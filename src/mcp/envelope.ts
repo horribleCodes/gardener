@@ -18,11 +18,25 @@ export function toEnvelope<T>(result: ServiceResult<T>, extras?: Partial<Envelop
   if (!result.ok) {
     return { ok: false, error: result.error };
   }
+  let data: unknown = result.data;
+  let advisories = extras?.advisories ?? [];
+  if (
+    data !== null &&
+    typeof data === "object" &&
+    !Array.isArray(data) &&
+    "advisories" in data &&
+    Array.isArray((data as { advisories: unknown }).advisories)
+  ) {
+    const record = data as Record<string, unknown> & { advisories: unknown[] };
+    advisories = record.advisories;
+    const { advisories: _omit, ...rest } = record;
+    data = rest;
+  }
   return {
     ok: true,
-    data: result.data,
+    data,
     rolls: extras?.rolls ?? [],
-    advisories: extras?.advisories ?? [],
+    advisories,
     derived: extras?.derived ?? {},
   };
 }

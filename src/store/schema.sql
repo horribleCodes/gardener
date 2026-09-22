@@ -143,6 +143,14 @@ CREATE TABLE IF NOT EXISTS court_consequences (
   stat_note TEXT
 );
 
+CREATE TABLE IF NOT EXISTS court_dispositions (
+  court_id TEXT NOT NULL REFERENCES courts(id),
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  disposition TEXT NOT NULL,
+  PRIMARY KEY (court_id, target_type, target_id)
+);
+
 CREATE TABLE IF NOT EXISTS court_defenses (
   id TEXT PRIMARY KEY,
   court_id TEXT NOT NULL REFERENCES courts(id),

@@ -1183,7 +1183,8 @@ export function listHooks(db: Database.Database, campaignId: string): ServiceRes
       .prepare(
         `SELECT cc.id, cc.text, cc.court_id FROM court_consequences cc
          JOIN courts c ON c.id = cc.court_id
-         JOIN facts f ON f.subject = 'court' AND f.subject_id = c.id
+         JOIN court_dispositions cd ON cd.court_id = c.id
+           AND cd.disposition IN ('favor', 'control')
          WHERE c.campaign_id = ?`,
       )
       .all(campaignId);

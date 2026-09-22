@@ -859,13 +859,18 @@ export function swayCourt(
       if (!court) throw new RuleError("ENTITY_NOT_FOUND", "court not found");
 
       const statement =
-        input.statement ??
-        `${input.mode} toward ${input.targetType} ${input.targetId}`;
+        input.statement ?? loadCatalog().minorRelationship[0].text;
       const factId = crypto.randomUUID();
       db.prepare(
         `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
          VALUES (?, ?, 'court', ?, ?, 'explicit', 'public')`,
       ).run(factId, input.campaignId, input.courtId, statement);
+
+      db.prepare(
+        `INSERT INTO court_dispositions (court_id, target_type, target_id, disposition)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(court_id, target_type, target_id) DO UPDATE SET disposition = excluded.disposition`,
+      ).run(input.courtId, input.targetType, input.targetId, input.mode);
 
       if (input.mode === "control" && court.rules_faction_id && !input.prepared) {
         db.prepare("UPDATE factions SET contested_control = 1 WHERE id = ?").run(

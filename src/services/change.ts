@@ -450,7 +450,10 @@ export function resolveWithdrawal(
         return { choice: "undo" };
       }
 
-      if (input.choice === "leave_fragile" && change.faction_id) {
+      if (input.choice === "leave_fragile") {
+        if (!change.faction_id) {
+          throw new RuleError("ENTITY_NOT_FOUND", "change has no faction");
+        }
         const catalog = loadCatalog();
         db.prepare(
           `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
