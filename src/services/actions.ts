@@ -131,6 +131,26 @@ function runEnactChange(
   if (faction.dominion < cost) {
     throw new RuleError("INSUFFICIENT_DOMINION", "not enough dominion for enact change");
   }
+
+  if (input.solveProblemId) {
+    const preflightProblems = loadProblemsOrdered(db, faction.id);
+    const preflightTrouble = sumTrouble(preflightProblems);
+    if (preflightTrouble === 0) {
+      throw new RuleError("NOTHING_TO_SOLVE", "nothing to solve");
+    }
+    const namedProblem = db
+      .prepare("SELECT id, points, intrinsic FROM problems WHERE id = ? AND faction_id = ?")
+      .get(input.solveProblemId, faction.id) as
+      | { id: string; points: number; intrinsic: number }
+      | undefined;
+    if (!namedProblem) {
+      throw new RuleError("ENTITY_NOT_FOUND", "problem to solve not found");
+    }
+    if (namedProblem.intrinsic !== 0) {
+      throw new RuleError("INTRINSIC_PROBLEM", "cannot reduce an intrinsic problem");
+    }
+  }
+
   db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(cost, faction.id);
 
   const problems = loadProblemsOrdered(db, faction.id);
@@ -167,9 +187,14 @@ function runEnactChange(
 
   if (input.solveProblemId) {
     const problem = db
-      .prepare("SELECT id, points FROM problems WHERE id = ? AND faction_id = ?")
-      .get(input.solveProblemId, faction.id) as { id: string; points: number } | undefined;
+      .prepare("SELECT id, points, intrinsic FROM problems WHERE id = ? AND faction_id = ?")
+      .get(input.solveProblemId, faction.id) as
+      | { id: string; points: number; intrinsic: number }
+      | undefined;
     if (!problem) throw new RuleError("ENTITY_NOT_FOUND", "problem to solve not found");
+    if (problem.intrinsic !== 0) {
+      throw new RuleError("INTRINSIC_PROBLEM", "cannot reduce an intrinsic problem");
+    }
     if (problem.points <= 1) {
       db.prepare("DELETE FROM problems WHERE id = ?").run(problem.id);
     } else {

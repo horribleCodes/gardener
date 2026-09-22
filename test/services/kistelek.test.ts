@@ -327,3 +327,88 @@ test("contested attack win adds catalog military problem text", () => {
     .get("village") as { text: string };
   expect(added.text).toBe(militaryText);
 });
+
+function createPower1FactionDb(dominion: number): Database.Database {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 42, 0)",
+  ).run("c1", "Kistelek");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run("f1", "c1", "Faction", 1, 1, dominion, "native", "self_absorbed_survivor", "npc", 0, "active");
+  return db;
+}
+
+test("enact_change solveProblemId rejects intrinsic problem before spending dominion", () => {
+  const db = createPower1FactionDb(2);
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES (?, ?, ?, ?, 'cultural', 1, 0, 0, ?)`,
+  ).run("holy-law", "f1", "Holy law", 1, 0);
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "f1",
+    type: "enact_change",
+    magnitude: "plausible",
+    solveProblemId: "holy-law",
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.code).toBe("INTRINSIC_PROBLEM");
+
+  const faction = db.prepare("SELECT dominion FROM factions WHERE id = ?").get("f1") as {
+    dominion: number;
+  };
+  expect(faction.dominion).toBe(2);
+});
+
+test("enact_change solveProblemId with no problems refuses before spending dominion", () => {
+  const db = createPower1FactionDb(2);
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "f1",
+    type: "enact_change",
+    magnitude: "plausible",
+    solveProblemId: "missing",
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.code).toBe("NOTHING_TO_SOLVE");
+
+  const faction = db.prepare("SELECT dominion FROM factions WHERE id = ?").get("f1") as {
+    dominion: number;
+  };
+  expect(faction.dominion).toBe(2);
+});
+
+test("enact_change solveProblemId success reduces named non-intrinsic problem", () => {
+  const db = createPower1FactionDb(2);
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES (?, ?, ?, ?, 'cultural', 0, 0, 0, ?)`,
+  ).run("woes", "f1", "Local woes", 2, 0);
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "f1",
+    type: "enact_change",
+    magnitude: "plausible",
+    solveProblemId: "woes",
+    forcedRoll: 1,
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data.success).toBe(true);
+
+  const problem = db.prepare("SELECT points FROM problems WHERE id = ?").get("woes") as {
+    points: number;
+  };
+  expect(problem.points).toBe(1);
+  const faction = db.prepare("SELECT dominion FROM factions WHERE id = ?").get("f1") as {
+    dominion: number;
+  };
+  expect(faction.dominion).toBe(1);
+});
