@@ -1,0 +1,23 @@
+{
+  "name": "godbound-world-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "start": "node --experimental-strip-types src/server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "better-sqlite3": "11.10.0",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.12",
+    "@types/node": "22.13.10",
+    "typescript": "5.8.2",
+    "vitest": "2.1.9"
+  }
+}
