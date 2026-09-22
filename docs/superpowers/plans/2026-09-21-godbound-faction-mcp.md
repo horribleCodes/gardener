@@ -1156,17 +1156,21 @@ Expected: FAIL, module missing.
 - `places (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES campaigns(id), name TEXT NOT NULL, scope TEXT NOT NULL, parent_place_id TEXT, culture_id TEXT)`
 - `wards (id TEXT PRIMARY KEY, place_id TEXT NOT NULL REFERENCES places(id), rating INTEGER NOT NULL, key_holder_ids TEXT NOT NULL DEFAULT '[]')`
 - `factions (id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, name TEXT NOT NULL, power INTEGER NOT NULL, cohesion INTEGER NOT NULL, dominion INTEGER NOT NULL, origin TEXT NOT NULL, behavior TEXT NOT NULL, control TEXT NOT NULL, auto_intervene INTEGER NOT NULL, status TEXT NOT NULL, patron_godbound_id TEXT, contested_control INTEGER NOT NULL DEFAULT 0, home_place_id TEXT, harshness TEXT, cult INTEGER NOT NULL DEFAULT 0)`
-- `features` and `feature_parts` as in the spec, with `usable` implied by remaining parts
+- `features` and `feature_parts` as in the spec, with `usable` implied by remaining parts. `features.covert INTEGER NOT NULL DEFAULT 0`
 - `problems (id, faction_id, text, points, domain, intrinsic, external, resistance, face_character_id, position INTEGER NOT NULL)`
 - `interests (id, from_faction_id, to_faction_id, points, nature, UNIQUE(from_faction_id, to_faction_id))`
-- `characters`, `courts`, `court_memberships`, `conflicts`, `court_consequences`, `court_defenses`
-- `facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id, superseded_by)`
-- `godbound (id, campaign_id, name, level, words TEXT, influence INTEGER, dominion INTEGER, wealth INTEGER, divinity TEXT, cult_faction_id TEXT)`
+- `characters` includes `acts_on_own INTEGER NOT NULL DEFAULT 0`
+- `courts` includes `acts_on_own INTEGER NOT NULL DEFAULT 0`
+- `court_memberships`, `conflicts`, `court_consequences`, `court_defenses`
+- `facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id, superseded_by, visibility TEXT NOT NULL DEFAULT 'public')`. `visibility` is `public`, `local`, `privileged`, or `hidden`
+- `godbound (id, campaign_id, name, level, words TEXT, influence INTEGER, dominion INTEGER, wealth INTEGER, divinity TEXT, cult_faction_id TEXT, acts_on_own INTEGER NOT NULL DEFAULT 0)`
 - `changes` with the status and counter columns from the spec
 - `change_commitments (change_id, godbound_id, influence, wealth_spent, PRIMARY KEY(change_id, godbound_id))`
 - `resisters (id, change_id, rating, label)`
 - `challenges`, `setpieces (id, campaign_id, key TEXT NOT NULL, need TEXT, status TEXT, UNIQUE(campaign_id, key))`
 - `turns (id, campaign_id, month, sequence, open INTEGER NOT NULL, faction_order TEXT NOT NULL)`
+- `unit_views (id TEXT PRIMARY KEY, turn_id TEXT NOT NULL REFERENCES turns(id), unit_type TEXT NOT NULL, unit_id TEXT NOT NULL, snapshot TEXT NOT NULL, UNIQUE(turn_id, unit_type, unit_id))`
+- `write_queue (id TEXT PRIMARY KEY, turn_id TEXT NOT NULL REFERENCES turns(id), unit_type TEXT NOT NULL, unit_id TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, error_code TEXT, created_at INTEGER NOT NULL)`. `status` is `queued`, `applying`, `done`, or `rejected`
 - `actions`, `rolls (id, campaign_id, turn_id, payload TEXT NOT NULL)`, `events (id, campaign_id, turn_id, type TEXT, payload TEXT NOT NULL)`
 
 `openDb` reads the SQL file via `fileURLToPath(new URL("./schema.sql", import.meta.url))`, runs it, and sets `db.pragma("foreign_keys = ON")`.
