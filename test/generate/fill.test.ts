@@ -8,7 +8,12 @@ test("aristocratic conflicts are a d12 and picks are 1-based", () => {
   const picked = pickOrRoll(catalog, "courts.aristocratic.conflict", mulberry32(1), 1);
   expect(picked.text).toBe(catalog.courts.aristocratic.conflict[0]);
   expect(picked.forced).toBe(true);
-  expect(() => pickOrRoll(catalog, "courts.aristocratic.conflict", mulberry32(1), 13)).toThrow(/PICK_OUT_OF_RANGE/);
+  try {
+    pickOrRoll(catalog, "courts.aristocratic.conflict", mulberry32(1), 13);
+    throw new Error("should have thrown");
+  } catch (error) {
+    expect((error as { code?: string }).code).toBe("PICK_OUT_OF_RANGE");
+  }
 });
 
 test("a missing field rolls once and a provided field is kept", () => {
