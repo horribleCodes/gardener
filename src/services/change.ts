@@ -222,6 +222,10 @@ export function applyOutcome(
       requireCampaign(db, input.campaignId);
 
       if (input.removeFeatureId) {
+        const feature = db
+          .prepare("SELECT id FROM features WHERE id = ? AND faction_id = ?")
+          .get(input.removeFeatureId, input.factionId) as { id: string } | undefined;
+        if (!feature) throw new RuleError("ENTITY_NOT_FOUND", "feature not found");
         db.prepare("DELETE FROM feature_parts WHERE feature_id = ?").run(input.removeFeatureId);
         db.prepare("DELETE FROM features WHERE id = ? AND faction_id = ?").run(
           input.removeFeatureId,
@@ -232,15 +236,22 @@ export function applyOutcome(
 
       if (input.removeFeaturePartId) {
         const part = db
-          .prepare("SELECT feature_id FROM feature_parts WHERE id = ?")
-          .get(input.removeFeaturePartId) as { feature_id: string } | undefined;
+          .prepare(
+            `SELECT fp.feature_id FROM feature_parts fp
+             INNER JOIN features f ON f.id = fp.feature_id
+             WHERE fp.id = ? AND f.faction_id = ?`,
+          )
+          .get(input.removeFeaturePartId, input.factionId) as { feature_id: string } | undefined;
         if (!part) throw new RuleError("ENTITY_NOT_FOUND", "feature part not found");
         db.prepare("DELETE FROM feature_parts WHERE id = ?").run(input.removeFeaturePartId);
         const remaining = db
           .prepare("SELECT COUNT(*) AS c FROM feature_parts WHERE feature_id = ?")
           .get(part.feature_id) as { c: number };
         if (remaining.c === 0) {
-          db.prepare("DELETE FROM features WHERE id = ?").run(part.feature_id);
+          db.prepare("DELETE FROM features WHERE id = ? AND faction_id = ?").run(
+            part.feature_id,
+            input.factionId,
+          );
         }
         return { removedFeaturePartId: input.removeFeaturePartId };
       }

@@ -188,6 +188,43 @@ test("enact_change failure increments only the acting faction culprit problem", 
   expect(neighborAfter.points).toBe(neighborBefore.points);
 });
 
+test("applyOutcome rejects removing another faction's feature", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 42, 0)",
+  ).run("c1", "Kistelek");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run("village", "c1", "Village", 1, 1, 0, "native", "self_absorbed_survivor", "npc", 0, "active");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run("neighbor", "c1", "Neighbor City", 2, 2, 0, "native", "martial_conqueror", "npc", 0, "active");
+  const featureId = "mil-feature";
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(featureId, "neighbor", "Standing army", "military", "normal", "normal", 0, "native");
+  db.prepare(
+    "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
+  ).run("mil-part", featureId, "Standing army", 0);
+
+  const result = applyOutcome(db, {
+    campaignId: "c1",
+    factionId: "village",
+    removeFeatureId: featureId,
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.code).toBe("ENTITY_NOT_FOUND");
+
+  const feature = db.prepare("SELECT id FROM features WHERE id = ?").get(featureId);
+  expect(feature).toBeTruthy();
+  const part = db.prepare("SELECT id FROM feature_parts WHERE id = ?").get("mil-part");
+  expect(part).toBeTruthy();
+});
+
 test("applyOutcome rejects reducing an intrinsic problem", () => {
   const db = createKistelekDb();
   db.prepare(
