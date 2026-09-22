@@ -182,6 +182,8 @@ export function insertFeatureFromText(
     quality?: string;
     magical?: number;
     origin?: string;
+    covert?: number;
+    aimedAtFactionId?: string | null;
   },
 ): string {
   const featureId = crypto.randomUUID();
@@ -190,10 +192,12 @@ export function insertFeatureFromText(
   const quality = tags?.quality ?? "normal";
   const magical = tags?.magical ?? 0;
   const origin = tags?.origin ?? "native";
+  const covert = tags?.covert ?? 0;
+  const aimedAt = tags?.aimedAtFactionId ?? null;
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(featureId, factionId, featureText, domain, size, quality, magical, origin);
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin, aimed_at_faction_id, covert)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(featureId, factionId, featureText, domain, size, quality, magical, origin, aimedAt, covert);
   const partId = crypto.randomUUID();
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, 0)",

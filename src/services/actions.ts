@@ -36,7 +36,12 @@ type RunActionInput = {
       improbable?: boolean;
       featureText?: string;
       solveProblemId?: string;
+      meansFeatureId?: string;
       problemId?: string;
+      domain?: string;
+      covert?: number;
+      aimedAtFactionId?: string;
+      addPartToFeatureId?: string;
     }
   | {
       type: "attack";
@@ -173,6 +178,9 @@ function runEnactChange(
   });
   const rollId = persistRoll(db, faction.campaign_id, turnId, check.roll);
   const actionId = crypto.randomUUID();
+  const enactFeatureIds = input.meansFeatureId
+    ? JSON.stringify([input.meansFeatureId])
+    : "[]";
 
   if (!check.success) {
     if (!inverted && check.culpritId) {
@@ -184,9 +192,9 @@ function runEnactChange(
       }
     }
     db.prepare(
-      `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, roll_id, outcome, dominion_delta)
-       VALUES (?, ?, 'enact_change', 'faction', ?, ?, 'failure', 0)`,
-    ).run(actionId, turnId, faction.id, rollId);
+      `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, roll_id, outcome, dominion_delta, feature_ids)
+       VALUES (?, ?, 'enact_change', 'faction', ?, ?, 'failure', 0, ?)`,
+    ).run(actionId, turnId, faction.id, rollId, enactFeatureIds);
     return { success: false, culpritId: check.culpritId, roll: check.roll };
   }
 
@@ -206,14 +214,36 @@ function runEnactChange(
       db.prepare("UPDATE problems SET points = points - 1 WHERE id = ?").run(problem.id);
     }
     db.prepare(
-      `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, roll_id, outcome, dominion_delta)
-       VALUES (?, ?, 'enact_change', 'faction', ?, ?, 'success', ?)`,
-    ).run(actionId, turnId, faction.id, rollId, -cost);
+      `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, roll_id, outcome, dominion_delta, feature_ids)
+       VALUES (?, ?, 'enact_change', 'faction', ?, ?, 'success', ?, ?)`,
+    ).run(actionId, turnId, faction.id, rollId, -cost, enactFeatureIds);
     return { success: true, solvedProblemId: problem.id, roll: check.roll };
   }
 
-  if (input.featureText) {
-    insertFeatureFromText(db, faction.id, input.featureText);
+  if (input.addPartToFeatureId) {
+    const feature = db
+      .prepare("SELECT id, faction_id FROM features WHERE id = ? AND faction_id = ?")
+      .get(input.addPartToFeatureId, faction.id) as { id: string; faction_id: string } | undefined;
+    if (!feature) throw new RuleError("ENTITY_NOT_FOUND", "feature to extend not found");
+    const posRow = db
+      .prepare("SELECT COALESCE(MAX(position), -1) + 1 AS p FROM feature_parts WHERE feature_id = ?")
+      .get(input.addPartToFeatureId) as { p: number };
+    const partText = input.featureText ?? "";
+    db.prepare(
+      "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
+    ).run(crypto.randomUUID(), input.addPartToFeatureId, partText, posRow.p);
+    if (input.aimedAtFactionId) {
+      db.prepare("UPDATE features SET aimed_at_faction_id = ? WHERE id = ?").run(
+        input.aimedAtFactionId,
+        input.addPartToFeatureId,
+      );
+    }
+  } else if (input.featureText) {
+    insertFeatureFromText(db, faction.id, input.featureText, {
+      domain: input.domain,
+      covert: input.covert,
+      aimedAtFactionId: input.aimedAtFactionId ?? null,
+    });
   }
   if (input.problemId) {
     const updated = db

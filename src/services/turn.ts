@@ -23,6 +23,7 @@ import {
 
 type FactionAction =
   | { type: "build_strength"; forcedRoll?: number }
+  | { type: "idle" }
   | { type: "aid"; targetFactionId: string }
   | {
       type: "enact_change";
@@ -30,6 +31,11 @@ type FactionAction =
       improbable?: boolean;
       featureText?: string;
       solveProblemId?: string;
+      meansFeatureId?: string;
+      domain?: string;
+      covert?: number;
+      aimedAtFactionId?: string;
+      addPartToFeatureId?: string;
       forcedRoll?: number;
     }
   | {
@@ -191,12 +197,21 @@ function priorAttackerWinAgainst(
   const row = db
     .prepare(
       `SELECT a.id FROM actions a
-       INNER JOIN turns t ON a.turn_id = t.id
-       WHERE t.campaign_id = ? AND t.open = 0
-         AND a.type = 'attack' AND a.target_id = ? AND a.outcome = 'attacker_win'
+       WHERE a.type = 'attack' AND a.target_id = ? AND a.outcome = 'attacker_win'
+         AND (
+           a.turn_id IN (
+             SELECT id FROM turns
+             WHERE campaign_id = ? AND open = 0
+             ORDER BY month DESC, sequence DESC
+             LIMIT 1
+           )
+           OR a.turn_id IN (
+             SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1
+           )
+         )
        LIMIT 1`,
     )
-    .get(campaignId, factionId) as { id: string } | undefined;
+    .get(factionId, campaignId, campaignId) as { id: string } | undefined;
   return row != null;
 }
 
@@ -386,6 +401,33 @@ function resolveStrategy(
       domain: string;
       intrinsic: number;
     }[];
+
+    if (strategy === "cunning_solve") {
+      const means = db
+        .prepare(
+          `SELECT id FROM features WHERE faction_id = ? AND domain != 'military' ORDER BY id ASC LIMIT 1`,
+        )
+        .get(faction.id) as { id: string } | undefined;
+      if (!means) return { type: "idle" };
+      const pick = problems
+        .filter((p) => p.intrinsic === 0)
+        .sort((a, b) => b.points - a.points)[0];
+      if (!pick) return { type: "build_strength" };
+      return {
+        type: "enact_change",
+        solveProblemId: pick.id,
+        meansFeatureId: means.id,
+      };
+    }
+
+    if (strategy === "solve_military") {
+      const pick = problems
+        .filter((p) => p.domain === "military" && p.intrinsic === 0)
+        .sort((a, b) => b.points - a.points)[0];
+      if (!pick) return { type: "idle" };
+      return { type: "enact_change", solveProblemId: pick.id };
+    }
+
     let pick: (typeof problems)[0] | undefined;
     if (strategy === "eliminate_resistance_problem") {
       pick = problems
@@ -394,10 +436,6 @@ function resolveStrategy(
     } else if (strategy === "solve_external_problem") {
       pick = problems
         .filter((p) => p.external !== 0)
-        .sort((a, b) => b.points - a.points)[0];
-    } else if (strategy === "solve_military") {
-      pick = problems
-        .filter((p) => p.domain === "military")
         .sort((a, b) => b.points - a.points)[0];
     }
     if (!pick) {
@@ -416,12 +454,52 @@ function resolveStrategy(
     strategy === "military_feature_aimed"
   ) {
     const catalog = loadCatalog();
+    if (strategy === "harmless_feature") {
+      const hasCultural = listFeatures(db, faction.id, "cultural").length > 0;
+      if (!hasCultural) {
+        return {
+          type: "enact_change",
+          featureText: catalog.features.cultural[0],
+          domain: "cultural",
+          covert: 1,
+        };
+      }
+      return {
+        type: "enact_change",
+        featureText: catalog.features.economic[0],
+        domain: "economic",
+        covert: 1,
+      };
+    }
+    if (strategy === "military_feature_aimed") {
+      const aimedAt = [...neighborRows].sort(
+        (a, b) => b.power - a.power || a.id.localeCompare(b.id),
+      )[0];
+      if (!aimedAt) return { type: "idle" };
+      const partText = catalog.features.military[0];
+      const milFeatures = listFeatures(db, faction.id, "military").sort((a, b) =>
+        a.id.localeCompare(b.id),
+      );
+      if (milFeatures.length > 0) {
+        return {
+          type: "enact_change",
+          featureText: partText,
+          domain: "military",
+          aimedAtFactionId: aimedAt.id,
+          addPartToFeatureId: milFeatures[0].id,
+        };
+      }
+      return {
+        type: "enact_change",
+        featureText: partText,
+        domain: "military",
+        aimedAtFactionId: aimedAt.id,
+      };
+    }
     const domain =
-      strategy === "harmless_feature"
-        ? "cultural"
-        : strategy === "dissident_feature"
-          ? "military"
-          : "military";
+      strategy === "dissident_feature"
+        ? "military"
+        : "military";
     const pool = catalog.features[domain] ?? catalog.features.other;
     const text = pool[0] ?? catalog.features.other[0];
     return { type: "enact_change", featureText: text };
@@ -464,6 +542,15 @@ function planFactionAction(
     return { factionId: faction.id, strategy, substituted, action: { type: "build_strength" } };
   }
   let action = resolveStrategy(db, faction, strategy);
+
+  if (action.type === "idle") {
+    return {
+      factionId: faction.id,
+      strategy,
+      skipRunAction: true,
+      action: { type: "build_strength" },
+    };
+  }
 
   if (action.type === "aid") {
     return { factionId: faction.id, strategy, action };

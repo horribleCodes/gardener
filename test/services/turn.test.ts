@@ -289,9 +289,18 @@ test("no_external_until_hit attacks after a prior attacker win", () => {
   const priorHit = db
     .prepare(
       `SELECT a.id FROM actions a
-       INNER JOIN turns t ON a.turn_id = t.id
-       WHERE t.campaign_id = 'c1' AND t.open = 0
-         AND a.type = 'attack' AND a.target_id = 'victim' AND a.outcome = 'attacker_win'
+       WHERE a.type = 'attack' AND a.target_id = 'victim' AND a.outcome = 'attacker_win'
+         AND (
+           a.turn_id IN (
+             SELECT id FROM turns
+             WHERE campaign_id = 'c1' AND open = 0
+             ORDER BY month DESC, sequence DESC
+             LIMIT 1
+           )
+           OR a.turn_id IN (
+             SELECT id FROM turns WHERE campaign_id = 'c1' AND open = 1 LIMIT 1
+           )
+         )
        LIMIT 1`,
     )
     .get();
@@ -310,4 +319,258 @@ test("no_external_until_hit attacks after a prior attacker win", () => {
     )
     .get(closedTurn) as { type: string };
   expect(attack.type).toBe("attack");
+});
+
+test("no_external_until_hit ignores attacker wins on older closed turns", () => {
+  const seed = 556;
+  let shuffleCounter = 0;
+  while (goalRollAt(seed, shuffleCounter + 1) < 1 || goalRollAt(seed, shuffleCounter + 1) > 2) {
+    shuffleCounter++;
+  }
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 2, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('victim', 'c1', 'Victim', 1, 1, 5, 'native', 'self_absorbed_survivor', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('neighbor', 'c1', 'Neighbor', 1, 1, 2, 'native', 'directed', 'player', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+     VALUES ('link', 'victim', 'neighbor', 2, 'rivalry')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES ('vmil', 'victim', 'Militia', 'military', 'normal', 'normal', 0, 'native')`,
+  ).run();
+  db.prepare(
+    "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
+  ).run("vmil-part", "vmil", "Militia", 0);
+
+  const olderClosed = "t-old";
+  const recentClosed = "t-recent";
+  db.prepare(
+    `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order)
+     VALUES (?, 'c1', 1, 1, 0, '[]')`,
+  ).run(olderClosed);
+  db.prepare(
+    `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order)
+     VALUES (?, 'c1', 2, 1, 0, '[]')`,
+  ).run(recentClosed);
+  db.prepare(
+    `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, outcome, dominion_delta)
+     VALUES ('old-hit', ?, 'attack', 'faction', 'neighbor', 'faction', 'victim', 'attacker_win', 0)`,
+  ).run(olderClosed);
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.data.results[0]?.strategy).toBe("no_external_until_hit");
+    expect(result.data.results[0]?.action.type).toBe("build_strength");
+  }
+
+  const victimActs = db
+    .prepare("SELECT type FROM actions WHERE actor_id = 'victim' AND turn_id != ?",)
+    .all(recentClosed) as { type: string }[];
+  expect(victimActs).toHaveLength(1);
+  expect(victimActs[0]?.type).toBe("build_strength");
+});
+
+function forceStrategyRoll(seed: number, min: number, max: number): number {
+  let shuffleCounter = 0;
+  while (true) {
+    const roll = goalRollAt(seed, shuffleCounter + 1);
+    if (roll >= min && roll <= max) return shuffleCounter;
+    shuffleCounter++;
+  }
+}
+
+test("solve_military idles when no non-intrinsic military problem exists", () => {
+  const seed = 901;
+  const shuffleCounter = forceStrategyRoll(seed, 7, 8);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'martial_conqueror', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES ('p-cult', 'actor', 'Unrest', 3, 'cultural', 0, 0, 0, 0)`,
+  ).run();
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES ('p-mil-in', 'actor', 'Core flaw', 2, 'military', 1, 0, 0, 1)`,
+  ).run();
+
+  const beforeDom = (
+    db.prepare("SELECT dominion FROM factions WHERE id = 'actor'").get() as { dominion: number }
+  ).dominion;
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.data.results[0]?.strategy).toBe("solve_military");
+    expect(result.data.results[0]?.skipRunAction).toBe(true);
+  }
+
+  const acts = db.prepare("SELECT id FROM actions WHERE actor_id = 'actor'").all();
+  expect(acts).toHaveLength(0);
+  const afterDom = (
+    db.prepare("SELECT dominion FROM factions WHERE id = 'actor'").get() as { dominion: number }
+  ).dominion;
+  expect(afterDom).toBe(beforeDom);
+});
+
+test("solve_military enacts against highest non-intrinsic military problem", () => {
+  const seed = 902;
+  const shuffleCounter = forceStrategyRoll(seed, 7, 8);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'martial_conqueror', 'npc', 0, 'active')`,
+  ).run();
+  for (let i = 0; i < 6; i++) {
+    db.prepare(
+      `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+       VALUES (?, 'actor', ?, 1, ?, 0, 0, 0, ?)`,
+    ).run(`p-${i}`, `Problem ${i}`, i === 0 ? "military" : "cultural", i);
+  }
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+
+  const mil = db
+    .prepare("SELECT points FROM problems WHERE id = 'p-0'")
+    .get() as { points: number } | undefined;
+  expect(mil).toBeUndefined();
+
+  const enact = db
+    .prepare("SELECT type FROM actions WHERE actor_id = 'actor' AND type = 'enact_change'")
+    .get() as { type: string };
+  expect(enact.type).toBe("enact_change");
+});
+
+test("cunning_solve records non-military means on enact_change", () => {
+  const seed = 903;
+  const shuffleCounter = forceStrategyRoll(seed, 9, 10);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'scheming_manipulator', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES ('z-means', 'actor', 'Spy ring', 'cultural', 'normal', 'normal', 0, 'native')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES ('a-means', 'actor', 'Guild ties', 'economic', 'normal', 'normal', 0, 'native')`,
+  ).run();
+  for (let i = 0; i < 6; i++) {
+    db.prepare(
+      `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+       VALUES (?, 'actor', ?, 1, 'cultural', 0, 0, 0, ?)`,
+    ).run(`p-${i}`, `Problem ${i}`, i);
+  }
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+
+  const row = db
+    .prepare("SELECT feature_ids FROM actions WHERE actor_id = 'actor' AND type = 'enact_change'")
+    .get() as { feature_ids: string };
+  expect(JSON.parse(row.feature_ids)).toEqual(["a-means"]);
+});
+
+test("harmless_feature creates covert cultural feature when none exists", () => {
+  const seed = 904;
+  const shuffleCounter = forceStrategyRoll(seed, 7, 8);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'scheming_manipulator', 'npc', 0, 'active')`,
+  ).run();
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+
+  const feature = db
+    .prepare("SELECT domain, covert, text FROM features WHERE faction_id = 'actor'")
+    .get() as { domain: string; covert: number; text: string };
+  expect(feature.domain).toBe("cultural");
+  expect(feature.covert).toBe(1);
+  expect(feature.text).toBeTruthy();
+});
+
+test("military_feature_aimed sets aimed_at on new military feature", () => {
+  const seed = 905;
+  const shuffleCounter = forceStrategyRoll(seed, 3, 4);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'martial_conqueror', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('low', 'c1', 'Low', 1, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('high', 'c1', 'High', 2, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+     VALUES ('i1', 'actor', 'low', 1, 'rivalry')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+     VALUES ('i2', 'actor', 'high', 1, 'rivalry')`,
+  ).run();
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+
+  const features = db
+    .prepare("SELECT aimed_at_faction_id, domain FROM features WHERE faction_id = 'actor'")
+    .all() as { aimed_at_faction_id: string; domain: string }[];
+  expect(features).toHaveLength(1);
+  expect(features[0]?.domain).toBe("military");
+  expect(features[0]?.aimed_at_faction_id).toBe("high");
 });
