@@ -8,6 +8,7 @@ import {
 import { factionProjectCost } from "../rules/cost.js";
 import { unevenBonus, featureRoll, resolveContest } from "../rules/contest.js";
 import { troubleCheck } from "../rules/trouble.js";
+import { loadCatalog } from "../tables/catalog.js";
 import { withTransaction } from "../store/db.js";
 import {
   ensureOpenTurn,
@@ -349,16 +350,11 @@ function runAttack(
       );
     } else {
       const problemId = crypto.randomUUID();
+      const problemText = loadCatalog().problems.military[0];
       db.prepare(
         `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
-         VALUES (?, ?, ?, ?, 'cultural', 0, 0, 0, ?)`,
-      ).run(
-        problemId,
-        defender.id,
-        "Damage from attack",
-        damage,
-        problems.length,
-      );
+         VALUES (?, ?, ?, ?, 'military', 0, 0, 0, ?)`,
+      ).run(problemId, defender.id, problemText, damage, problems.length);
     }
   }
 

@@ -179,7 +179,10 @@ export function commitResources(
             "SELECT statement FROM facts WHERE source_change_id = ? AND kind = 'feature_draft' LIMIT 1",
           )
           .get(change.id) as { statement: string } | undefined;
-        const featureText = input.featureText ?? draft?.statement ?? "A new feature";
+        const featureText = input.featureText ?? draft?.statement;
+        if (!featureText) {
+          throw new RuleError("FILL_INCOMPLETE", "missing featureText");
+        }
         const featureId = insertFeatureFromText(db, change.faction_id, featureText);
         const backlashId = insertBacklashProblem(db, change.faction_id, input.backlash);
         db.prepare(

@@ -98,3 +98,56 @@ test("pc feature creation adds one backlash problem and not a trouble check", ()
   expect(trouble.t).toBe(5);
   expect(loadCatalog().backlash[0]).toBeTruthy();
 });
+
+test("attack win without problemId adds catalog military problem text", () => {
+  const militaryText = loadCatalog().problems.military[0];
+  const before = db
+    .prepare("SELECT COUNT(*) AS c FROM problems WHERE faction_id = ?")
+    .get("village") as { c: number };
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "neighbor",
+    type: "attack",
+    targetFactionId: "village",
+    attackerFeatureId: "mil-feature",
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data.success).toBe(true);
+
+  const added = db
+    .prepare(
+      "SELECT text, domain FROM problems WHERE faction_id = ? ORDER BY position DESC LIMIT 1",
+    )
+    .get("village") as { text: string; domain: string };
+  const after = db
+    .prepare("SELECT COUNT(*) AS c FROM problems WHERE faction_id = ?")
+    .get("village") as { c: number };
+  expect(after.c).toBe(before.c + 1);
+  expect(added.text).toBe(militaryText);
+  expect(added.domain).toBe("military");
+});
+
+test("commitResources rejects feature activation without featureText or draft", () => {
+  const begun = beginChange(db, {
+    campaignId: "c1",
+    owner: "pc",
+    factionId: "village",
+    scope: "village",
+    magnitude: "plausible",
+    kind: "feature",
+    godboundId: "sword",
+  });
+  expect(begun.ok).toBe(true);
+  if (!begun.ok) return;
+
+  const committed = commitResources(db, {
+    changeId: begun.data.changeId,
+    godboundId: "sword",
+    influence: 1,
+  });
+  expect(committed.ok).toBe(false);
+  if (committed.ok) return;
+  expect(committed.error.code).toBe("FILL_INCOMPLETE");
+});
