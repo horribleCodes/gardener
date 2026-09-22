@@ -4,7 +4,13 @@ import { openDb } from "../../src/store/db.js";
 import { planGoal } from "../../src/rules/goals.js";
 import { decisionMakers } from "../../src/queries/brief.js";
 import { worldBrief, rumorLines } from "../../src/queries/rumors.js";
-import { halfInterestSatisfied, preferredInterestTarget, runFactionTurn } from "../../src/services/turn.js";
+import {
+  halfInterestSatisfied,
+  preferredInterestTarget,
+  runFactionTurn,
+  spendInterest,
+} from "../../src/services/turn.js";
+import { createFact } from "../../src/services/populate.js";
 import { runAction } from "../../src/services/actions.js";
 import { mulberry32, rollDie } from "../../src/rules/dice.js";
 import { DIE_BY_POWER } from "../../src/domain/types.js";
@@ -857,4 +863,145 @@ test("extend_interest increments interest and records action", () => {
 
   const act = db.prepare("SELECT type FROM actions WHERE actor_id = 'a'").get() as { type: string };
   expect(act.type).toBe("extend_interest");
+});
+
+function spendInterestFixture(): Database.Database {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", 1);
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('spender', 'c1', 'Spender', 2, 2, 4, 'native', 'directed', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('target', 'c1', 'Target', 1, 1, 6, 'native', 'directed', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+     VALUES ('edge', 'spender', 'target', 5, 'rivalry')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order)
+     VALUES ('turn1', 'c1', 1, 1, 1, '[]')`,
+  ).run();
+  return db;
+}
+
+test("spendInterest before reduces interest without charging dominion", () => {
+  const db = spendInterestFixture();
+  const beforeDom = (
+    db.prepare("SELECT dominion FROM factions WHERE id = 'spender'").get() as { dominion: number }
+  ).dominion;
+  const result = spendInterest(db, {
+    campaignId: "c1",
+    fromFactionId: "spender",
+    toFactionId: "target",
+    timing: "before",
+    modifier: 2,
+  });
+  expect(result.ok).toBe(true);
+  const afterDom = (
+    db.prepare("SELECT dominion FROM factions WHERE id = 'spender'").get() as { dominion: number }
+  ).dominion;
+  expect(afterDom).toBe(beforeDom);
+  const points = (
+    db.prepare("SELECT points FROM interests WHERE from_faction_id = 'spender'").get() as {
+      points: number;
+    }
+  ).points;
+  expect(points).toBe(3);
+});
+
+test("spendInterest after with short dominion leaves interest unchanged", () => {
+  const db = spendInterestFixture();
+  db.prepare("UPDATE factions SET dominion = 1 WHERE id = 'spender'").run();
+  const result = spendInterest(db, {
+    campaignId: "c1",
+    fromFactionId: "spender",
+    toFactionId: "target",
+    timing: "after",
+    modifier: 2,
+  });
+  expect(result.ok).toBe(false);
+  if (!result.ok) expect(result.error.code).toBe("INSUFFICIENT_DOMINION");
+  const points = (
+    db.prepare("SELECT points FROM interests WHERE from_faction_id = 'spender'").get() as {
+      points: number;
+    }
+  ).points;
+  expect(points).toBe(5);
+});
+
+test("spendInterest steal moves dominion without charging spender extra dominion", () => {
+  const db = spendInterestFixture();
+  const spenderBefore = (
+    db.prepare("SELECT dominion FROM factions WHERE id = 'spender'").get() as { dominion: number }
+  ).dominion;
+  const targetBefore = (
+    db.prepare("SELECT dominion FROM factions WHERE id = 'target'").get() as { dominion: number }
+  ).dominion;
+  const result = spendInterest(db, {
+    campaignId: "c1",
+    fromFactionId: "spender",
+    toFactionId: "target",
+    timing: "steal",
+    modifier: 3,
+  });
+  expect(result.ok).toBe(true);
+  const spenderAfter = (
+    db.prepare("SELECT dominion FROM factions WHERE id = 'spender'").get() as { dominion: number }
+  ).dominion;
+  const targetAfter = (
+    db.prepare("SELECT dominion FROM factions WHERE id = 'target'").get() as { dominion: number }
+  ).dominion;
+  expect(spenderAfter).toBe(spenderBefore + 3);
+  expect(targetAfter).toBe(targetBefore - 3);
+});
+
+test("worldBrief includes courts and openChanges", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", 100);
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('f1', 'c1', 'F', 1, 1, 0, 'native', 'directed', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO places (id, campaign_id, name, scope) VALUES ('p1', 'c1', 'City', 'city')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO courts (id, campaign_id, type, power_structure, atmosphere, place_id, blank, acts_on_own)
+     VALUES ('court1', 'c1', 'royal', 'autocratic', 'grim', 'p1', 0, 0)`,
+  ).run();
+  db.prepare(
+    `INSERT INTO changes (id, campaign_id, scope, magnitude, kind, owner, status, faction_id)
+     VALUES ('ch1', 'c1', 'city', 'plausible', 'feature', 'faction', 'active', 'f1')`,
+  ).run();
+
+  const brief = worldBrief(db, "c1");
+  expect(brief?.courts).toEqual([{ id: "court1", type: "royal", placeId: "p1" }]);
+  expect(brief?.openChanges).toEqual([{ id: "ch1", factionId: "f1", state: "active" }]);
+});
+
+test("createFact blank stores SQL NULL statement", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", 1);
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('f1', 'c1', 'F', 1, 1, 0, 'native', 'directed', 'npc', 0, 'active')`,
+  ).run();
+  const result = createFact(db, {
+    campaignId: "c1",
+    subject: "faction",
+    subjectId: "f1",
+    fill: "blank",
+  });
+  expect(result.ok).toBe(true);
+  const row = db.prepare("SELECT statement FROM facts").get() as { statement: string | null };
+  expect(row.statement).toBeNull();
 });

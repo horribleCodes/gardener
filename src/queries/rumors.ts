@@ -35,9 +35,32 @@ export function worldBrief(db: Database.Database, campaignId: string) {
     };
   });
 
+  const courts = db
+    .prepare(
+      `SELECT id, type, place_id FROM courts WHERE campaign_id = ?`,
+    )
+    .all(campaignId) as { id: string; type: string; place_id: string | null }[];
+
+  const openChanges = db
+    .prepare(
+      `SELECT id, faction_id, status FROM changes
+       WHERE campaign_id = ? AND status NOT IN ('resolved', 'failed')`,
+    )
+    .all(campaignId) as { id: string; faction_id: string | null; status: string }[];
+
   return {
     month: campaign.month,
     factions: factionBriefs,
+    courts: courts.map((c) => ({
+      id: c.id,
+      type: c.type,
+      placeId: c.place_id,
+    })),
+    openChanges: openChanges.map((ch) => ({
+      id: ch.id,
+      factionId: ch.faction_id,
+      state: ch.status,
+    })),
   };
 }
 

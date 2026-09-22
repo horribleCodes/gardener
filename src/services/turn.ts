@@ -988,6 +988,35 @@ export function factionAction(
   );
 }
 
+function applyBeforeRollModifier(payload: Record<string, unknown>, modifier: number): void {
+  const attacker = payload.attacker;
+  if (attacker && typeof attacker === "object" && attacker !== null) {
+    const roll = attacker as { kept?: number; total?: number };
+    if (typeof roll.kept === "number") roll.kept += modifier;
+    if (typeof roll.total === "number") roll.total += modifier;
+    return;
+  }
+  const roll = payload as { kept?: number; total?: number };
+  if (typeof roll.kept === "number") roll.kept += modifier;
+  if (typeof roll.total === "number") roll.total += modifier;
+}
+
+function storedDominionCost(
+  dominionDelta: number,
+  rollPayload: string | null,
+): number | undefined {
+  if (rollPayload) {
+    try {
+      const parsed = JSON.parse(rollPayload) as Record<string, unknown>;
+      if (typeof parsed.dominionCost === "number") return parsed.dominionCost;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (dominionDelta !== 0) return Math.abs(dominionDelta);
+  return undefined;
+}
+
 export function spendInterest(
   db: Database.Database,
   input: {
@@ -1003,9 +1032,7 @@ export function spendInterest(
     withTransaction(db, () => {
       const faction = requireFaction(db, input.fromFactionId);
       const dieMax = DIE_BY_POWER[faction.power];
-      if (input.modifier > dieMax) {
-        throw new RuleError("MODIFIER_EXCEEDS_DIE", "modifier exceeds die maximum");
-      }
+      interestModifier(dieMax, input.modifier);
 
       const turn = db
         .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
@@ -1028,26 +1055,91 @@ export function spendInterest(
         throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough interest");
       }
 
-      if (input.timing === "after" || input.timing === "steal") {
-        const cost = interestModifier(dieMax, input.modifier);
-        if (faction.dominion < cost) {
+      if (input.timing === "after") {
+        if (faction.dominion < input.modifier) {
           throw new RuleError("INSUFFICIENT_DOMINION", "not enough dominion for after-roll spend");
         }
         db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(
-          cost,
+          input.modifier,
           input.fromFactionId,
         );
-        if (input.timing === "steal") {
-          const target = requireFaction(db, input.toFactionId);
-          const steal = Math.min(input.modifier, target.dominion);
-          db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(
-            steal,
-            input.toFactionId,
-          );
-          db.prepare("UPDATE factions SET dominion = dominion + ? WHERE id = ?").run(
-            steal,
-            input.fromFactionId,
-          );
+      }
+
+      if (input.timing === "before" && input.actionId) {
+        const action = db
+          .prepare(
+            `SELECT roll_id FROM actions WHERE id = ? AND turn_id = ?`,
+          )
+          .get(input.actionId, turn.id) as { roll_id: string | null } | undefined;
+        if (action?.roll_id) {
+          const roll = db
+            .prepare("SELECT payload FROM rolls WHERE id = ?")
+            .get(action.roll_id) as { payload: string } | undefined;
+          if (roll) {
+            const payload = JSON.parse(roll.payload) as Record<string, unknown>;
+            applyBeforeRollModifier(payload, input.modifier);
+            db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(
+              JSON.stringify(payload),
+              action.roll_id,
+            );
+          }
+        }
+      }
+
+      const report: Record<string, unknown> = {
+        spent: input.modifier,
+        timing: input.timing,
+      };
+
+      if (input.timing === "steal") {
+        const target = requireFaction(db, input.toFactionId);
+        const steal = Math.min(input.modifier, target.dominion);
+        db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(
+          steal,
+          input.toFactionId,
+        );
+        db.prepare("UPDATE factions SET dominion = dominion + ? WHERE id = ?").run(
+          steal,
+          input.fromFactionId,
+        );
+        report.stolenDominion = steal;
+
+        const pendingActions = db
+          .prepare(
+            `SELECT a.id, a.dominion_delta, r.payload AS roll_payload
+             FROM actions a
+             LEFT JOIN rolls r ON r.id = a.roll_id
+             WHERE a.turn_id = ? AND a.actor_id = ?
+               AND (a.outcome IS NULL OR a.outcome IN ('pending', 'PENDING_DEFENDER_CHOICE'))`,
+          )
+          .all(turn.id, input.toFactionId) as {
+          id: string;
+          dominion_delta: number;
+          roll_payload: string | null;
+        }[];
+
+        const failed: string[] = [];
+        let skippedRecheck = false;
+        const remaining = (
+          db.prepare("SELECT dominion FROM factions WHERE id = ?").get(input.toFactionId) as {
+            dominion: number;
+          }
+        ).dominion;
+
+        for (const pending of pendingActions) {
+          const cost = storedDominionCost(pending.dominion_delta, pending.roll_payload);
+          if (cost === undefined) {
+            skippedRecheck = true;
+            continue;
+          }
+          if (cost > remaining) {
+            db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("failed", pending.id);
+            failed.push(pending.id);
+          }
+        }
+        if (failed.length > 0) report.failedPendingActions = failed;
+        if (skippedRecheck) {
+          report.note = "skipped pending-action dominion re-check where no stored cost was found";
         }
       }
 
@@ -1060,7 +1152,7 @@ export function spendInterest(
          VALUES (?, ?, 'spend_interest', 'faction', ?, 'faction', ?, 'success')`,
       ).run(crypto.randomUUID(), turn.id, input.fromFactionId, input.toFactionId);
 
-      return { spent: input.modifier, timing: input.timing };
+      return report;
     }),
   );
 }

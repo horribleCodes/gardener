@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS facts (
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   subject TEXT NOT NULL,
   subject_id TEXT NOT NULL,
-  statement TEXT NOT NULL,
+  statement TEXT,
   kind TEXT NOT NULL,
   source_change_id TEXT,
   superseded_by TEXT,

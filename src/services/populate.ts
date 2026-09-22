@@ -632,7 +632,7 @@ export function createFact(
         input.campaignId,
         input.subject,
         input.subjectId,
-        statement ?? "",
+        statement,
         input.kind ?? "explicit",
         input.visibility ?? "public",
       );
