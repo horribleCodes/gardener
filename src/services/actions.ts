@@ -3,6 +3,7 @@ import { DIE_BY_POWER, RuleError, type FeatureTags, type Power } from "../domain
 import {
   attackProblemDamage,
   chooseDefense,
+  interestCap,
   type DefenseChoice,
 } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
@@ -50,6 +51,17 @@ type RunActionInput = {
       defenderFeatureId?: string;
       defenderChoice?: DefenseChoice;
       problemId?: string;
+      marginal?: boolean;
+      forcedAttackerRoll?: number;
+      forcedDefenderRoll?: number;
+    }
+  | {
+      type: "extend_interest";
+      targetFactionId: string;
+      attackerFeatureId: string;
+      defenderFeatureId?: string;
+      willing?: boolean;
+      marginal?: boolean;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     }
@@ -72,6 +84,9 @@ export function runAction(db: Database.Database, input: RunActionInput): Service
       }
       if (input.type === "attack") {
         return runAttack(db, faction, turnId, input);
+      }
+      if (input.type === "extend_interest") {
+        return runExtendInterest(db, faction, turnId, input);
       }
       throw new RuleError("FILL_INCOMPLETE", `unknown action type`);
     }),
@@ -319,7 +334,7 @@ function runAttack(
     attackerRoll = featureRoll({
       rng,
       faces: attackerFaces,
-      marginal: false,
+      marginal: input.marginal ?? false,
       bonus: 0,
       forced: input.forcedAttackerRoll,
     });
@@ -338,7 +353,7 @@ function runAttack(
     attackerRoll = featureRoll({
       rng,
       faces: attackerFaces,
-      marginal: false,
+      marginal: input.marginal ?? false,
       bonus: attackerBonus,
       forced: input.forcedAttackerRoll,
     });
@@ -446,4 +461,173 @@ function runAttack(
     rollId,
   );
   return { success: true, winner: "attacker", defense: choice };
+}
+
+function runExtendInterest(
+  db: Database.Database,
+  attacker: { id: string; campaign_id: string; power: Power },
+  turnId: string,
+  input: Extract<RunActionInput, { type: "extend_interest" }>,
+) {
+  const defender = requireFaction(db, input.targetFactionId);
+  if (defender.campaign_id !== attacker.campaign_id) {
+    throw new RuleError("ENTITY_NOT_FOUND", "defender not in campaign");
+  }
+  if (defender.id === attacker.id) {
+    throw new RuleError("FILL_INCOMPLETE", "cannot extend interest to self");
+  }
+
+  const attackerFeature = db
+    .prepare(
+      `SELECT id, faction_id, domain, size, quality, magical, origin FROM features WHERE id = ?`,
+    )
+    .get(input.attackerFeatureId) as
+    | {
+        id: string;
+        faction_id: string;
+        domain: string;
+        size: string;
+        quality: string;
+        magical: number;
+        origin: string;
+      }
+    | undefined;
+  if (!attackerFeature || attackerFeature.faction_id !== attacker.id) {
+    throw new RuleError("NO_USABLE_FEATURE", "attacker has no usable feature");
+  }
+
+  const dieMax = DIE_BY_POWER[attacker.power];
+  const cap = interestCap(dieMax);
+  const existing = db
+    .prepare(
+      "SELECT points, nature FROM interests WHERE from_faction_id = ? AND to_faction_id = ?",
+    )
+    .get(attacker.id, defender.id) as { points: number; nature: string } | undefined;
+  if (existing && existing.points >= cap) {
+    throw new RuleError("INTEREST_CAP", "interest already at cap");
+  }
+
+  const attackerTags: FeatureTags = {
+    domain: attackerFeature.domain as FeatureTags["domain"],
+    size: attackerFeature.size as FeatureTags["size"],
+    quality: attackerFeature.quality as FeatureTags["quality"],
+    magical: attackerFeature.magical !== 0,
+    origin: attackerFeature.origin as FeatureTags["origin"],
+  };
+
+  const attackerFaces = dieMax;
+  let defenderFeature: typeof attackerFeature | undefined;
+  let defenderTags: FeatureTags | null = null;
+  let defenderTotal = 0;
+
+  if (input.defenderFeatureId) {
+    defenderFeature = db
+      .prepare(
+        `SELECT id, faction_id, domain, size, quality, magical, origin FROM features WHERE id = ?`,
+      )
+      .get(input.defenderFeatureId) as typeof attackerFeature | undefined;
+  }
+
+  let attackerRoll;
+  let winner: "attacker" | "defender";
+  let rollId: string;
+  if (input.willing) {
+    winner = "attacker";
+    rollId = persistRoll(db, attacker.campaign_id, turnId, { willing: true, winner: "attacker" });
+  } else if (!defenderFeature || defenderFeature.faction_id !== defender.id) {
+    const rng = nextRng(db, attacker.campaign_id);
+    attackerRoll = featureRoll({
+      rng,
+      faces: attackerFaces,
+      marginal: input.marginal ?? false,
+      bonus: 0,
+      forced: input.forcedAttackerRoll,
+    });
+    winner = "attacker";
+    rollId = persistRoll(db, attacker.campaign_id, turnId, {
+      attacker: attackerRoll,
+      defenderTotal,
+      winner,
+    });
+  } else {
+    const rng = nextRng(db, attacker.campaign_id);
+    defenderTags = {
+      domain: defenderFeature.domain as FeatureTags["domain"],
+      size: defenderFeature.size as FeatureTags["size"],
+      quality: defenderFeature.quality as FeatureTags["quality"],
+      magical: defenderFeature.magical !== 0,
+      origin: defenderFeature.origin as FeatureTags["origin"],
+    };
+    const defenderFaces = DIE_BY_POWER[defender.power];
+    const attackerBonus = unevenBonus(attackerTags, defenderTags);
+    const defenderBonus = unevenBonus(defenderTags, attackerTags);
+    attackerRoll = featureRoll({
+      rng,
+      faces: attackerFaces,
+      marginal: input.marginal ?? false,
+      bonus: attackerBonus,
+      forced: input.forcedAttackerRoll,
+    });
+    const defenderRoll = featureRoll({
+      rng,
+      faces: defenderFaces,
+      marginal: defender.power < attacker.power,
+      bonus: defenderBonus,
+      forced: input.forcedDefenderRoll,
+    });
+    defenderTotal = defenderRoll.total;
+    winner = resolveContest({
+      attackerTotal: attackerRoll.total,
+      defenderTotal: defenderRoll.total,
+      attackerPower: attacker.power,
+      defenderPower: defender.power,
+    });
+    rollId = persistRoll(db, attacker.campaign_id, turnId, {
+      attacker: attackerRoll,
+      defenderTotal,
+      winner,
+    });
+  }
+
+  const actionId = crypto.randomUUID();
+
+  if (winner === "defender") {
+    db.prepare(
+      `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, feature_ids, roll_id, outcome)
+       VALUES (?, ?, 'extend_interest', 'faction', ?, 'faction', ?, ?, ?, 'defender_win')`,
+    ).run(
+      actionId,
+      turnId,
+      attacker.id,
+      defender.id,
+      JSON.stringify([input.attackerFeatureId, input.defenderFeatureId ?? null]),
+      rollId,
+    );
+    return { success: false, winner: "defender" };
+  }
+
+  const natureDefault = loadCatalog().interestNature[0].id;
+  if (existing) {
+    db.prepare(
+      "UPDATE interests SET points = points + 1 WHERE from_faction_id = ? AND to_faction_id = ?",
+    ).run(attacker.id, defender.id);
+  } else {
+    db.prepare(
+      `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+       VALUES (?, ?, ?, 1, ?)`,
+    ).run(crypto.randomUUID(), attacker.id, defender.id, natureDefault);
+  }
+
+  db.prepare(
+    `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, feature_ids, roll_id, outcome)
+     VALUES (?, ?, 'extend_interest', 'faction', ?, 'faction', ?, ?, ?, 'attacker_win')`,
+  ).run(
+    actionId,
+    turnId,
+    attacker.id,
+    defender.id,
+    JSON.stringify([input.attackerFeatureId, input.defenderFeatureId ?? null]),
+    rollId,
+  );
+  return { success: true, winner: "attacker" };
 }

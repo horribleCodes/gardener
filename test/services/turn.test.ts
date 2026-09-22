@@ -3,7 +3,9 @@ import type Database from "better-sqlite3";
 import { openDb } from "../../src/store/db.js";
 import { planGoal } from "../../src/rules/goals.js";
 import { decisionMakers } from "../../src/queries/brief.js";
+import { worldBrief, rumorLines } from "../../src/queries/rumors.js";
 import { halfInterestSatisfied, preferredInterestTarget, runFactionTurn } from "../../src/services/turn.js";
+import { runAction } from "../../src/services/actions.js";
 import { mulberry32, rollDie } from "../../src/rules/dice.js";
 import { DIE_BY_POWER } from "../../src/domain/types.js";
 
@@ -573,4 +575,286 @@ test("military_feature_aimed sets aimed_at on new military feature", () => {
   expect(features).toHaveLength(1);
   expect(features[0]?.domain).toBe("military");
   expect(features[0]?.aimed_at_faction_id).toBe("high");
+});
+
+test("half_interest extends against preferred neighbor", () => {
+  const seed = 811;
+  const shuffleCounter = forceStrategyRoll(seed, 5, 6);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 2, 1, 3, 'native', 'martial_conqueror', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('weak', 'c1', 'Weak', 1, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('strong', 'c1', 'Strong', 3, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+     VALUES ('i1', 'actor', 'weak', 1, 'trade'), ('i2', 'actor', 'strong', 1, 'rivalry')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES ('z-feat', 'actor', 'Levy', 'military', 'normal', 'normal', 0, 'native')`,
+  ).run();
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+
+  const points = (
+    db.prepare("SELECT points FROM interests WHERE from_faction_id = 'actor' AND to_faction_id = 'weak'").get() as {
+      points: number;
+    }
+  ).points;
+  expect(points).toBe(2);
+
+  const action = db
+    .prepare("SELECT type, target_id FROM actions WHERE actor_id = 'actor'")
+    .get() as { type: string; target_id: string };
+  expect(action.type).toBe("extend_interest");
+  expect(action.target_id).toBe("weak");
+});
+
+test("max_interest extends once per neighbor up to power", () => {
+  const seed = 812;
+  const shuffleCounter = forceStrategyRoll(seed, 1, 2);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 3, 1, 5, 'native', 'scheming_manipulator', 'npc', 0, 'active')`,
+  ).run();
+  for (const [id, pwr] of [
+    ["n-a", 2],
+    ["n-b", 1],
+    ["n-c", 1],
+  ] as const) {
+    db.prepare(
+      `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+       VALUES (?, 'c1', ?, ?, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
+    ).run(id, id, pwr);
+    db.prepare(
+      `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+       VALUES (?, 'actor', ?, 0, 'trade')`,
+    ).run(`i-${id}`, id);
+  }
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES ('a-feat', 'actor', 'Spies', 'cultural', 'normal', 'normal', 0, 'native')`,
+  ).run();
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+
+  const extendActions = db
+    .prepare("SELECT target_id FROM actions WHERE actor_id = 'actor' AND type = 'extend_interest'")
+    .all() as { target_id: string }[];
+  expect(extendActions).toHaveLength(3);
+  const targets = extendActions.map((r) => r.target_id).sort();
+  expect(new Set(targets).size).toBe(3);
+});
+
+test("beat_weaker idles with no strictly weaker neighbor", () => {
+  const seed = 813;
+  const shuffleCounter = forceStrategyRoll(seed, 1, 2);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 2, 1, 5, 'native', 'martial_conqueror', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('peer', 'c1', 'Peer', 2, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+     VALUES ('i1', 'actor', 'peer', 1, 'rivalry')`,
+  ).run();
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.data.results[0]?.strategy).toBe("beat_weaker");
+    expect(result.data.results[0]?.skipRunAction).toBe(true);
+  }
+  const acts = db.prepare("SELECT id FROM actions WHERE actor_id = 'actor'").all();
+  expect(acts).toHaveLength(0);
+});
+
+test("double-satisfied reroll runs build_strength", () => {
+  const seed = 814;
+  let shuffleCounter = 0;
+  while (
+    goalRollAt(seed, shuffleCounter + 2) < 7 ||
+    goalRollAt(seed, shuffleCounter + 2) > 8 ||
+    goalRollAt(seed, shuffleCounter + 3) < 7 ||
+    goalRollAt(seed, shuffleCounter + 3) > 8
+  ) {
+    shuffleCounter++;
+  }
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'self_absorbed_survivor', 'npc', 0, 'active')`,
+  ).run();
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.data.results[0]?.action.type).toBe("build_strength");
+    expect(result.data.results[0]?.skipRunAction).toBeFalsy();
+  }
+  const act = db
+    .prepare("SELECT type FROM actions WHERE actor_id = 'actor'")
+    .get() as { type: string };
+  expect(act.type).toBe("build_strength");
+});
+
+test("military_defeat with only non-military feature sets marginal on attack", () => {
+  const seed = 815;
+  const shuffleCounter = forceStrategyRoll(seed, 3, 4);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'despotic_tyrant', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('neighbor', 'c1', 'Neighbor', 1, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+     VALUES ('i1', 'actor', 'neighbor', 3, 'rivalry')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES ('cult', 'actor', 'Court', 'cultural', 'normal', 'normal', 0, 'native')`,
+  ).run();
+
+  const result = runFactionTurn(db, { campaignId: "c1" });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.data.results[0]?.strategy).toBe("military_defeat");
+    expect(result.data.results[0]?.desiredOutcome).toBe("A military setback.");
+    expect(result.data.results[0]?.action.type).toBe("attack");
+    if (result.data.results[0]?.action.type === "attack") {
+      expect(result.data.results[0].action.marginal).toBe(true);
+    }
+  }
+});
+
+test("worldBrief and rumorLines match the query contract", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", 100);
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'directed', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES ('p1', 'actor', 'Unrest', 2, 'cultural', 0, 0, 0, 0)`,
+  ).run();
+
+  const brief = worldBrief(db, "c1");
+  expect(brief?.month).toBe(1);
+  expect(brief?.factions[0]).toMatchObject({
+    power: 1,
+    trouble: 2,
+    cohesion: 1,
+    status: "active",
+    collapseMargin: 4,
+  });
+
+  const turnId = "t1";
+  db.prepare(
+    `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order)
+     VALUES (?, 'c1', 1, 1, 0, '[]')`,
+  ).run(turnId);
+  const rollId = "r1";
+  db.prepare("INSERT INTO rolls (id, campaign_id, turn_id, payload) VALUES (?, 'c1', ?, ?)").run(
+    rollId,
+    turnId,
+    JSON.stringify({ winner: "attacker" }),
+  );
+  db.prepare(
+    `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, feature_ids, roll_id, outcome)
+     VALUES ('a1', ?, 'build_strength', 'faction', 'actor', NULL, NULL, '[]', ?, 'success')`,
+  ).run(turnId, rollId);
+
+  const lines = rumorLines(db, "c1");
+  expect(lines[0]).toBe(
+    "Actor attempted build_strength against themselves with no asset and success because won the contest.",
+  );
+});
+
+test("extend_interest increments interest and records action", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", 1);
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('a', 'c1', 'A', 1, 1, 1, 'native', 'directed', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('b', 'c1', 'B', 1, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES ('f1', 'a', 'Envoy', 'cultural', 'normal', 'normal', 0, 'native')`,
+  ).run();
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "a",
+    type: "extend_interest",
+    targetFactionId: "b",
+    attackerFeatureId: "f1",
+  });
+  expect(result.ok).toBe(true);
+
+  const edge = db
+    .prepare("SELECT points, nature FROM interests WHERE from_faction_id = 'a' AND to_faction_id = 'b'")
+    .get() as { points: number; nature: string };
+  expect(edge.points).toBe(1);
+  expect(edge.nature).toBe("alliance");
+
+  const act = db.prepare("SELECT type FROM actions WHERE actor_id = 'a'").get() as { type: string };
+  expect(act.type).toBe("extend_interest");
 });

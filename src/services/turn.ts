@@ -9,6 +9,7 @@ import { monthlyDominion } from "../rules/cults.js";
 import type { Harshness } from "../domain/types.js";
 import { rollDie } from "../rules/dice.js";
 import { planGoal } from "../rules/goals.js";
+import { interestCap } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
 import { loadCatalog } from "../tables/catalog.js";
 import { withTransaction } from "../store/db.js";
@@ -44,6 +45,14 @@ type FactionAction =
       attackerFeatureId: string;
       defenderFeatureId?: string;
       defenderChoice?: "cohesion" | "sacrifice" | "problem";
+      marginal?: boolean;
+      forcedAttackerRoll?: number;
+      forcedDefenderRoll?: number;
+    }
+  | {
+      type: "extend_interest";
+      targetFactionId: string;
+      attackerFeatureId: string;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     };
@@ -60,13 +69,10 @@ type FactionPlanResult = {
   strategy?: string;
   substituted?: boolean;
   skipRunAction?: boolean;
+  desiredOutcome?: string;
+  runSteps?: FactionAction[];
   action: FactionAction;
 };
-
-const INTEREST_ONLY_STRATEGIES = new Set([
-  "max_interest",
-  "half_interest",
-]);
 
 function shuffleIds(ids: string[], rng: { next(): number }): string[] {
   const order = [...ids];
@@ -133,6 +139,16 @@ function interestTo(
       "SELECT points, nature FROM interests WHERE from_faction_id = ? AND to_faction_id = ?",
     )
     .get(fromId, toId) as { points: number; nature: string } | undefined;
+}
+
+function pickLowestFeatureId(
+  db: Database.Database,
+  factionId: string,
+): string | undefined {
+  const row = db
+    .prepare("SELECT id FROM features WHERE faction_id = ? ORDER BY id ASC LIMIT 1")
+    .get(factionId) as { id: string } | undefined;
+  return row?.id;
 }
 
 function listFeatures(
@@ -269,15 +285,86 @@ function pickGoalRoll(db: Database.Database, campaignId: string, forced?: number
   return rollDie(rng, 10).natural;
 }
 
+function rankNeighborsBelowCap(
+  db: Database.Database,
+  faction: ReturnType<typeof loadFactionRow>,
+  neighborRows: ReturnType<typeof loadFactionRow>[],
+): ReturnType<typeof loadFactionRow>[] {
+  const cap = interestCap(DIE_BY_POWER[faction.power]);
+  return [...neighborRows]
+    .filter((n) => {
+      const edge = interestTo(db, faction.id, n.id);
+      const points = edge?.points ?? 0;
+      return points < cap;
+    })
+    .sort((a, b) => {
+      const gapA = cap - (interestTo(db, faction.id, a.id)?.points ?? 0);
+      const gapB = cap - (interestTo(db, faction.id, b.id)?.points ?? 0);
+      if (gapB !== gapA) return gapB - gapA;
+      if (b.power !== a.power) return b.power - a.power;
+      return a.id.localeCompare(b.id);
+    });
+}
+
+function planExtendInterest(
+  db: Database.Database,
+  faction: ReturnType<typeof loadFactionRow>,
+  strategy: string,
+  neighborRows: ReturnType<typeof loadFactionRow>[],
+): FactionAction[] {
+  const featureId = pickLowestFeatureId(db, faction.id);
+  if (!featureId) return [];
+
+  if (strategy === "half_interest") {
+    const targetId = preferredInterestTarget(db, faction);
+    if (!targetId) return [];
+    const cap = interestCap(DIE_BY_POWER[faction.power]);
+    const edge = interestTo(db, faction.id, targetId);
+    if (edge && edge.points >= cap) return [];
+    return [
+      {
+        type: "extend_interest",
+        targetFactionId: targetId,
+        attackerFeatureId: featureId,
+      },
+    ];
+  }
+
+  if (strategy === "max_interest") {
+    const ranked = rankNeighborsBelowCap(db, faction, neighborRows);
+    const picks = ranked.slice(0, faction.power);
+    return picks.map((n) => ({
+      type: "extend_interest",
+      targetFactionId: n.id,
+      attackerFeatureId: featureId,
+    }));
+  }
+
+  if (strategy === "proxy") {
+    const target = [...neighborRows].sort(
+      (a, b) => b.power - a.power || a.id.localeCompare(b.id),
+    )[0];
+    if (!target) return [];
+    const cap = interestCap(DIE_BY_POWER[faction.power]);
+    const edge = interestTo(db, faction.id, target.id);
+    if (edge && edge.points >= cap) return [];
+    return [
+      {
+        type: "extend_interest",
+        targetFactionId: target.id,
+        attackerFeatureId: featureId,
+      },
+    ];
+  }
+
+  return [];
+}
+
 function resolveStrategy(
   db: Database.Database,
   faction: ReturnType<typeof loadFactionRow>,
   strategy: string,
 ): FactionAction {
-  if (INTEREST_ONLY_STRATEGIES.has(strategy)) {
-    return { type: "build_strength" };
-  }
-
   if (strategy === "stockpile") {
     return { type: "build_strength" };
   }
@@ -308,7 +395,23 @@ function resolveStrategy(
         return { type: "aid", targetFactionId: recipient };
       }
     }
-    return { type: "build_strength" };
+    const neighbors = neighborFactions(db, faction.id);
+    const neighborRows = neighbors
+      .map((id) => loadFactionRow(db, id))
+      .filter((f) => f.status === "active");
+    const extendSteps = planExtendInterest(db, faction, "proxy", neighborRows);
+    if (extendSteps.length === 0) return { type: "idle" };
+    return extendSteps[0];
+  }
+
+  if (strategy === "half_interest" || strategy === "max_interest") {
+    const neighbors = neighborFactions(db, faction.id);
+    const neighborRows = neighbors
+      .map((id) => loadFactionRow(db, id))
+      .filter((f) => f.status === "active");
+    const extendSteps = planExtendInterest(db, faction, strategy, neighborRows);
+    if (extendSteps.length === 0) return { type: "idle" };
+    return extendSteps[0];
   }
 
   if (strategy === "glorify") {
@@ -361,24 +464,52 @@ function resolveStrategy(
       const weaker = neighborRows
         .filter((n) => n.power < faction.power)
         .sort((a, b) => a.power - b.power)[0];
-      if (!weaker) return { type: "build_strength" };
+      if (!weaker) return { type: "idle" };
       target = weaker;
     }
     if (!target) return { type: "build_strength" };
-    const wantMilitary = strategy !== "bloodless_coerce" && strategy !== "strip_military_feature";
     const features = listFeatures(db, faction.id);
-    const feature =
-      features.find((f) => f.domain === (wantMilitary ? "military" : "cultural")) ??
-      features.find((f) => f.domain !== "military") ??
-      features[0];
-    if (!feature) return { type: "build_strength" };
-    if (strategy === "bloodless_coerce" && features.every((f) => f.domain === "military")) {
-      return { type: "build_strength" };
+    const featureRows = db
+      .prepare("SELECT id, domain, covert FROM features WHERE faction_id = ?")
+      .all(faction.id) as { id: string; domain: string; covert: number }[];
+
+    let feature: { id: string; domain: string } | undefined;
+    let marginal = false;
+
+    if (strategy === "strip_military_feature" || strategy === "bloodless_coerce") {
+      const nonMil = featureRows.filter((f) => f.domain !== "military").sort((a, b) =>
+        a.id.localeCompare(b.id),
+      );
+      feature = nonMil[0];
+      if (strategy === "bloodless_coerce" && featureRows.every((f) => f.domain === "military")) {
+        return { type: "build_strength" };
+      }
+      if (!feature) return { type: "build_strength" };
+    } else if (strategy === "covert_problem") {
+      const nonMil = featureRows.filter((f) => f.domain !== "military");
+      const covert = nonMil.filter((f) => f.covert === 1).sort((a, b) => a.id.localeCompare(b.id));
+      feature = covert[0] ?? nonMil.sort((a, b) => a.id.localeCompare(b.id))[0];
+      if (!feature) return { type: "build_strength" };
+    } else if (strategy === "military_defeat") {
+      feature =
+        featureRows.find((f) => f.domain === "military") ??
+        featureRows.find((f) => f.domain !== "military") ??
+        featureRows[0];
+      if (!feature) return { type: "build_strength" };
+      if (feature.domain !== "military") marginal = true;
+    } else {
+      feature =
+        features.find((f) => f.domain === "military") ??
+        features.find((f) => f.domain !== "military") ??
+        features[0];
+      if (!feature) return { type: "build_strength" };
     }
+
     return {
       type: "attack",
       targetFactionId: target.id,
       attackerFeatureId: feature.id,
+      ...(marginal ? { marginal: true } : {}),
     };
   }
 
@@ -530,25 +661,40 @@ function planFactionAction(
         factionId: faction.id,
         strategy: next.strategy,
         action: { type: "build_strength" },
-        skipRunAction: true,
       };
     }
     strategy = next.strategy;
   }
 
   let substituted = false;
-  if (INTEREST_ONLY_STRATEGIES.has(strategy)) {
-    substituted = true;
-    return { factionId: faction.id, strategy, substituted, action: { type: "build_strength" } };
+  let runSteps: FactionAction[] | undefined;
+  let desiredOutcome: string | undefined;
+
+  if (strategy === "max_interest" || strategy === "half_interest") {
+    const neighbors = neighborFactions(db, faction.id);
+    const neighborRows = neighbors
+      .map((id) => loadFactionRow(db, id))
+      .filter((f) => f.status === "active");
+    const extendSteps = planExtendInterest(db, faction, strategy, neighborRows);
+    if (extendSteps.length === 0) {
+      return {
+        factionId: faction.id,
+        strategy,
+        skipRunAction: true,
+        action: { type: "idle" },
+      };
+    }
+    runSteps = extendSteps;
   }
-  let action = resolveStrategy(db, faction, strategy);
+
+  let action = runSteps?.[0] ?? resolveStrategy(db, faction, strategy);
 
   if (action.type === "idle") {
     return {
       factionId: faction.id,
       strategy,
       skipRunAction: true,
-      action: { type: "build_strength" },
+      action: { type: "idle" },
     };
   }
 
@@ -556,8 +702,15 @@ function planFactionAction(
     return { factionId: faction.id, strategy, action };
   }
 
-  if (strategy === "proxy" && action.type === "build_strength") {
-    return { factionId: faction.id, strategy, substituted: true, action };
+  if (strategy === "proxy" && action.type === "extend_interest") {
+    return { factionId: faction.id, strategy, action };
+  }
+
+  if (strategy === "military_defeat") {
+    desiredOutcome = "A military setback.";
+  }
+  if (strategy === "strip_military_feature") {
+    desiredOutcome = "The target should lose a military feature.";
   }
 
   if (action.type === "enact_change") {
@@ -570,7 +723,14 @@ function planFactionAction(
     }
   }
 
-  return { factionId: faction.id, strategy, substituted, action };
+  return {
+    factionId: faction.id,
+    strategy,
+    substituted,
+    desiredOutcome,
+    runSteps,
+    action,
+  };
 }
 
 function runGlorifyIfNeeded(
@@ -705,14 +865,19 @@ export function runFactionTurn(
           results.push(plan);
           continue;
         }
-        if (plan.action.type === "aid") {
-          executeAid(db, turnId, factionId, plan.action.targetFactionId);
-          results.push(plan);
-          continue;
+        const steps =
+          plan.runSteps ??
+          (plan.action.type === "aid" ? [plan.action] : [plan.action]);
+        for (const step of steps) {
+          if (step.type === "aid") {
+            executeAid(db, turnId, factionId, step.targetFactionId);
+            continue;
+          }
+          if (step.type === "idle") continue;
+          const actionInput = { campaignId: input.campaignId, factionId, ...step };
+          const actionResult = runAction(db, actionInput);
+          runGlorifyIfNeeded(db, factionId, turnId, plan.strategy, actionResult);
         }
-        const actionInput = { campaignId: input.campaignId, factionId, ...plan.action };
-        const actionResult = runAction(db, actionInput);
-        runGlorifyIfNeeded(db, factionId, turnId, plan.strategy, actionResult);
         results.push(plan);
       }
 
