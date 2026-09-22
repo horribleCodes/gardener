@@ -47,7 +47,7 @@ import {
 } from "../services/turn.js";
 import { openDb } from "../store/db.js";
 import type { ServiceResult } from "../services/util.js";
-import { mcpToolResult, runTool, toEnvelope } from "./envelope.js";
+import { mcpToolResult, runTool, toEnvelope, unexpectedErrorEnvelope } from "./envelope.js";
 
 const scopeZ = z.enum(["village", "city", "region", "nation", "realm"]);
 const magnitudeZ = z.enum(["plausible", "improbable", "impossible", "vast"]);
@@ -122,7 +122,7 @@ export function buildServer(dbPath: string): McpServer {
             error: { code: error.code, message: error.message, details: error.details },
           });
         }
-        throw error;
+        return mcpToolResult(unexpectedErrorEnvelope(error));
       }
     },
   );
@@ -753,7 +753,7 @@ export function buildServer(dbPath: string): McpServer {
             error: { code: error.code, message: error.message, details: error.details },
           });
         }
-        throw error;
+        return mcpToolResult(unexpectedErrorEnvelope(error));
       }
     },
   );
@@ -822,9 +822,12 @@ export function buildServer(dbPath: string): McpServer {
         return jsonResource(catalogRowsAt(path as string));
       } catch (error) {
         if (error instanceof RuleError) {
-          return jsonResource({ ok: false, error: error.code, message: error.message });
+          return jsonResource({
+            ok: false,
+            error: { code: error.code, message: error.message, details: error.details },
+          });
         }
-        throw error;
+        return jsonResource(unexpectedErrorEnvelope(error));
       }
     },
   );

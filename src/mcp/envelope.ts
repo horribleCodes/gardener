@@ -34,6 +34,14 @@ export function mcpToolResult(envelope: Envelope) {
   };
 }
 
+export function unexpectedErrorEnvelope(error: unknown): Envelope {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    ok: false,
+    error: { code: "ENTITY_NOT_FOUND", message, details: { unexpected: true } },
+  };
+}
+
 export function runTool<T>(fn: () => ServiceResult<T>): ReturnType<typeof mcpToolResult> {
   try {
     return mcpToolResult(toEnvelope(fn()));
@@ -44,6 +52,6 @@ export function runTool<T>(fn: () => ServiceResult<T>): ReturnType<typeof mcpToo
         error: { code: error.code, message: error.message, details: error.details },
       });
     }
-    throw error;
+    return mcpToolResult(unexpectedErrorEnvelope(error));
   }
 }

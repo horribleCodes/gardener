@@ -387,8 +387,8 @@ If `want` is set, spend exactly `want * (want + 1) / 2` or fail `INSUFFICIENT_WE
 
 `assess_withdrawal` does not mutate. It reports:
 
-- `opposed`: resisters still on the change, or a faction with `rivalry` or `spies` interest in the target
-- `beyond_local_maintenance`: feature origin is `improbable` or `impossible`, or magnitude was improbable or worse
+- `opposed`: resisters still on the change, or a faction with `rivalry` or `spies` interest **in the target**. The target is `changes.faction_id`. Query `interests` where `to_faction_id` is that faction and `nature` is `rivalry` or `spies`. Do not treat the owning faction's outgoing interest toward unrelated factions as opposition. If `faction_id` is null, `opposed` is true only when resisters exist.
+- `beyond_local_maintenance`: true when magnitude is `improbable`, `impossible`, or `vast`, or the linked feature's `origin` is `improbable` or `impossible`. Load `changes.feature_id` and that feature's `origin`. A plausible change whose feature origin is `improbable` is beyond local maintenance.
 - `persists_uncontrolled`: kind is `fact` or `other` and the statement was an event (caller sets `event: true`)
 
 `resolve_withdrawal` requires a decaying change and a choice:

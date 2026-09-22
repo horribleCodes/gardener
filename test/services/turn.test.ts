@@ -889,6 +889,23 @@ function spendInterestFixture(): Database.Database {
   return db;
 }
 
+test("spendInterest with no open turn returns ENTITY_NOT_FOUND", () => {
+  const db = spendInterestFixture();
+  db.prepare("UPDATE turns SET open = 0 WHERE id = 'turn1'").run();
+  const result = spendInterest(db, {
+    campaignId: "c1",
+    fromFactionId: "spender",
+    toFactionId: "target",
+    timing: "before",
+    modifier: 1,
+  });
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe("ENTITY_NOT_FOUND");
+    expect(result.error.message).toBe("no open turn");
+  }
+});
+
 test("spendInterest before reduces interest without charging dominion", () => {
   const db = spendInterestFixture();
   const beforeDom = (

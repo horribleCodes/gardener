@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/mcp/register.js";
+import { runTool } from "../src/mcp/envelope.js";
 
 test("quote_change through MCP returns the ward example", async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -18,4 +19,18 @@ test("quote_change through MCP returns the ward example", async () => {
   expect(body.ok).toBe(true);
   expect(body.data.total).toBe(12);
   await client.close();
+});
+
+test("runTool returns envelope instead of rejecting on unexpected errors", () => {
+  const result = runTool(() => {
+    throw new Error("simulated bug");
+  });
+  const envelope = result.structuredContent as {
+    ok: boolean;
+    error?: { code: string; message: string; details: { unexpected?: boolean } };
+  };
+  expect(envelope.ok).toBe(false);
+  expect(envelope.error?.code).toBe("ENTITY_NOT_FOUND");
+  expect(envelope.error?.message).toBe("simulated bug");
+  expect(envelope.error?.details.unexpected).toBe(true);
 });

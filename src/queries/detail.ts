@@ -49,15 +49,22 @@ export function getFaction(db: Database.Database, factionId: string) {
     .prepare("SELECT id, text, domain, size, quality, magical, origin, covert FROM features WHERE faction_id = ?")
     .all(faction.id);
 
-  const interestsOut = db
+  const interestsOutRaw = db
     .prepare("SELECT id, to_faction_id AS targetId, points, nature FROM interests WHERE from_faction_id = ?")
-    .all(faction.id);
+    .all(faction.id) as { id: string; targetId: string; points: number; nature: string }[];
   const interestsIn = db
     .prepare("SELECT id, from_faction_id AS sourceId, points, nature FROM interests WHERE to_faction_id = ?")
     .all(faction.id);
 
   const dieMax = DIE_BY_POWER[faction.power];
   const cap = interestCap(dieMax);
+  const interestsOut = interestsOutRaw.map((edge) => ({
+    ...edge,
+    room: Math.max(0, cap - edge.points),
+  }));
+  const maxOutgoingPoints =
+    interestsOutRaw.length > 0 ? Math.max(...interestsOutRaw.map((e) => e.points)) : 0;
+  const interestRoom = interestsOutRaw.length === 0 ? cap : cap - maxOutgoingPoints;
   const trouble = sumTrouble(problems);
 
   return {
@@ -69,7 +76,7 @@ export function getFaction(db: Database.Database, factionId: string) {
     interestsOut,
     interestsIn,
     interestCap: cap,
-    interestRoom: cap,
+    interestRoom,
   };
 }
 

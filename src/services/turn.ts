@@ -1037,7 +1037,7 @@ export function spendInterest(
       const turn = db
         .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
         .get(input.campaignId) as { id: string } | undefined;
-      if (!turn) throw new RuleError("TURN_ALREADY_OPEN", "no open turn");
+      if (!turn) throw new RuleError("ENTITY_NOT_FOUND", "no open turn");
 
       const spent = db
         .prepare(

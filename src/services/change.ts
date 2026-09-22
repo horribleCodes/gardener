@@ -355,7 +355,9 @@ export function assessWithdrawal(
 }> {
   return wrapRule(() => {
     const change = db
-      .prepare("SELECT id, campaign_id, magnitude, kind, faction_id FROM changes WHERE id = ?")
+      .prepare(
+        "SELECT id, campaign_id, magnitude, kind, faction_id, feature_id FROM changes WHERE id = ?",
+      )
       .get(input.changeId) as
       | {
           id: string;
@@ -363,6 +365,7 @@ export function assessWithdrawal(
           magnitude: Magnitude;
           kind: string;
           faction_id: string | null;
+          feature_id: string | null;
         }
       | undefined;
     if (!change) throw new RuleError("ENTITY_NOT_FOUND", "change not found");
@@ -372,18 +375,26 @@ export function assessWithdrawal(
       .all(change.id) as { id: string }[];
     let opposed = resisters.length > 0;
     if (change.faction_id) {
-      const rivalry = db
+      const incoming = db
         .prepare(
-          `SELECT id FROM interests WHERE from_faction_id = ? AND nature IN ('rivalry', 'spies') LIMIT 1`,
+          `SELECT id FROM interests WHERE to_faction_id = ? AND nature IN ('rivalry', 'spies') LIMIT 1`,
         )
         .get(change.faction_id);
-      if (rivalry) opposed = true;
+      if (incoming) opposed = true;
     }
 
-    const beyond =
+    let beyond =
       change.magnitude === "improbable" ||
       change.magnitude === "impossible" ||
       change.magnitude === "vast";
+    if (!beyond && change.feature_id) {
+      const feature = db
+        .prepare("SELECT origin FROM features WHERE id = ?")
+        .get(change.feature_id) as { origin: string } | undefined;
+      if (feature?.origin === "improbable" || feature?.origin === "impossible") {
+        beyond = true;
+      }
+    }
     const persists =
       (change.kind === "fact" || change.kind === "other") && input.event === true;
 
