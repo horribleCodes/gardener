@@ -1,4 +1,6 @@
+import type Database from "better-sqlite3";
 import { RuleError } from "../domain/types.js";
+import { computeDerived } from "./derived.js";
 import type { ServiceResult } from "../services/util.js";
 
 export type Envelope =
@@ -32,13 +34,46 @@ export function toEnvelope<T>(result: ServiceResult<T>, extras?: Partial<Envelop
     const { advisories: _omit, ...rest } = record;
     data = rest;
   }
+  let rolls = extras?.rolls;
+  if (rolls === undefined && data !== null && typeof data === "object" && !Array.isArray(data)) {
+    const record = data as Record<string, unknown>;
+    if (Array.isArray(record.rolls)) {
+      rolls = record.rolls;
+    } else if (record.roll !== undefined) {
+      rolls = [record.roll];
+    }
+  }
   return {
     ok: true,
     data,
-    rolls: extras?.rolls ?? [],
+    rolls: rolls ?? [],
     advisories,
     derived: extras?.derived ?? {},
   };
+}
+
+export function runDbTool(
+  db: Database.Database,
+  fn: () => ServiceResult<unknown>,
+  args: Record<string, unknown>,
+): ReturnType<typeof mcpToolResult> {
+  try {
+    const result = fn();
+    if (!result.ok) {
+      return mcpToolResult(toEnvelope(result));
+    }
+    return mcpToolResult(
+      toEnvelope(result, { derived: computeDerived(db, args, result.data) }),
+    );
+  } catch (error) {
+    if (error instanceof RuleError) {
+      return mcpToolResult({
+        ok: false,
+        error: { code: error.code, message: error.message, details: error.details },
+      });
+    }
+    return mcpToolResult(unexpectedErrorEnvelope(error));
+  }
 }
 
 export function mcpToolResult(envelope: Envelope) {

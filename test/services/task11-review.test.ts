@@ -5,7 +5,7 @@ import { getCourt } from "../../src/queries/detail.js";
 import { setPower, swayCourt } from "../../src/services/populate.js";
 import { factionAction, listHooks } from "../../src/services/turn.js";
 import { resolveWithdrawal } from "../../src/services/change.js";
-import { toEnvelope } from "../../src/mcp/envelope.js";
+import { runDbTool, toEnvelope } from "../../src/mcp/envelope.js";
 import { loadCatalog } from "../../src/tables/catalog.js";
 
 function courtDb(): Database.Database {
@@ -68,6 +68,10 @@ test("swayCourt control on ruling court sets contested_control and disposition",
     .prepare("SELECT disposition FROM court_dispositions WHERE court_id = 'court1'")
     .get() as { disposition: string };
   expect(disposition.disposition).toBe("control");
+  const facts = db
+    .prepare("SELECT id FROM facts WHERE subject = 'court' AND subject_id = 'court1'")
+    .all();
+  expect(facts).toHaveLength(0);
 });
 
 test("getCourt includes favor disposition after swayCourt", () => {
@@ -170,6 +174,44 @@ test("toEnvelope lifts advisories from data without mutating service payload", (
     expect(envelope.data).toEqual({ factionId: "f1" });
     expect(serviceData.advisories).toEqual(["warn"]);
   }
+});
+
+test("toEnvelope promotes data.roll into rolls without removing it from data", () => {
+  const roll = { natural: 4, faces: 6, total: 4 };
+  const envelope = toEnvelope({ ok: true, data: { roll, dominionGained: 1 } });
+  expect(envelope.ok).toBe(true);
+  if (envelope.ok) {
+    expect(envelope.rolls).toHaveLength(1);
+    expect(envelope.rolls[0]).toEqual(roll);
+    expect((envelope.data as { roll: unknown }).roll).toEqual(roll);
+  }
+});
+
+test("runDbTool derived.trouble matches faction problem-point sum", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 42, 0)",
+  ).run("c1", "Test");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status, contested_control)
+     VALUES ('f1', 'c1', 'Rulers', 2, 2, 0, 'native', 'directed', 'npc', 0, 'active', 0)`,
+  ).run();
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES ('p1', 'f1', 'Unrest', 3, 'cultural', 0, 0, 0, 0)`,
+  ).run();
+  const result = runDbTool(
+    db,
+    () => setPower(db, { campaignId: "c1", factionId: "f1", power: 3 }),
+    { campaignId: "c1", factionId: "f1", power: 3 },
+  );
+  const envelope = result.structuredContent as {
+    ok: boolean;
+    derived?: { trouble: number; collapseMargin: number };
+  };
+  expect(envelope.ok).toBe(true);
+  expect(envelope.derived?.trouble).toBe(3);
+  expect(envelope.derived?.collapseMargin).toBe(7);
 });
 
 test("leave_fragile without faction returns ENTITY_NOT_FOUND and leaves status decaying", () => {

@@ -47,7 +47,7 @@ import {
 } from "../services/turn.js";
 import { openDb } from "../store/db.js";
 import type { ServiceResult } from "../services/util.js";
-import { mcpToolResult, runTool, toEnvelope, unexpectedErrorEnvelope } from "./envelope.js";
+import { mcpToolResult, runDbTool, runTool, toEnvelope, unexpectedErrorEnvelope } from "./envelope.js";
 
 const scopeZ = z.enum(["village", "city", "region", "nation", "realm"]);
 const magnitudeZ = z.enum(["plausible", "improbable", "impossible", "vast"]);
@@ -59,12 +59,11 @@ type ToolHandler = (
   args: Record<string, unknown>,
 ) => ReturnType<typeof mcpToolResult> | Promise<ReturnType<typeof mcpToolResult>>;
 
-function dbTool(fn: (args: any) => ServiceResult<unknown>): ToolHandler {
-  return (args) => runTool(() => fn(args));
-}
-
 export function buildServer(dbPath: string): McpServer {
   const db = openDb(dbPath);
+  const dbTool = (fn: (args: any) => ServiceResult<unknown>): ToolHandler => {
+    return (args) => runDbTool(db, () => fn(args), args);
+  };
   const server = new McpServer({ name: "godbound-world", version: "0.1.0" });
   const reg = (
     name: string,

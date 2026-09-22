@@ -858,13 +858,16 @@ export function swayCourt(
         .get(input.courtId, input.campaignId) as { id: string; rules_faction_id: string | null } | undefined;
       if (!court) throw new RuleError("ENTITY_NOT_FOUND", "court not found");
 
-      const statement =
-        input.statement ?? loadCatalog().minorRelationship[0].text;
-      const factId = crypto.randomUUID();
-      db.prepare(
-        `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
-         VALUES (?, ?, 'court', ?, ?, 'explicit', 'public')`,
-      ).run(factId, input.campaignId, input.courtId, statement);
+      let factId: string | undefined;
+      if (input.mode === "favor") {
+        const statement =
+          input.statement ?? loadCatalog().minorRelationship[0].text;
+        factId = crypto.randomUUID();
+        db.prepare(
+          `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
+           VALUES (?, ?, 'court', ?, ?, 'explicit', 'public')`,
+        ).run(factId, input.campaignId, input.courtId, statement);
+      }
 
       db.prepare(
         `INSERT INTO court_dispositions (court_id, target_type, target_id, disposition)
@@ -886,7 +889,7 @@ export function swayCourt(
           nextProblemPosition(db, court.rules_faction_id),
         );
       }
-      return { factId, mode: input.mode };
+      return factId ? { factId, mode: input.mode } : { mode: input.mode };
     }),
   );
 }
