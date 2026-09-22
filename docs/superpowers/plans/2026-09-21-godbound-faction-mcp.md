@@ -824,12 +824,13 @@ git commit -m "feat: add attack damage and defender policy"
 **Files:**
 - Create: `src/tables/catalog.json` (copy of the spec catalog)
 - Create: `src/tables/catalog.ts`
-- Create: `src/generate/fill.ts`
 - Test: `test/generate/fill.test.ts`
 
 **Interfaces:**
-- Consumes: `Rng`, `rollDie`, `RuleError`, `FillMode`
-- Produces: `loadCatalog`, `pickOrRoll`, `FillSession`
+- Consumes: `Rng`, `RuleError`
+- Produces: `loadCatalog`, `pickOrRoll`
+
+The spec file map names `src/generate/fill.ts`. This task's steps only load the catalog and honor picks. Task 7 creates `fill.ts` and uses it for the `require` / `missing` / `blank` contract. There is no `FillSession` type.
 
 - [ ] **Step 1: Copy the catalog and write the failing test**
 
@@ -951,13 +952,14 @@ git commit -m "feat: load generator tables and honor picks"
 ### Task 7: Court and faction generators
 
 **Files:**
+- Create: `src/generate/fill.ts`
 - Create: `src/generate/court.ts`
 - Create: `src/generate/faction.ts`
 - Test: `test/generate/court.test.ts`
 
 **Interfaces:**
-- Consumes: `pickOrRoll`, `loadCatalog`, `FillMode`, `interestCap`, `DIE_BY_POWER`
-- Produces: `generateCourt`, `generateFactionSkeleton`
+- Consumes: `pickOrRoll`, `loadCatalog`, `FillMode`, `RuleError`, `interestCap`, `DIE_BY_POWER`
+- Produces: `defaultFill`, `assertRequired`, `displayName`, `quarrelSummary`, `generateCourt`, `problemBudget`, `splitProblemPoints`, `generateProblems`
 
 A generated court is a plain object, not a database row. Names are null in `blank` mode. In `missing` mode, names are `Unnamed {role}` unless `names` provides one. In `require` mode, `generateCourt` throws `FILL_INCOMPLETE` if `type` or `powerStructure` is missing; it does not roll.
 
@@ -980,7 +982,12 @@ test("blank courts roll structure and leave names empty", () => {
 });
 
 test("require mode does not invent a type", () => {
-  expect(() => generateCourt({ fill: "require", seed: 1 })).toThrow(/FILL_INCOMPLETE/);
+  try {
+    generateCourt({ fill: "require", seed: 1 });
+    throw new Error("should have thrown");
+  } catch (error) {
+    expect((error as { code?: string }).code).toBe("FILL_INCOMPLETE");
+  }
 });
 
 test("a supplied conflict is kept", () => {
@@ -1005,6 +1012,44 @@ Run: `npx vitest run test/generate/court.test.ts`
 Expected: FAIL, module missing.
 
 - [ ] **Step 3: Implement**
+
+`src/generate/fill.ts` exports the generation-contract helpers. `RuleError.message` is the message only; the code stays on `.code`.
+
+```ts
+import { RuleError, type FillMode } from "../domain/types.js";
+
+export function defaultFill(fill?: FillMode): FillMode {
+  return fill ?? "missing";
+}
+
+export function assertRequired(fill: FillMode, fields: Record<string, unknown>): void {
+  if (fill !== "require") return;
+  const missing = Object.entries(fields)
+    .filter(([, value]) => value == null || value === "")
+    .map(([key]) => key);
+  if (missing.length > 0) {
+    throw new RuleError("FILL_INCOMPLETE", `missing ${missing.join(", ")}`, { fields: missing });
+  }
+}
+
+export function displayName(fill: FillMode, role: string, provided?: string | null): string | null {
+  if (fill === "blank") return null;
+  if (provided != null && provided !== "") return provided;
+  return `Unnamed ${role}`;
+}
+
+export function quarrelSummary(
+  fill: FillMode,
+  protagonist: string | null,
+  conflict: string,
+  antagonist: string | null,
+): string | null {
+  if (fill === "blank") return null;
+  return `${protagonist} presses the quarrel (${conflict}). ${antagonist} opposes.`;
+}
+```
+
+`generateCourt` calls `assertRequired(fill, { type: input.type, powerStructure: input.powerStructure })` before any roll. Names come from `displayName`. `fittedSummary` comes from `quarrelSummary`. Do not invent a `FillSession` type.
 
 `generateCourt` input:
 
@@ -1063,7 +1108,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/generate/court.ts src/generate/faction.ts test/generate/court.test.ts
+git add src/generate/fill.ts src/generate/court.ts src/generate/faction.ts test/generate/court.test.ts
 git commit -m "feat: generate courts and faction problem budgets"
 ```
 
