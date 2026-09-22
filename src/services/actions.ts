@@ -128,9 +128,6 @@ function runEnactChange(
   const magnitude =
     input.improbable || input.magnitude === "improbable" ? "improbable" : "plausible";
   const cost = factionProjectCost(faction.power, magnitude);
-  if (faction.dominion < cost) {
-    throw new RuleError("INSUFFICIENT_DOMINION", "not enough dominion for enact change");
-  }
 
   if (input.solveProblemId) {
     const preflightProblems = loadProblemsOrdered(db, faction.id);
@@ -149,6 +146,10 @@ function runEnactChange(
     if (namedProblem.intrinsic !== 0) {
       throw new RuleError("INTRINSIC_PROBLEM", "cannot reduce an intrinsic problem");
     }
+  }
+
+  if (faction.dominion < cost) {
+    throw new RuleError("INSUFFICIENT_DOMINION", "not enough dominion for enact change");
   }
 
   db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(cost, faction.id);
@@ -234,6 +235,9 @@ function runAttack(
   input: Extract<RunActionInput, { type: "attack" }>,
 ) {
   const defender = requireFaction(db, input.targetFactionId);
+  if (defender.campaign_id !== attacker.campaign_id) {
+    throw new RuleError("ENTITY_NOT_FOUND", "defender not in campaign");
+  }
   const attackerFeature = db
     .prepare(
       `SELECT id, faction_id, domain, size, quality, magical, origin FROM features WHERE id = ?`,

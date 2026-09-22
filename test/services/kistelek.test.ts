@@ -384,6 +384,90 @@ test("enact_change solveProblemId with no problems refuses before spending domin
   expect(faction.dominion).toBe(2);
 });
 
+test("enact_change solveProblemId with zero dominion still returns NOTHING_TO_SOLVE not insufficient dominion", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 42, 0)",
+  ).run("c1", "Kistelek");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run("f1", "c1", "Faction", 1, 1, 0, "native", "self_absorbed_survivor", "npc", 0, "active");
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "f1",
+    type: "enact_change",
+    magnitude: "plausible",
+    solveProblemId: "missing",
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.code).toBe("NOTHING_TO_SOLVE");
+
+  const faction = db.prepare("SELECT dominion FROM factions WHERE id = ?").get("f1") as {
+    dominion: number;
+  };
+  expect(faction.dominion).toBe(0);
+});
+
+test("attack against a faction in another campaign is ENTITY_NOT_FOUND before any roll", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 42, 0)",
+  ).run("cA", "Campaign A");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 99, 0)",
+  ).run("cB", "Campaign B");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run("attacker", "cA", "Attacker", 2, 2, 0, "native", "martial_conqueror", "npc", 0, "active");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run("defender", "cB", "Defender", 1, 2, 0, "native", "self_absorbed_survivor", "npc", 0, "active");
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES (?, ?, ?, ?, 'cultural', 0, 0, 0, ?)`,
+  ).run("def-problem", "defender", "Woes", 1, 0);
+  const attackerFeatureId = "atk-feature";
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(attackerFeatureId, "attacker", "Army", "military", "normal", "normal", 0, "native");
+  db.prepare(
+    "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
+  ).run("atk-part", attackerFeatureId, "Army", 0);
+
+  const cohesionBefore = db
+    .prepare("SELECT cohesion FROM factions WHERE id = ?")
+    .get("defender") as { cohesion: number };
+  const problemPointsBefore = db
+    .prepare("SELECT points FROM problems WHERE id = ?")
+    .get("def-problem") as { points: number };
+
+  const result = runAction(db, {
+    campaignId: "cA",
+    factionId: "attacker",
+    type: "attack",
+    targetFactionId: "defender",
+    attackerFeatureId,
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.code).toBe("ENTITY_NOT_FOUND");
+
+  const cohesionAfter = db
+    .prepare("SELECT cohesion FROM factions WHERE id = ?")
+    .get("defender") as { cohesion: number };
+  const problemPointsAfter = db
+    .prepare("SELECT points FROM problems WHERE id = ?")
+    .get("def-problem") as { points: number };
+  expect(cohesionAfter.cohesion).toBe(cohesionBefore.cohesion);
+  expect(problemPointsAfter.points).toBe(problemPointsBefore.points);
+});
+
 test("enact_change solveProblemId success reduces named non-intrinsic problem", () => {
   const db = createPower1FactionDb(2);
   db.prepare(
