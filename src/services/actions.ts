@@ -25,7 +25,7 @@ import {
   type ServiceResult,
 } from "./util.js";
 
-type RunActionInput = {
+export type RunActionInput = {
   campaignId: string;
   factionId: string;
   forcedRoll?: number;

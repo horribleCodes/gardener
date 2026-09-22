@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS features (
   magical INTEGER NOT NULL,
   origin TEXT NOT NULL,
   aimed_at_faction_id TEXT,
-  covert INTEGER NOT NULL DEFAULT 0
+  covert INTEGER NOT NULL DEFAULT 0,
+  maintained INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS feature_parts (

@@ -7,12 +7,15 @@ import {
 import type { Quote } from "../rules/cost.js";
 import { quoteChange } from "../rules/cost.js";
 import { withTransaction } from "../store/db.js";
+import { loadCatalog } from "../tables/catalog.js";
 import {
   coveredOnChange,
   insertBacklashProblem,
   insertFeatureFromText,
+  nextProblemPosition,
   quoteForChangeRow,
   requireCampaign,
+  resisterRatingsForChange,
   wrapRule,
   type ServiceResult,
 } from "./util.js";
@@ -288,3 +291,303 @@ export function applyOutcome(
     }),
   );
 }
+
+export function withdrawInfluence(
+  db: Database.Database,
+  input: { changeId: string; godboundId: string },
+): ServiceResult<{ status: string; covered: number }> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      const change = db
+        .prepare(
+          `SELECT id, status, dominion_spent, deeds_required, deeds_done, challenges_required, challenges_done, feature_id
+           FROM changes WHERE id = ?`,
+        )
+        .get(input.changeId) as
+        | {
+            id: string;
+            status: string;
+            dominion_spent: number;
+            deeds_required: number;
+            deeds_done: number;
+            challenges_required: number;
+            challenges_done: number;
+            feature_id: string | null;
+          }
+        | undefined;
+      if (!change) throw new RuleError("ENTITY_NOT_FOUND", "change not found");
+
+      db.prepare(
+        "UPDATE change_commitments SET influence = 0 WHERE change_id = ? AND godbound_id = ?",
+      ).run(input.changeId, input.godboundId);
+
+      const row = db
+        .prepare("SELECT id, scope, magnitude, kind, place_ids FROM changes WHERE id = ?")
+        .get(input.changeId) as {
+        id: string;
+        scope: Scope;
+        magnitude: Magnitude;
+        kind: string;
+        place_ids: string;
+      };
+      const quote = quoteForChangeRow(db, row);
+      const covered = coveredOnChange(db, change.id, change.dominion_spent);
+      let status = change.status;
+      if (covered < quote.total) {
+        status = "decaying";
+        db.prepare("UPDATE changes SET status = ? WHERE id = ?").run(status, change.id);
+        if (change.feature_id) {
+          db.prepare("UPDATE features SET maintained = 0 WHERE id = ?").run(change.feature_id);
+        }
+      }
+      return { status, covered };
+    }),
+  );
+}
+
+export function assessWithdrawal(
+  db: Database.Database,
+  input: { changeId: string; event?: boolean },
+): ServiceResult<{
+  opposed: boolean;
+  beyond_local_maintenance: boolean;
+  persists_uncontrolled: boolean;
+}> {
+  return wrapRule(() => {
+    const change = db
+      .prepare("SELECT id, campaign_id, magnitude, kind, faction_id FROM changes WHERE id = ?")
+      .get(input.changeId) as
+      | {
+          id: string;
+          campaign_id: string;
+          magnitude: Magnitude;
+          kind: string;
+          faction_id: string | null;
+        }
+      | undefined;
+    if (!change) throw new RuleError("ENTITY_NOT_FOUND", "change not found");
+
+    const resisters = db
+      .prepare("SELECT id FROM resisters WHERE change_id = ?")
+      .all(change.id) as { id: string }[];
+    let opposed = resisters.length > 0;
+    if (change.faction_id) {
+      const rivalry = db
+        .prepare(
+          `SELECT id FROM interests WHERE from_faction_id = ? AND nature IN ('rivalry', 'spies') LIMIT 1`,
+        )
+        .get(change.faction_id);
+      if (rivalry) opposed = true;
+    }
+
+    const beyond =
+      change.magnitude === "improbable" ||
+      change.magnitude === "impossible" ||
+      change.magnitude === "vast";
+    const persists =
+      (change.kind === "fact" || change.kind === "other") && input.event === true;
+
+    return {
+      opposed,
+      beyond_local_maintenance: beyond,
+      persists_uncontrolled: persists,
+    };
+  });
+}
+
+export function resolveWithdrawal(
+  db: Database.Database,
+  input: { changeId: string; choice: "undo" | "leave_fragile" | "stable" },
+): ServiceResult<Record<string, unknown>> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      const change = db
+        .prepare("SELECT id, campaign_id, status, feature_id, faction_id FROM changes WHERE id = ?")
+        .get(input.changeId) as
+        | {
+            id: string;
+            campaign_id: string;
+            status: string;
+            feature_id: string | null;
+            faction_id: string | null;
+          }
+        | undefined;
+      if (!change) throw new RuleError("ENTITY_NOT_FOUND", "change not found");
+      if (change.status !== "decaying") {
+        throw new RuleError("CHANGE_NOT_READY", "change is not decaying");
+      }
+
+      if (input.choice === "undo") {
+        const facts = db
+          .prepare(
+            "SELECT id FROM facts WHERE source_change_id = ? AND superseded_by IS NULL",
+          )
+          .all(change.id) as { id: string }[];
+        for (const f of facts) {
+          const newId = crypto.randomUUID();
+          db.prepare(
+            `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id, superseded_by)
+             SELECT ?, campaign_id, subject, subject_id, statement, kind, source_change_id, NULL FROM facts WHERE id = ?`,
+          ).run(newId, f.id);
+          db.prepare("UPDATE facts SET superseded_by = ? WHERE id = ?").run(newId, f.id);
+        }
+        if (change.feature_id) {
+          db.prepare("DELETE FROM feature_parts WHERE feature_id = ?").run(change.feature_id);
+          db.prepare("DELETE FROM features WHERE id = ?").run(change.feature_id);
+        }
+        db.prepare("UPDATE changes SET status = 'failed' WHERE id = ?").run(change.id);
+        return { choice: "undo" };
+      }
+
+      if (input.choice === "leave_fragile" && change.faction_id) {
+        const catalog = loadCatalog();
+        db.prepare(
+          `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+           VALUES (?, ?, ?, 1, 'cultural', 0, 0, 0, ?)`,
+        ).run(
+          crypto.randomUUID(),
+          change.faction_id,
+          catalog.backlash[0],
+          nextProblemPosition(db, change.faction_id),
+        );
+        db.prepare("UPDATE changes SET status = 'resolved' WHERE id = ?").run(change.id);
+        return { choice: "leave_fragile" };
+      }
+
+      if (change.feature_id) {
+        db.prepare("UPDATE features SET maintained = 1 WHERE id = ?").run(change.feature_id);
+      }
+      db.prepare("UPDATE changes SET status = 'resolved' WHERE id = ?").run(change.id);
+      return { choice: "stable" };
+    }),
+  );
+}
+
+export function expandChange(
+  db: Database.Database,
+  input: {
+    changeId: string;
+    scope: Scope;
+    magnitude: Magnitude;
+    kind?: string;
+    placeIds?: string[];
+    influence?: number;
+    dominion?: number;
+    godboundId?: string;
+    childStatement: string;
+  },
+): ServiceResult<{ quote: Quote; deltaPaid: number }> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      const change = db
+        .prepare(
+          `SELECT id, campaign_id, scope, magnitude, kind, place_ids, faction_id, dominion_spent,
+                  deeds_required, deeds_done, challenges_required, challenges_done, status
+           FROM changes WHERE id = ?`,
+        )
+        .get(input.changeId) as
+        | {
+            id: string;
+            campaign_id: string;
+            scope: Scope;
+            magnitude: Magnitude;
+            kind: string;
+            place_ids: string;
+            faction_id: string | null;
+            dominion_spent: number;
+            deeds_required: number;
+            deeds_done: number;
+            challenges_required: number;
+            challenges_done: number;
+            status: string;
+          }
+        | undefined;
+      if (!change) throw new RuleError("ENTITY_NOT_FOUND", "change not found");
+
+      const oldQuote = quoteForChangeRow(db, change);
+      const newQuote = quoteChange({
+        scope: input.scope,
+        magnitude: input.magnitude,
+        kind: (input.kind ?? change.kind) as "feature" | "fact" | "problem_mitigation" | "creature_population" | "champion" | "other",
+        wardRatings: input.placeIds
+          ? input.placeIds.flatMap((placeId) => {
+              const wards = db
+                .prepare("SELECT rating FROM wards WHERE place_id = ?")
+                .all(placeId) as { rating: number }[];
+              return wards.map((w) => w.rating);
+            })
+          : [],
+        resisterRatings: resisterRatingsForChange(db, change.id),
+      });
+
+      let deltaPaid = 0;
+      if (input.scope === change.scope && input.magnitude === change.magnitude) {
+        const factId = crypto.randomUUID();
+        db.prepare(
+          `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id)
+           VALUES (?, ?, 'change', ?, ?, 'change', ?)`,
+        ).run(factId, change.campaign_id, change.id, input.childStatement, change.id);
+        return { quote: newQuote, deltaPaid: 0 };
+      }
+
+      deltaPaid = Math.max(0, newQuote.total - oldQuote.total);
+      const influence = input.influence ?? 0;
+      const dominion = input.dominion ?? 0;
+      if (influence + dominion < deltaPaid) {
+        throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough to expand change");
+      }
+      if (input.godboundId && influence > 0) {
+        const gb = db
+          .prepare("SELECT influence FROM godbound WHERE id = ?")
+          .get(input.godboundId) as { influence: number } | undefined;
+        if (!gb || gb.influence < influence) {
+          throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough influence");
+        }
+        db.prepare("UPDATE godbound SET influence = influence - ? WHERE id = ?").run(
+          influence,
+          input.godboundId,
+        );
+        const existing = db
+          .prepare(
+            "SELECT influence FROM change_commitments WHERE change_id = ? AND godbound_id = ?",
+          )
+          .get(change.id, input.godboundId) as { influence: number } | undefined;
+        if (existing) {
+          db.prepare(
+            "UPDATE change_commitments SET influence = influence + ? WHERE change_id = ? AND godbound_id = ?",
+          ).run(influence, change.id, input.godboundId);
+        } else {
+          db.prepare(
+            `INSERT INTO change_commitments (change_id, godbound_id, influence, wealth_spent) VALUES (?, ?, ?, 0)`,
+          ).run(change.id, input.godboundId, influence);
+        }
+      }
+      if (dominion > 0) {
+        db.prepare("UPDATE changes SET dominion_spent = dominion_spent + ? WHERE id = ?").run(
+          dominion,
+          change.id,
+        );
+      }
+
+      db.prepare(
+        `UPDATE changes SET scope = ?, magnitude = ?, place_ids = ?, deeds_required = ?, challenges_required = ? WHERE id = ?`,
+      ).run(
+        input.scope,
+        input.magnitude,
+        JSON.stringify(input.placeIds ?? JSON.parse(change.place_ids)),
+        Math.max(change.deeds_done, newQuote.deedsRequired),
+        Math.max(change.challenges_done, newQuote.challengesRequired),
+        change.id,
+      );
+
+      const factId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id)
+         VALUES (?, ?, 'change', ?, ?, 'change', ?)`,
+      ).run(factId, change.campaign_id, change.id, input.childStatement, change.id);
+
+      return { quote: newQuote, deltaPaid };
+    }),
+  );
+}
+

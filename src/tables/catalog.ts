@@ -24,6 +24,11 @@ export function loadCatalog(): Catalog {
   return cached;
 }
 
+export function catalogRowsAt(path: string): { id?: string; text: string }[] {
+  const catalog = loadCatalog();
+  return rowsAt(catalog, path);
+}
+
 function rowsAt(catalog: Catalog, path: string): { id?: string; text: string }[] {
   const parts = path.split(".");
   let cursor: unknown = catalog;

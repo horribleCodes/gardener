@@ -9,20 +9,23 @@ import { monthlyDominion } from "../rules/cults.js";
 import type { Harshness } from "../domain/types.js";
 import { rollDie } from "../rules/dice.js";
 import { planGoal } from "../rules/goals.js";
-import { interestCap } from "../rules/actions.js";
+import { interestCap, interestModifier } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
 import { loadCatalog } from "../tables/catalog.js";
 import { withTransaction } from "../store/db.js";
-import { runAction } from "./actions.js";
+import { runAction, type RunActionInput } from "./actions.js";
 import {
+  ensureOpenTurn,
+  loadProblemsOrdered,
   nextRng,
   requireCampaign,
   requireFaction,
+  sumTrouble,
   wrapRule,
   type ServiceResult,
 } from "./util.js";
 
-type FactionAction =
+export type FactionAction =
   | { type: "build_strength"; forcedRoll?: number }
   | { type: "idle" }
   | { type: "aid"; targetFactionId: string }
@@ -754,12 +757,6 @@ function runGlorifyIfNeeded(
 
 export function advanceMonth(db: Database.Database, campaignId: string): void {
   const campaign = requireCampaign(db, campaignId);
-  const openTurn = db
-    .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
-    .get(campaignId);
-  if (openTurn) {
-    throw new RuleError("TURN_ALREADY_OPEN", "cannot advance month while a turn is open");
-  }
 
   db.prepare("UPDATE campaigns SET month = month + 1 WHERE id = ?").run(campaignId);
 
@@ -891,6 +888,285 @@ export function runFactionTurn(
       }
 
       return { order, results };
+    }),
+  );
+}
+
+const INTERNAL_ACTIONS = new Set(["build_strength", "enact_change", "restore_cohesion", "set_theology"]);
+const EXTERNAL_ACTIONS = new Set(["attack", "extend_interest", "aid", "remove_interest"]);
+
+export function advanceMonthForCampaign(
+  db: Database.Database,
+  campaignId: string,
+): ServiceResult<{ month: number }> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      const pending = db
+        .prepare(
+          `SELECT a.id FROM actions a
+           JOIN turns t ON t.id = a.turn_id
+           WHERE t.campaign_id = ? AND t.open = 1 AND a.outcome = 'PENDING_DEFENDER_CHOICE' LIMIT 1`,
+        )
+        .get(campaignId);
+      if (pending) {
+        throw new RuleError("TURN_ALREADY_OPEN", "defender choice pending");
+      }
+
+      const openTurn = db
+        .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
+        .get(campaignId) as { id: string } | undefined;
+      if (openTurn) {
+        db.prepare("UPDATE turns SET open = 0 WHERE id = ?").run(openTurn.id);
+      }
+
+      advanceMonth(db, campaignId);
+      const campaign = requireCampaign(db, campaignId);
+      return { month: campaign.month };
+    }),
+  );
+}
+
+export function factionAction(
+  db: Database.Database,
+  input: {
+    campaignId: string;
+    factionId: string;
+    action: FactionAction;
+  },
+): ServiceResult<unknown> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      const faction = requireFaction(db, input.factionId);
+      if (faction.campaign_id !== input.campaignId) {
+        throw new RuleError("ENTITY_NOT_FOUND", "faction not in campaign");
+      }
+
+      const turnId = ensureOpenTurn(db, input.campaignId);
+      const prior = db
+        .prepare(
+          `SELECT type, target_id FROM actions WHERE turn_id = ? AND actor_type = 'faction' AND actor_id = ?`,
+        )
+        .all(turnId, input.factionId) as { type: string; target_id: string | null }[];
+
+      const actionType = input.action.type;
+      const isInternal = INTERNAL_ACTIONS.has(actionType);
+      const isExternal = EXTERNAL_ACTIONS.has(actionType);
+
+      if (isInternal) {
+        const internalCount = prior.filter((a) => INTERNAL_ACTIONS.has(a.type)).length;
+        if (internalCount > 0) {
+          throw new RuleError("INTERNAL_BUDGET", "internal action already taken");
+        }
+      }
+
+      if (isExternal) {
+        const externalCount = prior.filter((a) => EXTERNAL_ACTIONS.has(a.type)).length;
+        if (externalCount >= faction.power) {
+          throw new RuleError("EXTERNAL_BUDGET", "external action budget exhausted");
+        }
+        const targetId =
+          "targetFactionId" in input.action ? input.action.targetFactionId : undefined;
+        if (targetId) {
+          const dup = prior.some((a) => a.target_id === targetId && EXTERNAL_ACTIONS.has(a.type));
+          if (dup) throw new RuleError("DUPLICATE_EXTERNAL_TARGET", "already acted on target");
+        }
+      }
+
+      if (input.action.type === "idle") {
+        return { idle: true };
+      }
+      const result = runAction(db, {
+        campaignId: input.campaignId,
+        factionId: input.factionId,
+        ...input.action,
+      } as RunActionInput);
+      if (!result.ok) {
+        throw new RuleError(result.error.code, result.error.message, result.error.details);
+      }
+      return result.data;
+    }),
+  );
+}
+
+export function spendInterest(
+  db: Database.Database,
+  input: {
+    campaignId: string;
+    fromFactionId: string;
+    toFactionId: string;
+    timing: "before" | "after" | "steal";
+    modifier: number;
+    actionId?: string;
+  },
+): ServiceResult<Record<string, unknown>> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      const faction = requireFaction(db, input.fromFactionId);
+      const dieMax = DIE_BY_POWER[faction.power];
+      if (input.modifier > dieMax) {
+        throw new RuleError("MODIFIER_EXCEEDS_DIE", "modifier exceeds die maximum");
+      }
+
+      const turn = db
+        .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
+        .get(input.campaignId) as { id: string } | undefined;
+      if (!turn) throw new RuleError("TURN_ALREADY_OPEN", "no open turn");
+
+      const spent = db
+        .prepare(
+          `SELECT id FROM actions WHERE turn_id = ? AND actor_id = ? AND target_id = ? AND type = 'spend_interest'`,
+        )
+        .get(turn.id, input.fromFactionId, input.toFactionId);
+      if (spent) throw new RuleError("INTEREST_ALREADY_SPENT", "already spent on target");
+
+      const edge = db
+        .prepare(
+          "SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?",
+        )
+        .get(input.fromFactionId, input.toFactionId) as { points: number } | undefined;
+      if (!edge || edge.points < input.modifier) {
+        throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough interest");
+      }
+
+      if (input.timing === "after" || input.timing === "steal") {
+        const cost = interestModifier(dieMax, input.modifier);
+        if (faction.dominion < cost) {
+          throw new RuleError("INSUFFICIENT_DOMINION", "not enough dominion for after-roll spend");
+        }
+        db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(
+          cost,
+          input.fromFactionId,
+        );
+        if (input.timing === "steal") {
+          const target = requireFaction(db, input.toFactionId);
+          const steal = Math.min(input.modifier, target.dominion);
+          db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(
+            steal,
+            input.toFactionId,
+          );
+          db.prepare("UPDATE factions SET dominion = dominion + ? WHERE id = ?").run(
+            steal,
+            input.fromFactionId,
+          );
+        }
+      }
+
+      db.prepare(
+        "UPDATE interests SET points = points - ? WHERE from_faction_id = ? AND to_faction_id = ?",
+      ).run(input.modifier, input.fromFactionId, input.toFactionId);
+
+      db.prepare(
+        `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, outcome)
+         VALUES (?, ?, 'spend_interest', 'faction', ?, 'faction', ?, 'success')`,
+      ).run(crypto.randomUUID(), turn.id, input.fromFactionId, input.toFactionId);
+
+      return { spent: input.modifier, timing: input.timing };
+    }),
+  );
+}
+
+export function listHooks(db: Database.Database, campaignId: string): ServiceResult<unknown> {
+  return wrapRule(() => {
+    requireCampaign(db, campaignId);
+    const problems = db
+      .prepare(
+        `SELECT p.id, p.text, p.faction_id, f.name AS faction_name
+         FROM problems p JOIN factions f ON f.id = p.faction_id
+         WHERE f.campaign_id = ? AND p.face_character_id IS NULL`,
+      )
+      .all(campaignId);
+    const challenges = db
+      .prepare(
+        `SELECT c.id, c.text, c.change_id FROM challenges c
+         JOIN changes ch ON ch.id = c.change_id WHERE ch.campaign_id = ? AND c.status = 'open'`,
+      )
+      .all(campaignId);
+    const decaying = db
+      .prepare("SELECT id, scope, magnitude FROM changes WHERE campaign_id = ? AND status = 'decaying'")
+      .all(campaignId);
+    const blankCourts = db
+      .prepare("SELECT id, type FROM courts WHERE campaign_id = ? AND blank = 1")
+      .all(campaignId);
+    const consequences = db
+      .prepare(
+        `SELECT cc.id, cc.text, cc.court_id FROM court_consequences cc
+         JOIN courts c ON c.id = cc.court_id
+         JOIN facts f ON f.subject = 'court' AND f.subject_id = c.id
+         WHERE c.campaign_id = ?`,
+      )
+      .all(campaignId);
+    const factions = db
+      .prepare("SELECT id, name, power FROM factions WHERE campaign_id = ? AND status = 'active'")
+      .all(campaignId) as { id: string; name: string; power: Power }[];
+    const nearCollapse = factions
+      .map((f) => {
+        const trouble = sumTrouble(loadProblemsOrdered(db, f.id));
+        const margin = DIE_BY_POWER[f.power] - trouble;
+        return { ...f, trouble, margin };
+      })
+      .filter((f) => f.margin <= 1);
+
+    return {
+      problems,
+      challenges,
+      decayingChanges: decaying,
+      blankCourts,
+      courtConsequences: consequences,
+      nearCollapse,
+    };
+  });
+}
+
+export function resolveAttack(
+  db: Database.Database,
+  input: {
+    campaignId: string;
+    actionId: string;
+    defenderChoice: "cohesion" | "sacrifice" | "problem";
+    problemId?: string;
+  },
+): ServiceResult<unknown> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      const action = db
+        .prepare(
+          `SELECT a.id, a.turn_id, a.actor_id, a.target_id, a.feature_ids, a.outcome
+           FROM actions a JOIN turns t ON t.id = a.turn_id
+           WHERE a.id = ? AND t.campaign_id = ?`,
+        )
+        .get(input.actionId, input.campaignId) as
+        | {
+            id: string;
+            turn_id: string;
+            actor_id: string;
+            target_id: string;
+            feature_ids: string;
+            outcome: string;
+          }
+        | undefined;
+      if (!action) throw new RuleError("ENTITY_NOT_FOUND", "action not found");
+      if (action.outcome !== "PENDING_DEFENDER_CHOICE") {
+        throw new RuleError("NOT_PENDING", "action is not pending");
+      }
+
+      const featureIds = JSON.parse(action.feature_ids) as string[];
+      const attackerFeatureId = featureIds[0];
+      const defenderFeatureId = featureIds[1] ?? undefined;
+
+      const result = runAction(db, {
+        campaignId: input.campaignId,
+        factionId: action.actor_id,
+        type: "attack",
+        targetFactionId: action.target_id,
+        attackerFeatureId,
+        defenderFeatureId,
+        defenderChoice: input.defenderChoice,
+        problemId: input.problemId,
+      });
+      if (!result.ok) {
+        throw new RuleError(result.error.code, result.error.message, result.error.details);
+      }
+      return result.data;
     }),
   );
 }
