@@ -3,3 +3,4 @@ dist/
 data/*.sqlite
 data/*.sqlite-*
 uploads/
+.superpowers
