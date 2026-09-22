@@ -140,11 +140,15 @@ function runEnactChange(
       .get(input.solveProblemId, faction.id) as
       | { id: string; points: number; intrinsic: number }
       | undefined;
+    if (namedProblem && namedProblem.intrinsic !== 0) {
+      throw new RuleError("INTRINSIC_PROBLEM", "cannot reduce an intrinsic problem");
+    }
+    const hasNonIntrinsic = preflightProblems.some((p) => !p.intrinsic);
+    if (!hasNonIntrinsic) {
+      throw new RuleError("NOTHING_TO_SOLVE", "nothing to solve");
+    }
     if (!namedProblem) {
       throw new RuleError("ENTITY_NOT_FOUND", "problem to solve not found");
-    }
-    if (namedProblem.intrinsic !== 0) {
-      throw new RuleError("INTRINSIC_PROBLEM", "cannot reduce an intrinsic problem");
     }
   }
 

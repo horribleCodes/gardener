@@ -364,6 +364,30 @@ test("enact_change solveProblemId rejects intrinsic problem before spending domi
   expect(faction.dominion).toBe(2);
 });
 
+test("enact_change solveProblemId missing id when only intrinsic problems refuses NOTHING_TO_SOLVE", () => {
+  const db = createPower1FactionDb(2);
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES (?, ?, ?, ?, 'cultural', 1, 0, 0, ?)`,
+  ).run("holy-law", "f1", "Holy law", 1, 0);
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "f1",
+    type: "enact_change",
+    magnitude: "plausible",
+    solveProblemId: "missing",
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.code).toBe("NOTHING_TO_SOLVE");
+
+  const faction = db.prepare("SELECT dominion FROM factions WHERE id = ?").get("f1") as {
+    dominion: number;
+  };
+  expect(faction.dominion).toBe(2);
+});
+
 test("enact_change solveProblemId with no problems refuses before spending dominion", () => {
   const db = createPower1FactionDb(2);
 
