@@ -22,6 +22,15 @@ test("require mode does not invent a type", () => {
   }
 });
 
+test("unknown power structure throws PICK_UNKNOWN", () => {
+  try {
+    generateCourt({ fill: "missing", seed: 1, powerStructure: "nope" });
+    throw new Error("should have thrown");
+  } catch (error) {
+    expect((error as { code?: string }).code).toBe("PICK_UNKNOWN");
+  }
+});
+
 test("a supplied conflict is kept", () => {
   const court = generateCourt({
     fill: "missing", seed: 3, type: "temple", conflict: "Who keeps the relic",

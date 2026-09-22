@@ -1,4 +1,4 @@
-import type { FillMode } from "../domain/types.js";
+import { RuleError, type FillMode } from "../domain/types.js";
 import { mulberry32 } from "../rules/dice.js";
 import { loadCatalog, pickOrRoll } from "../tables/catalog.js";
 import { assertRequired, displayName, quarrelSummary } from "./fill.js";
@@ -56,7 +56,7 @@ function resolvePowerStructure(
     catalog.powerStructure.find((r) => r.id === rolled.text) ??
     catalog.powerStructure.find((r) => provided != null && r.id === provided);
   if (!row) {
-    throw new Error(`unknown power structure: ${rolled.text}`);
+    throw new RuleError("PICK_UNKNOWN", `${rolled.text} is not in powerStructure`);
   }
   return { id: row.id, agreement: row.agreement };
 }
