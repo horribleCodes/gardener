@@ -23,6 +23,7 @@ import {
 
 type FactionAction =
   | { type: "build_strength"; forcedRoll?: number }
+  | { type: "aid"; targetFactionId: string }
   | {
       type: "enact_change";
       magnitude?: "plausible" | "improbable";
@@ -52,6 +53,7 @@ type FactionPlanResult = {
   factionId: string;
   strategy?: string;
   substituted?: boolean;
+  skipRunAction?: boolean;
   action: FactionAction;
 };
 
@@ -143,6 +145,30 @@ function listFeatures(
   });
 }
 
+export function preferredInterestTarget(
+  db: Database.Database,
+  faction: { id: string; power: Power },
+): string | undefined {
+  const neighbors = neighborFactions(db, faction.id);
+  const active = neighbors
+    .map((id) => loadFactionRow(db, id))
+    .filter((f) => f.status === "active")
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const weaker = active.find((n) => n.power < faction.power);
+  return weaker?.id ?? active[0]?.id;
+}
+
+export function halfInterestSatisfied(
+  db: Database.Database,
+  faction: { id: string; power: Power },
+): boolean {
+  const targetId = preferredInterestTarget(db, faction);
+  if (!targetId) return false;
+  const interest = interestTo(db, faction.id, targetId);
+  const dieMax = DIE_BY_POWER[faction.power];
+  return interest != null && interest.points >= dieMax;
+}
+
 function strategySatisfied(
   db: Database.Database,
   faction: { id: string; power: Power; dominion: number },
@@ -152,15 +178,74 @@ function strategySatisfied(
     return faction.dominion >= 2 * faction.power;
   }
   if (strategy === "half_interest") {
-    const dieMax = DIE_BY_POWER[faction.power];
-    const neighbors = neighborFactions(db, faction.id);
-    for (const nId of neighbors) {
-      const interest = interestTo(db, faction.id, nId);
-      if (interest && interest.points >= dieMax) return true;
-    }
-    return false;
+    return halfInterestSatisfied(db, faction);
   }
   return false;
+}
+
+function priorAttackerWinAgainst(
+  db: Database.Database,
+  campaignId: string,
+  factionId: string,
+): boolean {
+  const row = db
+    .prepare(
+      `SELECT a.id FROM actions a
+       INNER JOIN turns t ON a.turn_id = t.id
+       WHERE t.campaign_id = ? AND t.open = 0
+         AND a.type = 'attack' AND a.target_id = ? AND a.outcome = 'attacker_win'
+       LIMIT 1`,
+    )
+    .get(campaignId, factionId) as { id: string } | undefined;
+  return row != null;
+}
+
+function pickProxyRecipient(
+  db: Database.Database,
+  actorId: string,
+  campaignId: string,
+): string | undefined {
+  const row = db
+    .prepare(
+      `SELECT f.id FROM factions f
+       WHERE f.campaign_id = ? AND f.status = 'active' AND f.id != ?
+         AND EXISTS (SELECT 1 FROM features WHERE faction_id = f.id AND domain = 'military')
+       ORDER BY f.power DESC, f.id ASC
+       LIMIT 1`,
+    )
+    .get(campaignId, actorId) as { id: string } | undefined;
+  return row?.id;
+}
+
+function executeAid(
+  db: Database.Database,
+  turnId: string,
+  actorId: string,
+  targetId: string,
+): void {
+  db.prepare("UPDATE factions SET dominion = dominion - 1 WHERE id = ?").run(actorId);
+  db.prepare("UPDATE factions SET dominion = dominion + 1 WHERE id = ?").run(targetId);
+  db.prepare(
+    `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, dominion_delta)
+     VALUES (?, ?, 'aid', 'faction', ?, 'faction', ?, -1)`,
+  ).run(crypto.randomUUID(), turnId, actorId, targetId);
+}
+
+function militaryDefeatTarget(
+  db: Database.Database,
+  factionId: string,
+  neighborRows: ReturnType<typeof loadFactionRow>[],
+  neighbors: string[],
+): ReturnType<typeof loadFactionRow> | undefined {
+  const scored = neighbors
+    .map((nId) => ({
+      id: nId,
+      interest: interestTo(db, factionId, nId),
+    }))
+    .filter((x) => x.interest && (x.interest.nature === "rivalry" || x.interest.nature === "spies"))
+    .sort((a, b) => (b.interest?.points ?? 0) - (a.interest?.points ?? 0));
+  if (scored[0]) return loadFactionRow(db, scored[0].id);
+  return neighborRows[0];
 }
 
 function pickGoalRoll(db: Database.Database, campaignId: string, forced?: number): number {
@@ -174,11 +259,40 @@ function resolveStrategy(
   faction: ReturnType<typeof loadFactionRow>,
   strategy: string,
 ): FactionAction {
-  if (INTEREST_ONLY_STRATEGIES.has(strategy) || strategy === "proxy") {
+  if (INTEREST_ONLY_STRATEGIES.has(strategy)) {
     return { type: "build_strength" };
   }
 
-  if (strategy === "stockpile" || strategy === "no_external_until_hit") {
+  if (strategy === "stockpile") {
+    return { type: "build_strength" };
+  }
+
+  if (strategy === "no_external_until_hit") {
+    if (!priorAttackerWinAgainst(db, faction.campaign_id, faction.id)) {
+      return { type: "build_strength" };
+    }
+    const neighbors = neighborFactions(db, faction.id);
+    const neighborRows = neighbors
+      .map((id) => loadFactionRow(db, id))
+      .filter((f) => f.status === "active");
+    const target = militaryDefeatTarget(db, faction.id, neighborRows, neighbors);
+    if (!target) return { type: "build_strength" };
+    const mil = listFeatures(db, faction.id, "military")[0];
+    if (!mil) return { type: "build_strength" };
+    return {
+      type: "attack",
+      targetFactionId: target.id,
+      attackerFeatureId: mil.id,
+    };
+  }
+
+  if (strategy === "proxy") {
+    if (faction.dominion >= 1) {
+      const recipient = pickProxyRecipient(db, faction.id, faction.campaign_id);
+      if (recipient) {
+        return { type: "aid", targetFactionId: recipient };
+      }
+    }
     return { type: "build_strength" };
   }
 
@@ -334,7 +448,12 @@ function planFactionAction(
     roll = pickGoalRoll(db, faction.campaign_id);
     const next = planGoal(faction.behavior, roll);
     if (strategySatisfied(db, faction, next.strategy)) {
-      return { factionId: faction.id, strategy, action: { type: "build_strength" } };
+      return {
+        factionId: faction.id,
+        strategy: next.strategy,
+        action: { type: "build_strength" },
+        skipRunAction: true,
+      };
     }
     strategy = next.strategy;
   }
@@ -344,12 +463,15 @@ function planFactionAction(
     substituted = true;
     return { factionId: faction.id, strategy, substituted, action: { type: "build_strength" } };
   }
-  if (strategy === "proxy") {
-    substituted = true;
-    return { factionId: faction.id, strategy, substituted, action: { type: "build_strength" } };
+  let action = resolveStrategy(db, faction, strategy);
+
+  if (action.type === "aid") {
+    return { factionId: faction.id, strategy, action };
   }
 
-  let action = resolveStrategy(db, faction, strategy);
+  if (strategy === "proxy" && action.type === "build_strength") {
+    return { factionId: faction.id, strategy, substituted: true, action };
+  }
 
   if (action.type === "enact_change") {
     const magnitude =
@@ -461,13 +583,17 @@ export function runFactionTurn(
         )
         .all(input.campaignId) as { id: string }[];
 
-      const shuffleRng = nextRng(db, input.campaignId);
-      const order = shuffleIds(acting.map((f) => f.id), shuffleRng);
-
+      let order: string[];
       let turnId: string;
       if (existing) {
         turnId = existing.id;
+        const turnRow = db
+          .prepare("SELECT faction_order FROM turns WHERE id = ?")
+          .get(turnId) as { faction_order: string };
+        order = JSON.parse(turnRow.faction_order) as string[];
       } else {
+        const shuffleRng = nextRng(db, input.campaignId);
+        order = shuffleIds(acting.map((f) => f.id), shuffleRng);
         const campaign = requireCampaign(db, input.campaignId);
         turnId = crypto.randomUUID();
         db.prepare(
@@ -476,10 +602,27 @@ export function runFactionTurn(
         ).run(turnId, input.campaignId, campaign.month, JSON.stringify(order));
       }
 
+      const actedRows = db
+        .prepare(
+          `SELECT DISTINCT actor_id FROM actions WHERE turn_id = ? AND actor_type = 'faction'`,
+        )
+        .all(turnId) as { actor_id: string }[];
+      const alreadyActed = new Set(actedRows.map((r) => r.actor_id));
+
       const results: FactionPlanResult[] = [];
       for (const factionId of order) {
+        if (alreadyActed.has(factionId)) continue;
         const fresh = loadFactionRow(db, factionId);
         const plan = planFactionAction(db, fresh, input.actions?.[factionId]);
+        if (plan.skipRunAction) {
+          results.push(plan);
+          continue;
+        }
+        if (plan.action.type === "aid") {
+          executeAid(db, turnId, factionId, plan.action.targetFactionId);
+          results.push(plan);
+          continue;
+        }
         const actionInput = { campaignId: input.campaignId, factionId, ...plan.action };
         const actionResult = runAction(db, actionInput);
         runGlorifyIfNeeded(db, factionId, turnId, plan.strategy, actionResult);

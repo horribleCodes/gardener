@@ -17,7 +17,7 @@ export type PowerStructure =
 export function decisionMakers(input: {
   powerStructure: PowerStructure;
   actors: CourtActorInput[];
-}): { binds: boolean; approaches: string[]; insufficient?: string[] } {
+}): { binds: boolean; approaches: string[]; insufficient?: string[]; majority?: number } {
   const majors = input.actors.filter((a) => a.rank === "major");
   const leaders = input.actors.filter((a) => a.isLeader);
   const hidden = input.actors.filter((a) => a.isHiddenController);
@@ -48,10 +48,11 @@ export function decisionMakers(input: {
         approaches: majors.map((a) => a.id),
       };
     case "democratic": {
-      const count = Math.floor(majors.length / 2) + 1;
+      const n = majors.length;
       return {
-        binds: majors.length > 0,
-        approaches: majors.slice(0, count).map((a) => a.id),
+        binds: n > 0,
+        approaches: majors.map((a) => a.id),
+        majority: Math.floor(n / 2) + 1,
       };
     }
     case "anarchic":
