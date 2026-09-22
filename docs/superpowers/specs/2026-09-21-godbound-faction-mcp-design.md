@@ -39,7 +39,8 @@ Approach A is the design.
 | Language | TypeScript, Node 22 |
 | MCP | `@modelcontextprotocol/sdk` over stdio |
 | Validation | Zod |
-| Store | SQLite via `better-sqlite3`, one file per process, WAL |
+| Store | SQLite via `better-sqlite3`, WAL. One database file. Many processes may read. One writer at a time. |
+| Writes | Exclusive lock file beside the database, plus a `write_queue` table. Decision agents run in parallel. Apply is serial. |
 | Tests | Vitest |
 | IDs | UUID v4 |
 | RNG | mulberry32, seed is a uint32 stored on the roll |
@@ -47,30 +48,34 @@ Approach A is the design.
 | Derived numbers | Server computes Trouble, action die, collapse, caps, and cost. Clients cannot write them. |
 | Table prose | `docs/superpowers/specs/generator-catalog.json` |
 | Names | Caller-supplied culture lists. Otherwise `Unnamed {role}`. No setting name-lists ship in the server. |
-| Defender AI | `preserve_existence`, overridable per resolution |
-| Ally interest | Factions auto-intervene only when interest nature says so, and only after a roll if the spend would flip it |
+| Defender AI | `preserve_existence` only when the defender's plan did not name a choice. Player-controlled defenders still pause. |
+| Turn agents | Each acting unit gets a frozen view of what it is privy to. It submits a plan. It does not read the GM brief. |
+| Missing plan | `idle` by default. `mechanical` is an explicit fallback that runs goal strategies using only the unit's view. |
 
 ## Architecture
 
 ```text
-MCP tools / resources / prompts
+orchestrator (one agent per acting unit, parallel)
+        |  get_unit_view / submit_unit_plan
+        v
+MCP tools
         |
         v
-application services  (create, ensure, act, quote, brief)
-        |
-        +--> generation (partial fill, blank, fit)
-        +--> rules       (pure)
-        +--> queries     (derived, read-only)
+write lock  -->  write queue  -->  single applier
         |
         v
-SQLite: materialized rows + append-only events and rolls
+services, rules, generation, queries
+        |
+        v
+SQLite rows + events + frozen unit_view snapshots
 ```
 
-- **Rules** import nothing from the store or the SDK. They take values and an RNG and return results plus roll records.
+- **Rules** import nothing from the store or the SDK. They take values and an RNG and return results plus roll records. The knowledge projector is a pure function: full state in, one unit's view out.
 - **Generation** reads the catalog and the rules. It never overwrites a field the caller sent.
-- **Services** open one transaction per tool call, write rows, append events, and return the envelope below.
-- **Queries** do not roll and do not write, except `explain_roll`, which only reads.
+- **Services** open one transaction per tool call. Every mutation takes the write lock before the transaction and releases it after commit or rollback.
+- **Queries** do not roll and do not write. `get_unit_view` reads the frozen snapshot for that unit and no other row from the GM brief.
 - **MCP** parses arguments, calls one service, and returns the envelope as text JSON. It also sets `structuredContent` to the same object.
+- The server does not call a language model. The host runs one agent per unit and gives that agent only `get_unit_view` and `submit_unit_plan` for its own id. The server rejects plans that name an entity absent from that snapshot.
 
 ```mermaid
 flowchart LR
@@ -112,7 +117,7 @@ Failure:
 
 Error codes used by the engine:
 
-`CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_OUT_OF_RANGE`, `PICK_UNKNOWN`, `COLLAPSED_FACTION`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `INTEREST_CAP`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `FEATURE_NOT_RELEVANT`, `IMPOSSIBLE_FOR_FACTION`, `DEEDS_OUTSTANDING`, `CHALLENGES_OUTSTANDING`, `COHESION_AT_CAP`, `COHESION_ABOVE_POWER`, `INTRINSIC_PROBLEM`, `DUPLICATE_EXTERNAL_TARGET`, `EXTERNAL_BUDGET`, `INTERNAL_BUDGET`, `ALREADY_ACTED_ON_TARGET`, `INTEREST_ALREADY_SPENT`, `PENDING_DEFENDER_CHOICE`, `NOT_PENDING`, `CHANGE_NOT_READY`, `WARD_OUT_OF_RANGE`, `POWER_OUT_OF_RANGE`, `MAGNITUDE_REJECTED`, `NOTHING_TO_SOLVE`, `TURN_ALREADY_OPEN`, `BLANK_FIELD`, `NAME_TAKEN`.
+`CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_OUT_OF_RANGE`, `PICK_UNKNOWN`, `COLLAPSED_FACTION`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `INTEREST_CAP`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `FEATURE_NOT_RELEVANT`, `IMPOSSIBLE_FOR_FACTION`, `DEEDS_OUTSTANDING`, `CHALLENGES_OUTSTANDING`, `COHESION_AT_CAP`, `COHESION_ABOVE_POWER`, `INTRINSIC_PROBLEM`, `DUPLICATE_EXTERNAL_TARGET`, `EXTERNAL_BUDGET`, `INTERNAL_BUDGET`, `ALREADY_ACTED_ON_TARGET`, `INTEREST_ALREADY_SPENT`, `PENDING_DEFENDER_CHOICE`, `NOT_PENDING`, `CHANGE_NOT_READY`, `WARD_OUT_OF_RANGE`, `POWER_OUT_OF_RANGE`, `MAGNITUDE_REJECTED`, `NOTHING_TO_SOLVE`, `TURN_ALREADY_OPEN`, `BLANK_FIELD`, `NAME_TAKEN`, `WRITE_LOCKED`, `QUEUE_CLOSED`, `UNKNOWN_TO_UNIT`, `REACTION_CLOSED`.
 
 ## Domain model
 
@@ -439,7 +444,7 @@ Extend Interest uses the same marginal-feature and no-defender-feature rules as 
 
 `m` cannot exceed current interest. One successful spend per target per turn.
 
-Automated intervention, only when `autoIntervene` is true and the edge nature is `alliance` or `aid` (help) or `rivalry` or `spies` (harm): after the raw totals exist and before the outcome is committed, if a modifier of size `m` (1…die max) would change the winner, and the spender can pay the after-roll Dominion, they spend the smallest such `m`. They do not spend before the roll unless a tool call asks them to. Help moves the ally's total up or the ally's enemy's total down, whichever is cheaper, preferring to boost the ally. Harm does the opposite.
+A unit authorizes intervention in its plan, before it sees the roll. The plan may carry standing orders `{ targetFactionId, side: "help" | "harm", maxSpend }`. During apply, after the raw totals exist and before the outcome is committed, the server spends the smallest `m` that flips the result, up to `maxSpend`, the spender's die maximum, and the spender's interest in that target. `side: "help"` boosts the named target or reduces its opponent, preferring the boost. `side: "harm"` does the opposite. An after-roll standing order also spends `m` Dominion; if Dominion is short, that order does not fire. The unit never receives the opponent's hidden sheet in order to write the standing order. `autoIntervene: true` does not invent a standing order. It only allows a submitted order to fire. There is no omniscient pass that inspects every faction's totals and spends on its own.
 
 ### Goal strategies
 
@@ -472,16 +477,58 @@ If the chosen action needs Dominion the faction does not have, substitute Build 
 
 `directed` factions act only on the explicit action list in `run_faction_turn` or the single-action tools.
 
+### Who is privy to what
+
+An acting **unit** is a faction, a court, a character, or a Godbound. NPC factions act by default. A court, character, or Godbound acts only when `actsOnOwn` is true. Player-controlled factions do not receive an agent; the caller submits their plan, or they stay idle.
+
+`projectUnitView` is a pure function. It receives the full campaign state and one unit id, and returns the only JSON that unit's agent may see. `get_world_brief`, `get_faction`, and `interest_map` are GM tools. A plan is illegal when it names a faction, court, character, place, feature, or problem id that does not appear in that unit's snapshot (`UNKNOWN_TO_UNIT`).
+
+Another faction appears in the view only when the viewer shares its home place or a parent place, the viewer holds Interest in it, it holds a non-spy Interest in the viewer, or a fact the viewer can see names it. Factions that fail those tests are omitted, not listed as redacted blanks.
+
+| Viewer relationship to the other faction | Fields included |
+| --- | --- |
+| Included at all | id, name, power, home place, features whose `covert` is false |
+| Holds `alliance` or `aid` | Also cohesion, dominion, every non-covert and covert feature, every non-intrinsic problem |
+| Holds `marriage`, `trade`, or `tribute` | Also problems whose domain is `cultural` or `economic` |
+| Holds `rivalry` | Also military features, including covert military features, and military problems |
+| Holds `spies` with at least 1 point | Also cohesion, dominion, every feature, every problem |
+| Holds `spies` with points at least equal to the viewer's own die maximum | Also the target's ruling court in full, including hidden controllers and power sources |
+
+The viewer's own faction sheet is complete: power, cohesion, dominion, trouble, behavior, every feature, every problem, and every Interest it holds. Interest aimed at the viewer is listed only when its nature is not `spies`. Spy Interest against the viewer is absent from the view. `statNote` never appears in a unit view.
+
+Court fields follow the same cut. A non-member sees the court id, type, place, atmosphere, and the public leader's name. A member who is not a hidden controller sees every actor except hidden controllers, the conflict text, defenses, and consequences, and does not see power sources. When the true structure is `figurehead` and this viewer cannot see the controllers, the view reports `agreement` as `leader`. The public leader is who they believe decides. A hidden controller, or a spy who meets the die-maximum threshold above, sees the court in full.
+
+Facts carry `visibility`: `public`, `local`, `privileged`, or `hidden`. Public facts are visible with their subject. Local facts are visible to units at that place. Privileged facts are visible to the owner and to holders of `alliance`, `aid`, or any `spies`. Hidden facts are visible to the owner and to spies who meet the die-maximum threshold. Omitted facts are not replaced with placeholders.
+
+Rumors in the view are events where the unit is the actor or the target, plus events stored as `public` at a place the unit knows. Feature names inside a rumor are replaced with "an undisclosed asset" when that feature is not otherwise in the view.
+
+### Parallel turns and the write queue
+
+`open_parallel_turn` opens the campaign's single turn, shuffles the acting units, and stores one frozen snapshot per unit in `unit_views`. Later mutations do not change those snapshots. The tool's return value lists every unit id. It does not include other units' views. The orchestrator fetches each view with `get_unit_view` and starts one agent per unit. Those agents run together.
+
+`submit_unit_plan` takes the write lock, appends or replaces that unit's queued plan, and releases the lock. It does not roll dice and does not change the faction. A second submit before apply replaces the payload. A submit after apply has started for that unit returns `QUEUE_CLOSED`.
+
+`apply_write_queue` takes the write lock and holds it until the apply phase finishes or pauses for a defender choice. Apply order is the shuffled unit order, never the order the plans arrived. A unit with no plan becomes idle when `missing` is `idle` (the default): no internal action and no external action. When `missing` is `mechanical`, that unit's goal strategy runs against the snapshot only. The strategy cannot select a neighbor the snapshot omitted.
+
+When an attack's defender is an agent unit and the attacker's plan did not include a pre-agreed outcome, apply pauses with `PENDING_DEFENDER_CHOICE` and writes a reaction snapshot for the defender. That snapshot is the defender's view plus the attack as the defender would perceive it: named features stay named only when the defender's view contains them. The defender submits `{ defenderChoice }` through `submit_reaction`. The lock is not held while the orchestrator waits.
+
+Standing interest orders inside the original plan fire during apply, as specified under Spend Interest. They are not a second agent call.
+
+`run_faction_turn` remains the one-shot mechanical path. It is `open_parallel_turn` with `missing: "mechanical"` followed by `apply_write_queue` in the same call. Tests and a GM who wants the dice strategies use that path. A campaign played by unit agents uses the split tools.
+
+The lock file path is the database path plus `.lock`. The holder writes its pid and a millisecond timestamp, using exclusive create. If the file exists, the waiter reads it. A lock whose timestamp is older than 30 seconds and whose pid is not running is deleted and the waiter retries. Otherwise the waiter sleeps 25 milliseconds times the attempt number. The default wait is 10 seconds (`GODBOUND_LOCK_TIMEOUT_MS`), then `WRITE_LOCKED`. `:memory:` databases use an in-process mutex with the same timeout, because there is no file. The queue table is still written.
+
+Queue columns: `id`, `campaign_id`, `turn_id`, `unit_id`, `kind` (`plan` or `reaction`), `payload`, `status` (`queued`, `applying`, `done`, `rejected`), `enqueued_at`. Apply marks a row `applying` and then `done` or `rejected` with the rule error code stored in the row.
+
 ### Turn procedure
 
-`run_faction_turn({ factionIds?, advanceMonth? })`:
+`open_parallel_turn({ unitIds?, missing?, advanceMonth? })` followed by `apply_write_queue`:
 
-1. Participating factions default to all `active` factions. Shuffle that list with the campaign RNG.
-2. For each faction in that order, build the plan, then resolve actions. Other factions may Spend Interest at the after-roll window during each contest or trouble check.
-3. Append the turn row and rumor events, then close the turn.
-4. If `advanceMonth` is true, call `advance_month`. Income uses the Power and level values left by the actions just resolved. `advance_month` sees a closed turn, grants Dominion once, and increments `month`.
-
-Explicit actions in the request replace the strategy for that faction. They are validated against the internal/external budget.
+1. Acting units default to every active NPC faction, plus courts, characters, and Godbound whose `actsOnOwn` is true. Shuffle that list with the campaign RNG. Freeze one view per unit.
+2. Wait until `apply_write_queue` is called. Agents may submit in parallel.
+3. Apply plans in shuffled order under the lock. Standing interest orders fire inside that apply. Defender reactions pause and resume as above.
+4. Close the turn and write rumor events from the actions that were actually resolved.
+5. If `advanceMonth` was set on open, call `advance_month` after the turn closes. Income uses the Power and level values left by those actions.
 
 `advance_month` increments `month` and grants Dominion:
 
@@ -533,7 +580,8 @@ All read-only.
 
 | Query | Returns |
 | --- | --- |
-| `get_world_brief` | Month, factions with power, trouble, cohesion, status, collapse margin (`dieMax - trouble`), courts, open changes |
+| `get_unit_view` | The frozen snapshot for one unit. No other unit's sheet, and no GM-only field. |
+| `get_world_brief` | Month, factions with power, trouble, cohesion, status, collapse margin (`dieMax - trouble`), courts, open changes. GM only. |
 | `get_faction` | Full faction, features, problems with blame bands, interests in and out, cap, remaining room under the cap |
 | `get_court` | Court, actors, conflict, decision rule |
 | `quote_change` | The cost breakdown, deeds, challenges, whether a faction could pay it |
@@ -547,6 +595,7 @@ All read-only.
 
 Resources mirror these so a client can read without a tool call:
 
+- `world://campaigns/{id}/units/{unitId}/view` returns that unit's snapshot for the open turn
 - `world://campaigns/{id}/brief`
 - `world://campaigns/{id}/factions/{factionId}`
 - `world://campaigns/{id}/courts/{courtId}`
@@ -558,16 +607,19 @@ Two prompts, both read-only:
 
 - `gm-briefing`: embeds `get_world_brief` and `list_hooks` and tells the model to narrate only what is in the JSON.
 - `faction-turn-narration`: embeds `list_rumors` and the raw actions.
+- `unit-turn`: embeds one `get_unit_view` and tells the agent to submit a plan using only that JSON. The prompt forbids calling GM tools.
 
 ## Persistence
 
 One SQLite file, default `./data/campaign.sqlite`, override with `GODBOUND_WORLD_DB`.
 
-Tables: `campaigns`, `places`, `wards`, `factions`, `features`, `feature_parts`, `problems`, `interests`, `characters`, `courts`, `court_memberships`, `conflicts`, `court_consequences`, `court_defenses`, `facts`, `godbound`, `changes`, `change_commitments`, `resisters`, `challenges`, `setpieces`, `turns`, `actions`, `rolls`, `events`.
+Tables: `campaigns`, `places`, `wards`, `factions`, `features`, `feature_parts`, `problems`, `interests`, `characters`, `courts`, `court_memberships`, `conflicts`, `court_consequences`, `court_defenses`, `facts`, `godbound`, `changes`, `change_commitments`, `resisters`, `challenges`, `setpieces`, `turns`, `unit_views`, `write_queue`, `actions`, `rolls`, `events`.
+
+`facts.visibility` is `public`, `local`, `privileged`, or `hidden`. `characters.acts_on_own` and `courts.acts_on_own` and `godbound.acts_on_own` are integers, default 0. `features.covert` is an integer, default 0.
 
 `court_memberships` carries the actor flags and side. Characters are not stored twice.
 
-Every service call is one transaction. A rule failure rolls the transaction back, including rolls. The error envelope is returned only after rollback, so a failed attack does not consume the external budget or the roll counter. The failed attempt is not an event. Callers that need a log of illegal requests will not find one; the protocol error is the record.
+Every mutation takes the write lock, then one transaction. A rule failure rolls the transaction back, including rolls, then releases the lock. Read tools do not take the lock. `get_unit_view` reads the snapshot that was stored at open. The error envelope is returned only after rollback, so a failed attack does not consume the external budget or the roll counter. The failed attempt is not an event. Callers that need a log of illegal requests will not find one; the protocol error is the record.
 
 Foreign keys on. JSON columns only for event payloads and roll detail.
 
@@ -613,15 +665,19 @@ Tools, grouped. Each create/ensure tool accepts the generation fields. Mutation 
 - `set_theology`
 - `set_divinity`
 - `set_power`
-- `run_faction_turn`
-- `faction_action` (one action, opens or joins the open turn)
+- `open_parallel_turn`
+- `submit_unit_plan`
+- `submit_reaction`
+- `apply_write_queue`
+- `run_faction_turn` (mechanical one-shot: open with `missing: "mechanical"`, then apply)
+- `faction_action` (one action, opens or joins the open turn, still under the write lock)
 - `resolve_attack`
 - `spend_interest`
 - `record_shatter`
 
 **Read**
 
-- `get_world_brief`, `get_faction`, `get_court`, `explain_roll`, `list_hooks`, `list_rumors`, `decision_makers`, `cult_income`, `interest_map`, `relevant_features`
+- `get_unit_view`, `get_world_brief`, `get_faction`, `get_court`, `explain_roll`, `list_hooks`, `list_rumors`, `decision_makers`, `cult_income`, `interest_map`, `relevant_features`
 
 `faction_action` is the single-step form of the actions in the table. `run_faction_turn` batches them. Both call the same rule functions.
 
@@ -635,7 +691,11 @@ Store tests use a temporary SQLite file. One integration test runs a scripted fa
 
 Generation tests: `require` fails when a name is missing; `missing` keeps a supplied conflict and rolls only the atmosphere; `blank` leaves names null; a second ensure with the same key does not roll again; `pick` forces a row.
 
-MCP tests start the server in-process with an in-memory transport if the SDK allows it, otherwise spawn stdio and send one JSON-RPC `tools/call`. At least `seed_campaign` and `quote_change` go through that path.
+Knowledge tests: a rivalry view includes military problems and excludes dominion; a spy view with 1 point includes dominion; a faction with no shared place and no Interest is absent; a plan naming that faction returns `UNKNOWN_TO_UNIT`; `statNote` is absent from every unit view.
+
+Lock and queue tests use a file-backed database. Two overlapping `submit_unit_plan` calls both persist. Apply follows shuffled order when the later unit submitted first. A lock file whose pid is dead and whose timestamp is older than 30 seconds is reclaimed. A held lock past the timeout returns `WRITE_LOCKED`.
+
+MCP tests start the server in-process with `InMemoryTransport.createLinkedPair` from SDK 1.30.0. At least `quote_change` and `get_unit_view` go through that path.
 
 ## Out of scope
 
@@ -647,7 +707,8 @@ MCP tests start the server in-process with an in-memory transport if the SDK all
 - Paradise
 - A web UI
 - HTTP transport
-- More than one campaign file per process (the file may contain many campaigns)
+- More than one database file per process (the file may contain many campaigns)
+- The server calling a language model. Host agents submit plans. The server checks them against the snapshot and the rules.
 
 ## File map for the implementation
 
@@ -667,6 +728,8 @@ src/rules/collapse.ts
 src/rules/actions.ts
 src/rules/cults.ts
 src/rules/goals.ts
+src/rules/knowledge.ts        projectUnitView
+src/store/lock.ts             lock file and memory mutex
 src/tables/catalog.ts         imports the JSON catalog
 src/generate/fill.ts
 src/generate/court.ts

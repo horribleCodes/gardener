@@ -19,7 +19,11 @@
 - Do not generate ruin purpose, hazards, rewards, inhabitants, or rooms. `clear_danger` is a challenge card only.
 - Do not copy rulebook prose into new strings. Use the catalog file.
 - Error codes are the spec's list, including `NOTHING_TO_SOLVE`, `INTERNAL_BUDGET`, and `TURN_ALREADY_OPEN`.
-- One SQLite transaction per tool call. Rule failures roll back, including roll-counter increments.
+- One SQLite transaction per tool call. Mutations take the write lock first. Rule failures roll back, including roll-counter increments, then release the lock.
+- Turn agents see `projectUnitView` output only. A plan that names an id outside that snapshot fails `UNKNOWN_TO_UNIT`.
+- Parallel `submit_unit_plan` calls enqueue. `apply_write_queue` applies the shuffled order under the lock file `{dbPath}.lock`.
+- Default missing plan is `idle`. Mechanical goal strategies are opt-in and may only select entities present in the snapshot.
+- The server does not call a language model.
 - Package manager: npm.
 
 ---
@@ -1263,7 +1267,7 @@ Expected: FAIL, module missing.
 
 `planGoal` reads `loadCatalog().goals[behavior]`, finds the row whose `min <= roll <= max`, and returns `{ strategy }`. `directed` throws `RuleError("MAGNITUDE_REJECTED", "directed factions need an explicit plan")` if called.
 
-`runFactionTurn` follows spec steps 1–4. Strategy-to-actions uses the spec table literally. When a strategy is satisfied (`stockpile` and dominion already `>= 2 * power`, or `half_interest` already at the die maximum against that target), roll the d10 once more via `rollDie`. Explicit `actions` on the request skip `planGoal` for that faction.
+`runFactionTurn` is the mechanical one-shot from the spec: shuffle the acting units, build each plan from the goal table, apply in that order, close the turn, then `advanceMonth` when requested. It may read full faction rows. It does not spend Interest on a faction's behalf. Standing orders and the privy-information filter arrive in Task 13, which wraps target selection so a mechanical plan cannot name an id outside `projectUnitView`. When a strategy is satisfied (`stockpile` and dominion already `>= 2 * power`, or `half_interest` already at the die maximum against that target), roll the d10 once more via `rollDie`. Explicit `actions` on the request skip `planGoal` for that faction.
 
 `decisionMakers` implements the six-row table in the spec. `rumorLines` maps each closed turn's actions to:
 
@@ -1447,3 +1451,110 @@ git commit -m "docs: explain how to run the faction MCP"
 ```
 
 The README in this step replaces a design-only README if one was committed with the spec. Keep one README.
+
+### Task 13: Privy views, lock file, and write queue
+
+**Files:**
+- Create: `src/rules/knowledge.ts`
+- Create: `src/store/lock.ts`
+- Create: `src/services/queue.ts`
+- Test: `test/rules/knowledge.test.ts`
+- Test: `test/store/lock.test.ts`
+
+**Interfaces:**
+- Consumes: faction, feature, problem, interest, court, and fact rows from Tasks 8–10. `RuleError` codes `UNKNOWN_TO_UNIT`, `WRITE_LOCKED`, `QUEUE_CLOSED`.
+- Produces: `projectUnitView`, `withWriteLock`, `openParallelTurn`, `submitUnitPlan`, `applyWriteQueue`
+
+- [ ] **Step 1: Write the failing knowledge test**
+
+```ts
+import { expect, test } from "vitest";
+import { projectUnitView } from "../../src/rules/knowledge.js";
+
+const world = {
+  factions: [
+    { id: "us", name: "Us", power: 1, cohesion: 1, dominion: 3, homePlaceId: "p", behavior: "directed", status: "active" },
+    { id: "them", name: "Them", power: 2, cohesion: 2, dominion: 9, homePlaceId: "far", behavior: "despotic_tyrant", status: "active" },
+  ],
+  places: [{ id: "p", name: "Home", scope: "village", parentPlaceId: null }, { id: "far", name: "Far", scope: "city", parentPlaceId: null }],
+  features: [
+    { id: "f1", factionId: "them", text: "Open market", domain: "economic", covert: false },
+    { id: "f2", factionId: "them", text: "Secret rifles", domain: "military", covert: true },
+  ],
+  problems: [
+    { id: "pr1", factionId: "them", text: "Bandits", domain: "military", points: 1, intrinsic: false },
+    { id: "pr2", factionId: "them", text: "Empty treasury", domain: "economic", points: 1, intrinsic: false },
+  ],
+  interests: [{ fromFactionId: "us", toFactionId: "them", points: 4, nature: "rivalry" }],
+  courts: [],
+  characters: [{ id: "c1", name: "Spy", statNote: "HD 4", courtId: null, isHiddenController: false }],
+  facts: [],
+  events: [],
+};
+
+test("a rival sees military secrets and not dominion", () => {
+  const view = projectUnitView(world, { type: "faction", id: "us" });
+  const them = view.known.factions.find((faction) => faction.id === "them");
+  expect(them?.features.map((feature) => feature.id).sort()).toEqual(["f1", "f2"]);
+  expect(them?.problems.map((problem) => problem.id)).toEqual(["pr1"]);
+  expect(them).not.toHaveProperty("dominion");
+  expect(JSON.stringify(view)).not.toContain("HD 4");
+  expect(JSON.stringify(view)).not.toContain("despotic_tyrant");
+});
+```
+
+Them is known because Us holds rivalry, even though the places do not touch. Non-covert features are always included for a known faction, and rivalry adds covert military features and military problems. The economic problem stays out. Dominion, cohesion, behavior, and `statNote` stay out.
+
+- [ ] **Step 2: Run and confirm failure**
+
+Run: `npx vitest run test/rules/knowledge.test.ts`
+Expected: FAIL, module missing.
+
+- [ ] **Step 3: Implement `projectUnitView`**
+
+Follow the spec section "Who is privy to what" field for field. Own sheet is complete. Another faction is omitted when no inclusion rule matches. Rivalry adds military features and military problems and does not copy `dominion`, `cohesion`, or `behavior`. Strip `statNote` everywhere in the output. Figurehead courts the viewer cannot see through report `agreement: "leader"`.
+
+- [ ] **Step 4: Write the lock and queue tests**
+
+Use a temporary directory and a file database, not `:memory:`, for the lock file.
+
+```ts
+import { expect, test } from "vitest";
+import { withWriteLock } from "../../src/store/lock.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+test("a dead stale lock is reclaimed", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb-"));
+  const dbPath = join(dir, "campaign.sqlite");
+  // seed the lock file with pid 2**22 (not running) and a timestamp 60s ago
+  // then withWriteLock(dbPath, () => "entered") returns "entered"
+});
+
+test("two plans both persist and apply in shuffle order", () => {
+  // openParallelTurn with a forced order ["late", "early"]
+  // submit early after late
+  // applyWriteQueue resolves late's plan first
+});
+```
+
+The second test builds two Power 1 factions that know each other, opens a turn whose stored order is `["b", "a"]`, submits `a` first and `b` second, and asserts the action log lists `b` before `a`.
+
+`withWriteLock` uses exclusive create on `dbPath + ".lock"`. Timeout throws `RuleError` code `WRITE_LOCKED`. A lock older than 30000 ms whose `process.kill(pid, 0)` throws is unlinked.
+
+- [ ] **Step 5: Implement the queue service**
+
+`submitUnitPlan` validates ids against the stored snapshot, then inserts under `withWriteLock`. `applyWriteQueue` applies in `turns.faction_order`. Missing units with `missing: "idle"` write an idle action. A plan targeting an unknown id is stored `rejected` with `UNKNOWN_TO_UNIT` and does not throw away the rest of the queue.
+
+- [ ] **Step 6: Run the tests**
+
+Run: `npx vitest run test/rules/knowledge.test.ts test/store/lock.test.ts`
+Expected: PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/rules/knowledge.ts src/store/lock.ts src/services/queue.ts test/rules/knowledge.test.ts test/store/lock.test.ts
+git commit -m "feat: isolate unit knowledge and serialize parallel plans"
+```
