@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type Database from "better-sqlite3";
 import { openDb } from "../../src/store/db.js";
-import { beginChange, commitResources } from "../../src/services/change.js";
+import { applyOutcome, beginChange, commitResources } from "../../src/services/change.js";
 import { runAction } from "../../src/services/actions.js";
 import { loadCatalog } from "../../src/tables/catalog.js";
 
@@ -154,4 +154,139 @@ test("commitResources rejects feature activation without featureText or draft", 
   expect(committed.ok).toBe(false);
   if (committed.ok) return;
   expect(committed.error.code).toBe("FILL_INCOMPLETE");
+});
+
+test("enact_change failure increments only the acting faction culprit problem", () => {
+  const db = createKistelekDb();
+  db.prepare("UPDATE factions SET dominion = 1 WHERE id = ?").run("village");
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES (?, ?, ?, ?, 'cultural', 0, 0, 0, ?)`,
+  ).run("neighbor-problem", "neighbor", "Neighbor woes", 2, 0);
+  const neighborBefore = db
+    .prepare("SELECT points FROM problems WHERE id = ?")
+    .get("neighbor-problem") as { points: number };
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "village",
+    type: "enact_change",
+    magnitude: "plausible",
+    forcedRoll: 4,
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data.success).toBe(false);
+
+  const despair = db.prepare("SELECT points FROM problems WHERE id = ?").get("despair") as {
+    points: number;
+  };
+  expect(despair.points).toBe(3);
+  const neighborAfter = db
+    .prepare("SELECT points FROM problems WHERE id = ?")
+    .get("neighbor-problem") as { points: number };
+  expect(neighborAfter.points).toBe(neighborBefore.points);
+});
+
+test("applyOutcome rejects reducing an intrinsic problem", () => {
+  const db = createKistelekDb();
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES (?, ?, ?, ?, 'cultural', 1, 0, 0, ?)`,
+  ).run("core-wound", "village", "Core wound", 1, 3);
+
+  const result = applyOutcome(db, {
+    campaignId: "c1",
+    factionId: "village",
+    reduceProblemId: "core-wound",
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.code).toBe("INTRINSIC_PROBLEM");
+});
+
+test("applyOutcome addFeatureText inserts catalog backlash problem", () => {
+  const db = createKistelekDb();
+  const backlashText = loadCatalog().backlash[0];
+  const before = db
+    .prepare("SELECT COUNT(*) AS c FROM problems WHERE faction_id = ?")
+    .get("village") as { c: number };
+
+  const result = applyOutcome(db, {
+    campaignId: "c1",
+    factionId: "village",
+    addFeatureText: "A shrine to the sword.",
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+
+  const backlashRows = db
+    .prepare("SELECT text FROM problems WHERE faction_id = ? ORDER BY position DESC LIMIT 1")
+    .all("village") as { text: string }[];
+  const after = db
+    .prepare("SELECT COUNT(*) AS c FROM problems WHERE faction_id = ?")
+    .get("village") as { c: number };
+  expect(after.c).toBe(before.c + 1);
+  expect(backlashRows).toHaveLength(1);
+  expect(backlashRows[0].text).toBe(backlashText);
+});
+
+test("attack against player defender without choice stays pending and spares cohesion", () => {
+  const db = createKistelekDb();
+  db.prepare("UPDATE factions SET control = 'player' WHERE id = ?").run("village");
+  const cohesionBefore = db
+    .prepare("SELECT cohesion FROM factions WHERE id = ?")
+    .get("village") as { cohesion: number };
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "neighbor",
+    type: "attack",
+    targetFactionId: "village",
+    attackerFeatureId: "mil-feature",
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data.pending).toBe(true);
+  expect(result.data.code).toBe("PENDING_DEFENDER_CHOICE");
+
+  const cohesionAfter = db
+    .prepare("SELECT cohesion FROM factions WHERE id = ?")
+    .get("village") as { cohesion: number };
+  expect(cohesionAfter.cohesion).toBe(cohesionBefore.cohesion);
+});
+
+test("contested attack win adds catalog military problem text", () => {
+  const db = createKistelekDb();
+  const militaryText = loadCatalog().problems.military[0];
+  db.prepare("UPDATE problems SET points = 1 WHERE id = ?").run("despair");
+  const defenderFeatureId = "village-mil";
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(defenderFeatureId, "village", "Militia", "military", "normal", "normal", 0, "native");
+  db.prepare(
+    "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
+  ).run("village-mil-part", defenderFeatureId, "Militia", 0);
+
+  const result = runAction(db, {
+    campaignId: "c1",
+    factionId: "neighbor",
+    type: "attack",
+    targetFactionId: "village",
+    attackerFeatureId: "mil-feature",
+    defenderFeatureId,
+    forcedAttackerRoll: 8,
+    forcedDefenderRoll: 1,
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.data.success).toBe(true);
+
+  const added = db
+    .prepare(
+      "SELECT text FROM problems WHERE faction_id = ? ORDER BY position DESC LIMIT 1",
+    )
+    .get("village") as { text: string };
+  expect(added.text).toBe(militaryText);
 });

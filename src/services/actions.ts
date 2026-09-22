@@ -151,7 +151,12 @@ function runEnactChange(
 
   if (!check.success) {
     if (!inverted && check.culpritId) {
-      db.prepare("UPDATE problems SET points = points + 1 WHERE id = ?").run(check.culpritId);
+      const updated = db
+        .prepare("UPDATE problems SET points = points + 1 WHERE id = ? AND faction_id = ?")
+        .run(check.culpritId, faction.id);
+      if (updated.changes === 0) {
+        throw new RuleError("ENTITY_NOT_FOUND", "problem not found");
+      }
     }
     db.prepare(
       `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, roll_id, outcome, dominion_delta)
