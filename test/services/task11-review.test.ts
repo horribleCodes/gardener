@@ -1,8 +1,9 @@
 import { expect, test } from "vitest";
 import type Database from "better-sqlite3";
 import { openDb } from "../../src/store/db.js";
-import { swayCourt } from "../../src/services/populate.js";
-import { listHooks } from "../../src/services/turn.js";
+import { getCourt } from "../../src/queries/detail.js";
+import { setPower, swayCourt } from "../../src/services/populate.js";
+import { factionAction, listHooks } from "../../src/services/turn.js";
 import { resolveWithdrawal } from "../../src/services/change.js";
 import { toEnvelope } from "../../src/mcp/envelope.js";
 import { loadCatalog } from "../../src/tables/catalog.js";
@@ -67,6 +68,73 @@ test("swayCourt control on ruling court sets contested_control and disposition",
     .prepare("SELECT disposition FROM court_dispositions WHERE court_id = 'court1'")
     .get() as { disposition: string };
   expect(disposition.disposition).toBe("control");
+});
+
+test("getCourt includes favor disposition after swayCourt", () => {
+  const db = courtDb();
+  swayCourt(db, {
+    campaignId: "c1",
+    courtId: "court1",
+    targetType: "godbound",
+    targetId: "gb1",
+    mode: "favor",
+  });
+  const court = getCourt(db, "court1");
+  expect(court?.dispositions).toEqual([
+    { targetType: "godbound", targetId: "gb1", disposition: "favor" },
+  ]);
+});
+
+test("listHooks returns one consequence when the court has two disposition rows", () => {
+  const db = courtDb();
+  db.prepare(
+    `INSERT INTO court_dispositions (court_id, target_type, target_id, disposition)
+     VALUES ('court1', 'godbound', 'gb1', 'favor'), ('court1', 'godbound', 'gb2', 'control')`,
+  ).run();
+  const hooks = listHooks(db, "c1");
+  expect(hooks.ok).toBe(true);
+  if (hooks.ok) expect(hooks.data.courtConsequences).toHaveLength(1);
+});
+
+test("rescale intrinsic insert uses catalog cultural sentence", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 42, 0)",
+  ).run("c1", "Test");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status, contested_control, cult, harshness)
+     VALUES ('f1', 'c1', 'Cult', 1, 1, 0, 'native', 'directed', 'npc', 0, 'active', 0, 1, 'grueling')`,
+  ).run();
+  const result = setPower(db, { campaignId: "c1", factionId: "f1", power: 2 });
+  expect(result.ok).toBe(true);
+  const problem = db
+    .prepare("SELECT text FROM problems WHERE faction_id = 'f1' AND intrinsic = 1")
+    .get() as { text: string };
+  expect(problem.text).toBe(loadCatalog().problems.cultural[0]);
+  expect(problem.text).not.toBe("Holy law");
+});
+
+test("faction_action idle does not consume internal action budget", () => {
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 42, 0)",
+  ).run("c1", "Test");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status, contested_control)
+     VALUES ('f1', 'c1', 'Rulers', 2, 2, 10, 'native', 'directed', 'npc', 0, 'active', 0)`,
+  ).run();
+  const idle = factionAction(db, {
+    campaignId: "c1",
+    factionId: "f1",
+    action: { type: "idle" },
+  });
+  expect(idle.ok).toBe(true);
+  const internal = factionAction(db, {
+    campaignId: "c1",
+    factionId: "f1",
+    action: { type: "build_strength" },
+  });
+  expect(internal.ok).toBe(true);
 });
 
 test("listHooks includes court consequences only with favor or control disposition", () => {

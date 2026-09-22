@@ -1049,10 +1049,11 @@ function rescaleIntrinsic(db: Database.Database, factionId: string, power: Power
   const total = rows.reduce((s, r) => s + r.points, 0);
   if (total === budget) return;
   if (rows.length === 0 && budget > 0) {
+    const text = loadCatalog().problems.cultural[0];
     db.prepare(
       `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
-       VALUES (?, ?, 'Holy law', ?, 'cultural', 1, 0, 0, 0)`,
-    ).run(crypto.randomUUID(), factionId, budget);
+       VALUES (?, ?, ?, ?, 'cultural', 1, 0, 0, 0)`,
+    ).run(crypto.randomUUID(), factionId, text, budget);
     return;
   }
   if (budget > total && rows[0]) {

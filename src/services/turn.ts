@@ -942,6 +942,11 @@ export function factionAction(
       }
 
       const turnId = ensureOpenTurn(db, input.campaignId);
+
+      if (input.action.type === "idle") {
+        return { idle: true };
+      }
+
       const prior = db
         .prepare(
           `SELECT type, target_id FROM actions WHERE turn_id = ? AND actor_type = 'faction' AND actor_id = ?`,
@@ -972,9 +977,6 @@ export function factionAction(
         }
       }
 
-      if (input.action.type === "idle") {
-        return { idle: true };
-      }
       const result = runAction(db, {
         campaignId: input.campaignId,
         factionId: input.factionId,
@@ -1181,7 +1183,7 @@ export function listHooks(db: Database.Database, campaignId: string): ServiceRes
       .all(campaignId);
     const consequences = db
       .prepare(
-        `SELECT cc.id, cc.text, cc.court_id FROM court_consequences cc
+        `SELECT DISTINCT cc.id, cc.text, cc.court_id FROM court_consequences cc
          JOIN courts c ON c.id = cc.court_id
          JOIN court_dispositions cd ON cd.court_id = c.id
            AND cd.disposition IN ('favor', 'control')

@@ -138,6 +138,18 @@ export function getCourt(db: Database.Database, courtId: string) {
     )
     .get(courtId);
 
+  const dispositions = (
+    db
+      .prepare(
+        `SELECT target_type, target_id, disposition FROM court_dispositions WHERE court_id = ?`,
+      )
+      .all(courtId) as { target_type: string; target_id: string; disposition: string }[]
+  ).map((d) => ({
+    targetType: d.target_type,
+    targetId: d.target_id,
+    disposition: d.disposition,
+  }));
+
   const rule = decisionMakers({
     powerStructure: court.power_structure as PowerStructure,
     actors: actors.map((a) => ({
@@ -149,7 +161,7 @@ export function getCourt(db: Database.Database, courtId: string) {
     })),
   });
 
-  return { ...court, actors, conflict, decisionRule: rule };
+  return { ...court, actors, conflict, dispositions, decisionRule: rule };
 }
 
 export function explainRoll(db: Database.Database, rollId: string) {
