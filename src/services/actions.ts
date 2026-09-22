@@ -181,7 +181,12 @@ function runEnactChange(
     insertFeatureFromText(db, faction.id, input.featureText);
   }
   if (input.problemId) {
-    db.prepare("UPDATE problems SET points = points + 1 WHERE id = ?").run(input.problemId);
+    const updated = db
+      .prepare("UPDATE problems SET points = points + 1 WHERE id = ? AND faction_id = ?")
+      .run(input.problemId, faction.id);
+    if (updated.changes === 0) {
+      throw new RuleError("ENTITY_NOT_FOUND", "problem not found");
+    }
   } else {
     insertBacklashProblem(db, faction.id);
   }
@@ -231,13 +236,6 @@ function runAttack(
   let defenderFeature: typeof attackerFeature | undefined;
   let defenderTags: FeatureTags | null = null;
   let defenderTotal = 0;
-  let attackerRoll = featureRoll({
-    rng,
-    faces: attackerFaces,
-    marginal: false,
-    bonus: 0,
-    forced: input.forcedAttackerRoll,
-  });
 
   if (input.defenderFeatureId) {
     defenderFeature = db
@@ -247,8 +245,16 @@ function runAttack(
       .get(input.defenderFeatureId) as typeof attackerFeature | undefined;
   }
 
+  let attackerRoll;
   let winner: "attacker" | "defender";
   if (!defenderFeature || defenderFeature.faction_id !== defender.id) {
+    attackerRoll = featureRoll({
+      rng,
+      faces: attackerFaces,
+      marginal: false,
+      bonus: 0,
+      forced: input.forcedAttackerRoll,
+    });
     winner = "attacker";
   } else {
     defenderTags = {
@@ -344,10 +350,12 @@ function runAttack(
     db.prepare("DELETE FROM features WHERE id = ?").run(defenderFeature.id);
   } else {
     if (input.problemId) {
-      db.prepare("UPDATE problems SET points = points + ? WHERE id = ?").run(
-        damage,
-        input.problemId,
-      );
+      const updated = db
+        .prepare("UPDATE problems SET points = points + ? WHERE id = ? AND faction_id = ?")
+        .run(damage, input.problemId, defender.id);
+      if (updated.changes === 0) {
+        throw new RuleError("ENTITY_NOT_FOUND", "problem not found");
+      }
     } else {
       const problemId = crypto.randomUUID();
       const problemText = loadCatalog().problems.military[0];

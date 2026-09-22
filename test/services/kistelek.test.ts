@@ -1,14 +1,12 @@
-import { beforeAll, expect, test } from "vitest";
+import { expect, test } from "vitest";
 import type Database from "better-sqlite3";
 import { openDb } from "../../src/store/db.js";
 import { beginChange, commitResources } from "../../src/services/change.js";
 import { runAction } from "../../src/services/actions.js";
 import { loadCatalog } from "../../src/tables/catalog.js";
 
-let db: Database.Database;
-
-beforeAll(() => {
-  db = openDb(":memory:");
+function createKistelekDb(): Database.Database {
+  const db = openDb(":memory:");
   db.prepare(
     "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 42, 0)",
   ).run("c1", "Kistelek");
@@ -48,9 +46,12 @@ beforeAll(() => {
     `INSERT INTO godbound (id, campaign_id, name, level, words, influence, dominion, wealth, divinity)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run("sword", "c1", "Sword", 3, "[]", 2, 0, 0, "free");
-});
+
+  return db;
+}
 
 test("a forced trouble roll of 4 blames despair and gains no dominion", () => {
+  const db = createKistelekDb();
   const result = runAction(db, {
     campaignId: "c1",
     factionId: "village",
@@ -69,6 +70,7 @@ test("a forced trouble roll of 4 blames despair and gains no dominion", () => {
 });
 
 test("pc feature creation adds one backlash problem and not a trouble check", () => {
+  const db = createKistelekDb();
   const begun = beginChange(db, {
     campaignId: "c1",
     owner: "pc",
@@ -100,6 +102,7 @@ test("pc feature creation adds one backlash problem and not a trouble check", ()
 });
 
 test("attack win without problemId adds catalog military problem text", () => {
+  const db = createKistelekDb();
   const militaryText = loadCatalog().problems.military[0];
   const before = db
     .prepare("SELECT COUNT(*) AS c FROM problems WHERE faction_id = ?")
@@ -130,6 +133,7 @@ test("attack win without problemId adds catalog military problem text", () => {
 });
 
 test("commitResources rejects feature activation without featureText or draft", () => {
+  const db = createKistelekDb();
   const begun = beginChange(db, {
     campaignId: "c1",
     owner: "pc",
