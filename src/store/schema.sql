@@ -1,4 +1,4 @@
-CREATE TABLE campaigns (
+CREATE TABLE IF NOT EXISTS campaigns (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   month INTEGER NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE campaigns (
   name_lists TEXT NOT NULL DEFAULT '{}'
 );
 
-CREATE TABLE places (
+CREATE TABLE IF NOT EXISTS places (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   name TEXT NOT NULL,
@@ -16,14 +16,14 @@ CREATE TABLE places (
   culture_id TEXT
 );
 
-CREATE TABLE wards (
+CREATE TABLE IF NOT EXISTS wards (
   id TEXT PRIMARY KEY,
   place_id TEXT NOT NULL REFERENCES places(id),
   rating INTEGER NOT NULL,
   key_holder_ids TEXT NOT NULL DEFAULT '[]'
 );
 
-CREATE TABLE factions (
+CREATE TABLE IF NOT EXISTS factions (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   name TEXT NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE factions (
   cult INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE features (
+CREATE TABLE IF NOT EXISTS features (
   id TEXT PRIMARY KEY,
   faction_id TEXT NOT NULL REFERENCES factions(id),
   text TEXT NOT NULL,
@@ -55,14 +55,14 @@ CREATE TABLE features (
   covert INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE feature_parts (
+CREATE TABLE IF NOT EXISTS feature_parts (
   id TEXT PRIMARY KEY,
   feature_id TEXT NOT NULL REFERENCES features(id),
   text TEXT NOT NULL,
   position INTEGER NOT NULL
 );
 
-CREATE TABLE problems (
+CREATE TABLE IF NOT EXISTS problems (
   id TEXT PRIMARY KEY,
   faction_id TEXT NOT NULL REFERENCES factions(id),
   text TEXT NOT NULL,
@@ -75,7 +75,7 @@ CREATE TABLE problems (
   position INTEGER NOT NULL
 );
 
-CREATE TABLE interests (
+CREATE TABLE IF NOT EXISTS interests (
   id TEXT PRIMARY KEY,
   from_faction_id TEXT NOT NULL REFERENCES factions(id),
   to_faction_id TEXT NOT NULL REFERENCES factions(id),
@@ -84,7 +84,7 @@ CREATE TABLE interests (
   UNIQUE(from_faction_id, to_faction_id)
 );
 
-CREATE TABLE courts (
+CREATE TABLE IF NOT EXISTS courts (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   type TEXT NOT NULL,
@@ -96,7 +96,7 @@ CREATE TABLE courts (
   acts_on_own INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE characters (
+CREATE TABLE IF NOT EXISTS characters (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   name TEXT,
@@ -114,7 +114,7 @@ CREATE TABLE characters (
   acts_on_own INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE court_memberships (
+CREATE TABLE IF NOT EXISTS court_memberships (
   court_id TEXT NOT NULL REFERENCES courts(id),
   character_id TEXT NOT NULL REFERENCES characters(id),
   rank TEXT NOT NULL,
@@ -126,7 +126,7 @@ CREATE TABLE court_memberships (
   PRIMARY KEY (court_id, character_id)
 );
 
-CREATE TABLE conflicts (
+CREATE TABLE IF NOT EXISTS conflicts (
   id TEXT PRIMARY KEY,
   court_id TEXT NOT NULL REFERENCES courts(id),
   text TEXT NOT NULL,
@@ -135,21 +135,21 @@ CREATE TABLE conflicts (
   antagonist_id TEXT
 );
 
-CREATE TABLE court_consequences (
+CREATE TABLE IF NOT EXISTS court_consequences (
   id TEXT PRIMARY KEY,
   court_id TEXT NOT NULL REFERENCES courts(id),
   text TEXT NOT NULL,
   stat_note TEXT
 );
 
-CREATE TABLE court_defenses (
+CREATE TABLE IF NOT EXISTS court_defenses (
   id TEXT PRIMARY KEY,
   court_id TEXT NOT NULL REFERENCES courts(id),
   text TEXT NOT NULL,
   stat_note TEXT
 );
 
-CREATE TABLE facts (
+CREATE TABLE IF NOT EXISTS facts (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   subject TEXT NOT NULL,
@@ -161,7 +161,7 @@ CREATE TABLE facts (
   visibility TEXT NOT NULL DEFAULT 'public'
 );
 
-CREATE TABLE godbound (
+CREATE TABLE IF NOT EXISTS godbound (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   name TEXT NOT NULL,
@@ -175,7 +175,7 @@ CREATE TABLE godbound (
   acts_on_own INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE changes (
+CREATE TABLE IF NOT EXISTS changes (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   scope TEXT NOT NULL,
@@ -194,7 +194,7 @@ CREATE TABLE changes (
   backlash_problem_id TEXT
 );
 
-CREATE TABLE change_commitments (
+CREATE TABLE IF NOT EXISTS change_commitments (
   change_id TEXT NOT NULL REFERENCES changes(id),
   godbound_id TEXT NOT NULL REFERENCES godbound(id),
   influence INTEGER NOT NULL,
@@ -202,14 +202,14 @@ CREATE TABLE change_commitments (
   PRIMARY KEY (change_id, godbound_id)
 );
 
-CREATE TABLE resisters (
+CREATE TABLE IF NOT EXISTS resisters (
   id TEXT PRIMARY KEY,
   change_id TEXT NOT NULL REFERENCES changes(id),
   rating INTEGER NOT NULL,
   label TEXT NOT NULL
 );
 
-CREATE TABLE challenges (
+CREATE TABLE IF NOT EXISTS challenges (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
   text TEXT NOT NULL,
@@ -217,7 +217,7 @@ CREATE TABLE challenges (
   status TEXT NOT NULL
 );
 
-CREATE TABLE setpieces (
+CREATE TABLE IF NOT EXISTS setpieces (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   key TEXT NOT NULL,
@@ -226,7 +226,7 @@ CREATE TABLE setpieces (
   UNIQUE(campaign_id, key)
 );
 
-CREATE TABLE turns (
+CREATE TABLE IF NOT EXISTS turns (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   month INTEGER NOT NULL,
@@ -235,7 +235,7 @@ CREATE TABLE turns (
   faction_order TEXT NOT NULL
 );
 
-CREATE TABLE unit_views (
+CREATE TABLE IF NOT EXISTS unit_views (
   id TEXT PRIMARY KEY,
   turn_id TEXT NOT NULL REFERENCES turns(id),
   unit_type TEXT NOT NULL,
@@ -244,7 +244,7 @@ CREATE TABLE unit_views (
   UNIQUE(turn_id, unit_type, unit_id)
 );
 
-CREATE TABLE write_queue (
+CREATE TABLE IF NOT EXISTS write_queue (
   id TEXT PRIMARY KEY,
   turn_id TEXT NOT NULL REFERENCES turns(id),
   unit_type TEXT NOT NULL,
@@ -255,14 +255,14 @@ CREATE TABLE write_queue (
   created_at INTEGER NOT NULL
 );
 
-CREATE TABLE rolls (
+CREATE TABLE IF NOT EXISTS rolls (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   turn_id TEXT,
   payload TEXT NOT NULL
 );
 
-CREATE TABLE actions (
+CREATE TABLE IF NOT EXISTS actions (
   id TEXT PRIMARY KEY,
   turn_id TEXT NOT NULL REFERENCES turns(id),
   type TEXT NOT NULL,
@@ -276,7 +276,7 @@ CREATE TABLE actions (
   dominion_delta INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   turn_id TEXT,

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { expect, test } from "vitest";
 import { openDb } from "../../src/store/db.js";
 
@@ -12,4 +15,21 @@ test("migrate creates campaigns and rolls back a failed transaction", () => {
   }).toThrow(/nope/);
   const row = db.prepare("SELECT month FROM campaigns WHERE id = ?").get("c1") as { month: number };
   expect(row.month).toBe(1);
+});
+
+test("openDb reopens an existing file database in WAL mode", () => {
+  const dir = mkdtempSync(join(tmpdir(), "godbound-db-"));
+  const path = join(dir, "campaign.sqlite");
+  try {
+    const db1 = openDb(path);
+    expect(db1.pragma("journal_mode", { simple: true })).toBe("wal");
+    db1.close();
+
+    const db2 = openDb(path);
+    expect(db2.pragma("journal_mode", { simple: true })).toBe("wal");
+    expect(db2.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'campaigns'").get()).toBeTruthy();
+    db2.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

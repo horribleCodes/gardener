@@ -11,6 +11,9 @@ export function openDb(path: string): Database.Database {
   const db = new Database(path);
   migrate(db);
   db.pragma("foreign_keys = ON");
+  if (path !== ":memory:") {
+    db.pragma("journal_mode = WAL");
+  }
   return db;
 }
 
