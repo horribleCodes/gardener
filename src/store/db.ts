@@ -39,6 +39,19 @@ function migrateLegacyStrain(db: Database.Database): void {
   const changeId = challengeColumns.find((column) => column.name === "change_id");
   const hasCampaign = challengeColumns.some((column) => column.name === "campaign_id");
   if (changeId?.notnull === 1 || !hasCampaign) {
+    const orphaned = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM challenges c
+         LEFT JOIN changes ch ON ch.id = c.change_id
+         WHERE ch.id IS NULL`,
+      )
+      .get() as { n: number };
+    if (orphaned.n > 0) {
+      throw new RuleError(
+        "INCOMPATIBLE_SCHEMA",
+        `campaign file is not compatible with this server: ${orphaned.n} orphaned challenge(s) would be dropped during migration`,
+      );
+    }
     db.exec(`
       CREATE TABLE challenges_next (
         id TEXT PRIMARY KEY,
@@ -76,16 +89,22 @@ export function migrate(db: Database.Database, fileVersion = Number(db.pragma("u
   const legacy = db
     .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'campaigns'")
     .get() as { ok: number } | undefined;
-  db.pragma("foreign_keys = OFF");
-  const apply = db.transaction(() => {
-    if (!legacy) {
-      db.exec(schemaSql());
-    } else {
-      migrateLegacyStrain(db);
-    }
-    db.pragma(`user_version = ${SCHEMA_VERSION}`);
-  });
-  apply();
+  const previousForeignKeys = Number(db.pragma("foreign_keys", { simple: true }));
+  try {
+    db.pragma("foreign_keys = OFF");
+    const apply = db.transaction(() => {
+      if (!legacy) {
+        db.exec(schemaSql());
+      } else {
+        db.exec(schemaSql());
+        migrateLegacyStrain(db);
+      }
+      db.pragma(`user_version = ${SCHEMA_VERSION}`);
+    });
+    apply();
+  } finally {
+    db.pragma(`foreign_keys = ${previousForeignKeys ? "ON" : "OFF"}`);
+  }
 }
 
 export function openDb(path: string): Database.Database {

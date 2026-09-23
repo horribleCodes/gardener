@@ -2,7 +2,16 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test } from "vitest";
-import { openDb } from "../../src/store/db.js";
+import Database from "better-sqlite3";
+import { migrate, openDb } from "../../src/store/db.js";
+
+test("migrate restores foreign_keys after it temporarily disables them", () => {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  migrate(db);
+  expect(db.pragma("foreign_keys", { simple: true })).toBe(1);
+  db.close();
+});
 
 test("migrate creates campaigns and rolls back a failed transaction", () => {
   const db = openDb(":memory:");
