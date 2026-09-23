@@ -66,9 +66,9 @@ export function parseUnitPlan(raw: Record<string, unknown>): UnitPlan {
     "forcedRoll",
     "forcedAttackerRoll",
     "forcedDefenderRoll",
-    "willing",
     "defenderChoice",
   ];
+  if (raw.type !== "remove_interest") forbidden.push("willing");
   for (const key of forbidden) {
     if (key in raw && raw[key] !== undefined) {
       throw new RuleError("FILL_INCOMPLETE", `forbidden plan field: ${key}`);

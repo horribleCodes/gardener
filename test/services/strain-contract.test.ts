@@ -2,7 +2,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { RuleError } from "../../src/domain/types.js";
+import { runAction } from "../../src/services/actions.js";
 import { ensureSetpiece, recordChallengeOutcome } from "../../src/services/populate.js";
+import { factionActionFromUnitPlan, parseUnitPlan } from "../../src/services/unitPlan.js";
 import { listHooks } from "../../src/services/turn.js";
 import { openDb } from "../../src/store/db.js";
 import { loadCatalog } from "../../src/tables/catalog.js";
@@ -141,6 +144,42 @@ test("a court setpiece stores the court it created", () => {
     expect(row.court_id).toBeTruthy();
     const court = db.prepare("SELECT id FROM courts WHERE id = ?").get(row.court_id);
     expect(court).toBeTruthy();
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a willing remove-interest plan skips the roll and drops a point", () => {
+  const { dir, db } = campaignDb();
+  try {
+    expect(() =>
+      parseUnitPlan({ type: "attack", targetFactionId: "def", attackerFeatureId: "f", willing: true }),
+    ).toThrow(RuleError);
+    const plan = parseUnitPlan({
+      type: "remove_interest",
+      targetFactionId: "def",
+      willing: true,
+    });
+    expect(plan).toMatchObject({ type: "remove_interest", willing: true });
+
+    db.prepare(
+      `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+       VALUES ('atk', 'c1', 'Atk', 1, 1, 0, 'existing', 'directed', 'npc', 0, 'active'),
+              ('def', 'c1', 'Def', 5, 5, 0, 'existing', 'directed', 'npc', 0, 'active')`,
+    ).run();
+    db.prepare(
+      "INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature) VALUES ('i1', 'atk', 'def', 2, 'rivalry')",
+    ).run();
+    const action = factionActionFromUnitPlan(plan);
+    const result = runAction(db, { campaignId: "c1", factionId: "atk", ...action });
+    expect(result.ok).toBe(true);
+    const edge = db
+      .prepare("SELECT points FROM interests WHERE from_faction_id = 'atk' AND to_faction_id = 'def'")
+      .get() as { points: number };
+    expect(edge.points).toBe(1);
+    const roll = db.prepare("SELECT payload FROM rolls").get() as { payload: string };
+    expect(JSON.parse(roll.payload).willing).toBe(true);
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });
