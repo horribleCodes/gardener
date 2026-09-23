@@ -1212,6 +1212,56 @@ export function listHooks(db: Database.Database, campaignId: string): ServiceRes
   });
 }
 
+export function resolvePendingAttack(
+  db: Database.Database,
+  input: {
+    campaignId: string;
+    actionId: string;
+    defenderChoice: "cohesion" | "sacrifice" | "problem";
+    problemId?: string;
+  },
+): unknown {
+  const action = db
+    .prepare(
+      `SELECT a.id, a.turn_id, a.actor_id, a.target_id, a.feature_ids, a.outcome
+       FROM actions a JOIN turns t ON t.id = a.turn_id
+       WHERE a.id = ? AND t.campaign_id = ?`,
+    )
+    .get(input.actionId, input.campaignId) as
+    | {
+        id: string;
+        turn_id: string;
+        actor_id: string;
+        target_id: string;
+        feature_ids: string;
+        outcome: string;
+      }
+    | undefined;
+  if (!action) throw new RuleError("ENTITY_NOT_FOUND", "action not found");
+  if (action.outcome !== "PENDING_DEFENDER_CHOICE") {
+    throw new RuleError("NOT_PENDING", "action is not pending");
+  }
+
+  const featureIds = JSON.parse(action.feature_ids) as string[];
+  const attackerFeatureId = featureIds[0];
+  const defenderFeatureId = featureIds[1] ?? undefined;
+
+  const result = runAction(db, {
+    campaignId: input.campaignId,
+    factionId: action.actor_id,
+    type: "attack",
+    targetFactionId: action.target_id,
+    attackerFeatureId,
+    defenderFeatureId,
+    defenderChoice: input.defenderChoice,
+    problemId: input.problemId,
+  });
+  if (!result.ok) {
+    throw new RuleError(result.error.code, result.error.message, result.error.details);
+  }
+  return result.data;
+}
+
 export function resolveAttack(
   db: Database.Database,
   input: {
@@ -1221,47 +1271,5 @@ export function resolveAttack(
     problemId?: string;
   },
 ): ServiceResult<unknown> {
-  return wrapRule(() =>
-    withTransaction(db, () => {
-      const action = db
-        .prepare(
-          `SELECT a.id, a.turn_id, a.actor_id, a.target_id, a.feature_ids, a.outcome
-           FROM actions a JOIN turns t ON t.id = a.turn_id
-           WHERE a.id = ? AND t.campaign_id = ?`,
-        )
-        .get(input.actionId, input.campaignId) as
-        | {
-            id: string;
-            turn_id: string;
-            actor_id: string;
-            target_id: string;
-            feature_ids: string;
-            outcome: string;
-          }
-        | undefined;
-      if (!action) throw new RuleError("ENTITY_NOT_FOUND", "action not found");
-      if (action.outcome !== "PENDING_DEFENDER_CHOICE") {
-        throw new RuleError("NOT_PENDING", "action is not pending");
-      }
-
-      const featureIds = JSON.parse(action.feature_ids) as string[];
-      const attackerFeatureId = featureIds[0];
-      const defenderFeatureId = featureIds[1] ?? undefined;
-
-      const result = runAction(db, {
-        campaignId: input.campaignId,
-        factionId: action.actor_id,
-        type: "attack",
-        targetFactionId: action.target_id,
-        attackerFeatureId,
-        defenderFeatureId,
-        defenderChoice: input.defenderChoice,
-        problemId: input.problemId,
-      });
-      if (!result.ok) {
-        throw new RuleError(result.error.code, result.error.message, result.error.details);
-      }
-      return result.data;
-    }),
-  );
+  return wrapRule(() => withTransaction(db, () => resolvePendingAttack(db, input)));
 }

@@ -14,7 +14,7 @@ import {
   planFactionAction,
   loadFactionRow,
   advanceMonth,
-  resolveAttack,
+  resolvePendingAttack,
 } from "./turn.js";
 import { runAction } from "./actions.js";
 import { requireCampaign, wrapRule, type ServiceResult } from "./util.js";
@@ -132,10 +132,18 @@ export function loadCampaignWorld(db: Database.Database, campaignId: string): Ca
     db
       .prepare(
         `SELECT id, subject, subject_id AS subjectId, statement, visibility
-         FROM facts WHERE campaign_id = ?`,
+         FROM facts WHERE campaign_id = ? AND superseded_by IS NULL`,
       )
       .all(campaignId) as CampaignWorld["facts"]
   );
+
+  const godbound = (
+    db
+      .prepare(
+        `SELECT id, name, acts_on_own AS actsOnOwn FROM godbound WHERE campaign_id = ?`,
+      )
+      .all(campaignId) as { id: string; name: string; actsOnOwn: number }[]
+  ).map((g) => ({ ...g, actsOnOwn: g.actsOnOwn !== 0 }));
 
   const events = (
     db
@@ -157,6 +165,7 @@ export function loadCampaignWorld(db: Database.Database, campaignId: string): Ca
     characters,
     facts,
     events,
+    godbound,
   };
 }
 
@@ -182,8 +191,8 @@ type WorldCharacterRow = {
   actsOnOwn: number;
 };
 
-function shuffleUnitIds(ids: string[], rng: { next(): number }): string[] {
-  const order = [...ids];
+function shuffleUnits(units: UnitRef[], rng: { next(): number }): UnitRef[] {
+  const order = [...units];
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(rng.next() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
@@ -191,15 +200,43 @@ function shuffleUnitIds(ids: string[], rng: { next(): number }): string[] {
   return order;
 }
 
-function defaultActingFactionIds(db: Database.Database, campaignId: string): string[] {
-  return (
+function parseTurnOrder(raw: string): UnitRef[] {
+  const parsed = JSON.parse(raw) as (string | UnitRef)[];
+  return parsed.map((entry) =>
+    typeof entry === "string" ? { type: "faction", id: entry } : entry,
+  );
+}
+
+function orderEntryIds(order: UnitRef[]): string[] {
+  return order.map((u) => u.id);
+}
+
+function defaultActingUnits(db: Database.Database, campaignId: string): UnitRef[] {
+  const units: UnitRef[] = (
     db
       .prepare(
         `SELECT id FROM factions
          WHERE campaign_id = ? AND status = 'active' AND control = 'npc'`,
       )
       .all(campaignId) as { id: string }[]
-  ).map((r) => r.id);
+  ).map((r) => ({ type: "faction", id: r.id }));
+
+  const courts = db
+    .prepare(`SELECT id FROM courts WHERE campaign_id = ? AND acts_on_own = 1`)
+    .all(campaignId) as { id: string }[];
+  for (const c of courts) units.push({ type: "court", id: c.id });
+
+  const characters = db
+    .prepare(`SELECT id FROM characters WHERE campaign_id = ? AND acts_on_own = 1`)
+    .all(campaignId) as { id: string }[];
+  for (const c of characters) units.push({ type: "character", id: c.id });
+
+  const godbound = db
+    .prepare(`SELECT id FROM godbound WHERE campaign_id = ? AND acts_on_own = 1`)
+    .all(campaignId) as { id: string }[];
+  for (const g of godbound) units.push({ type: "godbound", id: g.id });
+
+  return units;
 }
 
 function freezeView(
@@ -237,14 +274,19 @@ export function openParallelTurn(
 
         const missing = input.missing ?? "idle";
         const advanceMonthFlag = input.advanceMonth ?? false;
-        let order: string[];
+        let orderStored: (string | UnitRef)[];
+        let orderUnits: UnitRef[];
         if (input.unitIds && input.unitIds.length > 0) {
-          order = [...input.unitIds];
+          orderStored = [...input.unitIds];
+          orderUnits = orderStored.map((entry) =>
+            typeof entry === "string" ? { type: "faction", id: entry } : entry,
+          );
         } else {
-          const acting = defaultActingFactionIds(db, input.campaignId);
+          const acting = defaultActingUnits(db, input.campaignId);
           const campaign = requireCampaign(db, input.campaignId);
           const rng = mulberry32(campaign.rng_seed + campaign.roll_counter);
-          order = shuffleUnitIds(acting, rng);
+          orderUnits = shuffleUnits(acting, rng);
+          orderStored = orderUnits;
         }
 
         const campaign = requireCampaign(db, input.campaignId);
@@ -256,14 +298,19 @@ export function openParallelTurn(
         db.prepare(
           `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order)
            VALUES (?, ?, ?, ?, 1, ?)`,
-        ).run(turnId, input.campaignId, campaign.month, seqRow.seq, JSON.stringify(order));
+        ).run(turnId, input.campaignId, campaign.month, seqRow.seq, JSON.stringify(orderStored));
 
         const world = loadCampaignWorld(db, input.campaignId);
-        for (const factionId of order) {
-          freezeView(db, turnId, { type: "faction", id: factionId }, world);
+        for (const unit of orderUnits) {
+          freezeView(db, turnId, unit, world);
         }
 
-        return { turnId, unitIds: order, missing, advanceMonth: advanceMonthFlag };
+        return {
+          turnId,
+          unitIds: orderEntryIds(orderUnits),
+          missing,
+          advanceMonth: advanceMonthFlag,
+        };
       }),
     ),
   );
@@ -402,13 +449,107 @@ function sanitizeActionForSnapshot(
   return action;
 }
 
+function featureKnownInSnapshot(
+  snapshot: ReturnType<typeof projectUnitView>,
+  featureId: string,
+): boolean {
+  return collectSnapshotIds(snapshot).has(featureId);
+}
+
+function sanitizeAttackForDefender(
+  snapshot: ReturnType<typeof projectUnitView>,
+  attack: FactionAction,
+): Record<string, unknown> {
+  if (attack.type !== "attack") return attack as Record<string, unknown>;
+  const out: Record<string, unknown> = { type: "attack", targetFactionId: attack.targetFactionId };
+  if (attack.attackerFeatureId) {
+    if (featureKnownInSnapshot(snapshot, attack.attackerFeatureId)) {
+      out.attackerFeatureId = attack.attackerFeatureId;
+    } else {
+      out.attackerFeatureName = "an undisclosed asset";
+    }
+  }
+  if (attack.defenderFeatureId) {
+    if (featureKnownInSnapshot(snapshot, attack.defenderFeatureId)) {
+      out.defenderFeatureId = attack.defenderFeatureId;
+    } else {
+      out.defenderFeatureName = "an undisclosed asset";
+    }
+  }
+  return out;
+}
+
+function pendingDefenderChoice(
+  db: Database.Database,
+  turnId: string,
+): { actionId: string; defenderUnit: UnitRef } | undefined {
+  const row = db
+    .prepare(
+      `SELECT id, target_id FROM actions
+       WHERE turn_id = ? AND outcome = 'PENDING_DEFENDER_CHOICE' LIMIT 1`,
+    )
+    .get(turnId) as { id: string; target_id: string } | undefined;
+  if (!row) return undefined;
+  return {
+    actionId: row.id,
+    defenderUnit: { type: "faction", id: row.target_id },
+  };
+}
+
+function queuedReactionDefender(
+  db: Database.Database,
+  turnId: string,
+): UnitRef | undefined {
+  const row = db
+    .prepare(
+      `SELECT unit_type, unit_id FROM write_queue
+       WHERE turn_id = ? AND kind = 'reaction' AND status = 'queued' LIMIT 1`,
+    )
+    .get(turnId) as { unit_type: string; unit_id: string } | undefined;
+  if (!row) return undefined;
+  return { type: row.unit_type as UnitRef["type"], id: row.unit_id };
+}
+
+function enqueueDefenderReaction(
+  db: Database.Database,
+  campaignId: string,
+  turnId: string,
+  defender: UnitRef,
+  actionId: string,
+  attackPlan: FactionAction,
+): void {
+  const existing = db
+    .prepare(
+      `SELECT id FROM write_queue WHERE turn_id = ? AND kind = 'reaction' AND status = 'queued' LIMIT 1`,
+    )
+    .get(turnId);
+  if (existing) return;
+
+  const viewRow = db
+    .prepare(
+      `SELECT snapshot FROM unit_views WHERE turn_id = ? AND unit_type = ? AND unit_id = ?`,
+    )
+    .get(turnId, defender.type, defender.id) as { snapshot: string };
+  const snapshot = JSON.parse(viewRow.snapshot) as ReturnType<typeof projectUnitView>;
+  const payload = JSON.stringify({
+    actionId,
+    attack: sanitizeAttackForDefender(snapshot, attackPlan),
+    view: snapshot,
+  });
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO write_queue (id, campaign_id, turn_id, unit_type, unit_id, kind, payload, status, error_code, enqueued_at)
+     VALUES (?, ?, ?, ?, ?, 'reaction', ?, 'queued', NULL, ?)`,
+  ).run(crypto.randomUUID(), campaignId, turnId, defender.type, defender.id, payload, now);
+}
+
 function applyFactionPlan(
   db: Database.Database,
   campaignId: string,
   turnId: string,
   factionId: string,
   action: FactionAction,
-): { pending?: boolean } {
+): { pending?: boolean; defenderUnit?: UnitRef; actionId?: string } {
   if (action.type === "idle") {
     recordIdleAction(db, turnId, factionId);
     return {};
@@ -419,8 +560,113 @@ function applyFactionPlan(
   }
   const data = result.data as { pending?: boolean; code?: string };
   if (data.pending && data.code === "PENDING_DEFENDER_CHOICE") {
-    return { pending: true };
+    const pending = pendingDefenderChoice(db, turnId);
+    return {
+      pending: true,
+      defenderUnit: pending?.defenderUnit ?? { type: "faction", id: factionId },
+      actionId: pending?.actionId,
+    };
   }
+  return {};
+}
+
+function planRowDone(db: Database.Database, turnId: string, unit: UnitRef): void {
+  const row = queueRowForUnit(db, turnId, unit.type, unit.id);
+  if (row) {
+    db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
+  }
+}
+
+type ApplyPause = { paused: true; defenderUnit: UnitRef };
+type ApplyDone = { paused?: false };
+
+function applyUnitsInOrder(
+  db: Database.Database,
+  input: {
+    campaignId: string;
+    turnId: string;
+    order: UnitRef[];
+    missing: "idle" | "mechanical";
+    startIndex: number;
+  },
+): ApplyPause | ApplyDone {
+  const { campaignId, turnId, order, missing, startIndex } = input;
+
+  for (let i = startIndex; i < order.length; i++) {
+    const unit = order[i];
+    if (unit.type !== "faction") {
+      const row = queueRowForUnit(db, turnId, unit.type, unit.id);
+      if (row?.status === "rejected") {
+        db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
+      } else if (row?.status === "done") {
+        continue;
+      } else if (!row || row.status === "queued") {
+        if (row) {
+          db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
+        }
+      }
+      continue;
+    }
+
+    const factionId = unit.id;
+    const row = queueRowForUnit(db, turnId, "faction", factionId);
+
+    if (row?.status === "applying") {
+      const pause = pendingDefenderChoice(db, turnId);
+      if (pause) {
+        return { paused: true, defenderUnit: pause.defenderUnit };
+      }
+      planRowDone(db, turnId, unit);
+      continue;
+    }
+
+    if (row?.status === "done") continue;
+
+    if (row?.status === "rejected") {
+      db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
+      continue;
+    }
+
+    let action: FactionAction;
+    let queueId: string | undefined;
+    let attackPlan: FactionAction | undefined;
+
+    if (row && row.status === "queued") {
+      queueId = row.id;
+      db.prepare(`UPDATE write_queue SET status = 'applying' WHERE id = ?`).run(row.id);
+      action = JSON.parse(row.payload) as FactionAction;
+      if (action.type === "attack") attackPlan = action;
+    } else if (missing === "mechanical") {
+      const viewRow = db
+        .prepare(
+          `SELECT snapshot FROM unit_views WHERE turn_id = ? AND unit_type = 'faction' AND unit_id = ?`,
+        )
+        .get(turnId, factionId) as { snapshot: string };
+      const snapshot = JSON.parse(viewRow.snapshot) as ReturnType<typeof projectUnitView>;
+      const allowed = collectSnapshotIds(snapshot);
+      const faction = loadFactionRow(db, factionId);
+      const planned = planFactionAction(db, faction, undefined);
+      action = sanitizeActionForSnapshot(planned.action, allowed);
+      if (action.type === "attack") attackPlan = action;
+    } else {
+      action = { type: "idle" };
+    }
+
+    const outcome = applyFactionPlan(db, campaignId, turnId, factionId, action);
+
+    if (outcome.pending) {
+      const defender = outcome.defenderUnit ?? { type: "faction", id: factionId };
+      if (attackPlan && outcome.actionId) {
+        enqueueDefenderReaction(db, campaignId, turnId, defender, outcome.actionId, attackPlan);
+      }
+      return { paused: true, defenderUnit: defender };
+    }
+
+    if (queueId) {
+      db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(queueId);
+    }
+  }
+
   return {};
 }
 
@@ -434,66 +680,41 @@ export function applyWriteQueue(
   },
 ): ServiceResult<{ paused?: boolean; defenderUnit?: UnitRef }> {
   return wrapRule(() =>
-    withWriteLock(dbPath, () => {
-      const turn = db
-        .prepare("SELECT id, faction_order FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
-        .get(input.campaignId) as { id: string; faction_order: string } | undefined;
-      if (!turn) throw new RuleError("ENTITY_NOT_FOUND", "no open turn");
-
-      const order = JSON.parse(turn.faction_order) as string[];
-      const missing = input.missing ?? "idle";
-
-      for (const factionId of order) {
-        const row = queueRowForUnit(db, turn.id, "faction", factionId);
-        if (row?.status === "rejected") {
-          db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
-          continue;
-        }
-
-        let action: FactionAction;
-        let queueId: string | undefined;
-
-        if (row && row.status === "queued") {
-          queueId = row.id;
-          db.prepare(`UPDATE write_queue SET status = 'applying' WHERE id = ?`).run(row.id);
-          action = JSON.parse(row.payload) as FactionAction;
-        } else if (missing === "mechanical") {
-          const viewRow = db
-            .prepare(
-              `SELECT snapshot FROM unit_views WHERE turn_id = ? AND unit_type = 'faction' AND unit_id = ?`,
-            )
-            .get(turn.id, factionId) as { snapshot: string };
-          const snapshot = JSON.parse(viewRow.snapshot) as ReturnType<typeof projectUnitView>;
-          const allowed = collectSnapshotIds(snapshot);
-          const faction = loadFactionRow(db, factionId);
-          const planned = planFactionAction(db, faction, undefined);
-          action = sanitizeActionForSnapshot(planned.action, allowed);
-        } else {
-          action = { type: "idle" };
-        }
-
-        const pending = withTransaction(db, () =>
-          applyFactionPlan(db, input.campaignId, turn.id, factionId, action),
-        );
-
-        if (queueId) {
-          db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(queueId);
-        }
-
-        if (pending.pending) {
-          return { paused: true, defenderUnit: { type: "faction", id: factionId } };
-        }
-      }
-
+    withWriteLock(dbPath, () =>
       withTransaction(db, () => {
+        const turn = db
+          .prepare("SELECT id, faction_order FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
+          .get(input.campaignId) as { id: string; faction_order: string } | undefined;
+        if (!turn) throw new RuleError("ENTITY_NOT_FOUND", "no open turn");
+
+        const reactionWait = queuedReactionDefender(db, turn.id);
+        if (reactionWait) {
+          return { paused: true, defenderUnit: reactionWait };
+        }
+
+        const order = parseTurnOrder(turn.faction_order);
+        const missing = input.missing ?? "idle";
+
+        const result = applyUnitsInOrder(db, {
+          campaignId: input.campaignId,
+          turnId: turn.id,
+          order,
+          missing,
+          startIndex: 0,
+        });
+
+        if (result.paused) {
+          return result;
+        }
+
         db.prepare("UPDATE turns SET open = 0 WHERE id = ?").run(turn.id);
         if (input.advanceMonth) {
           advanceMonth(db, input.campaignId);
         }
-      });
 
-      return {};
-    }),
+        return {};
+      }),
+    ),
   );
 }
 
@@ -509,26 +730,63 @@ export function submitReaction(
   },
 ): ServiceResult<unknown> {
   return wrapRule(() =>
-    withWriteLock(dbPath, () => {
-      const pending = db
-        .prepare(
-          `SELECT a.id FROM actions a
-           JOIN turns t ON t.id = a.turn_id
-           WHERE t.campaign_id = ? AND t.open = 1 AND a.outcome = 'PENDING_DEFENDER_CHOICE'
-           AND a.target_type = 'faction' AND a.target_id = ? LIMIT 1`,
-        )
-        .get(input.campaignId, input.unitId) as { id: string } | undefined;
-      if (!pending) throw new RuleError("NOT_PENDING", "no pending defender choice");
-      const result = resolveAttack(db, {
-        campaignId: input.campaignId,
-        actionId: pending.id,
-        defenderChoice: input.defenderChoice,
-        problemId: input.problemId,
-      });
-      if (!result.ok) {
-        throw new RuleError(result.error.code, result.error.message, result.error.details);
-      }
-      return result.data;
-    }),
+    withWriteLock(dbPath, () =>
+      withTransaction(db, () => {
+        const turn = db
+          .prepare("SELECT id, faction_order FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
+          .get(input.campaignId) as { id: string; faction_order: string } | undefined;
+        if (!turn) throw new RuleError("ENTITY_NOT_FOUND", "no open turn");
+
+        const pending = db
+          .prepare(
+            `SELECT a.id, a.actor_id FROM actions a
+             WHERE a.turn_id = ? AND a.outcome = 'PENDING_DEFENDER_CHOICE'
+             AND a.target_type = 'faction' AND a.target_id = ? LIMIT 1`,
+          )
+          .get(turn.id, input.unitId) as { id: string; actor_id: string } | undefined;
+        if (!pending) throw new RuleError("NOT_PENDING", "no pending defender choice");
+
+        const reactionRow = db
+          .prepare(
+            `SELECT id FROM write_queue
+             WHERE turn_id = ? AND kind = 'reaction' AND unit_type = ? AND unit_id = ? AND status = 'queued'
+             LIMIT 1`,
+          )
+          .get(turn.id, input.unitType, input.unitId) as { id: string } | undefined;
+        if (!reactionRow) throw new RuleError("REACTION_CLOSED", "no open reaction");
+
+        const data = resolvePendingAttack(db, {
+          campaignId: input.campaignId,
+          actionId: pending.id,
+          defenderChoice: input.defenderChoice,
+          problemId: input.problemId,
+        });
+
+        db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(reactionRow.id);
+
+        const attackerUnit: UnitRef = { type: "faction", id: pending.actor_id };
+        planRowDone(db, turn.id, attackerUnit);
+
+        const order = parseTurnOrder(turn.faction_order);
+        const attackerIndex = order.findIndex(
+          (u) => u.type === attackerUnit.type && u.id === attackerUnit.id,
+        );
+        const resumeFrom = attackerIndex >= 0 ? attackerIndex + 1 : order.length;
+
+        const continueResult = applyUnitsInOrder(db, {
+          campaignId: input.campaignId,
+          turnId: turn.id,
+          order,
+          missing: "idle",
+          startIndex: resumeFrom,
+        });
+
+        if (!continueResult.paused) {
+          db.prepare("UPDATE turns SET open = 0 WHERE id = ?").run(turn.id);
+        }
+
+        return data;
+      }),
+    ),
   );
 }

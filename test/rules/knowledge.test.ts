@@ -31,3 +31,22 @@ test("a rival sees military secrets and not dominion", () => {
   expect(JSON.stringify(view)).not.toContain("HD 4");
   expect(JSON.stringify(view)).not.toContain("despotic_tyrant");
 });
+
+test("local fact at unknown place is absent from the view", () => {
+  const isolated = {
+    ...world,
+    interests: [] as typeof world.interests,
+    facts: [
+      {
+        id: "lf1",
+        subject: "place",
+        subjectId: "far",
+        statement: "A secret only locals know",
+        visibility: "local",
+        placeId: "far",
+      },
+    ],
+  };
+  const view = projectUnitView(isolated, { type: "faction", id: "us" });
+  expect(view.known.facts.some((f) => f.id === "lf1")).toBe(false);
+});

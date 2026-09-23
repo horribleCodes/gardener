@@ -419,7 +419,35 @@ function viewerKnownPlaces(world: CampaignWorld, unit: UnitRef): Set<string> {
       for (const id of placeAncestors(world, court?.placeId ?? null)) places.add(id);
     }
   }
-  for (const p of world.places) places.add(p.id);
+
+  const viewerFaction = fid;
+  if (!viewerFaction) return places;
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const f of world.factions) {
+      if (!factionIncluded(world, viewerFaction, f.id, places)) continue;
+      for (const id of placeAncestors(world, f.homePlaceId)) {
+        if (!places.has(id)) {
+          places.add(id);
+          changed = true;
+        }
+      }
+    }
+    for (const fact of world.facts) {
+      if (!factVisibleToUnit(world, unit, fact, places, viewerFaction)) continue;
+      const pid = fact.placeId;
+      if (pid) {
+        for (const id of placeAncestors(world, pid)) {
+          if (!places.has(id)) {
+            places.add(id);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
   return places;
 }
 
