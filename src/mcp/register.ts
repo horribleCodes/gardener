@@ -45,6 +45,13 @@ import {
   listHooks,
   type FactionAction,
 } from "../services/turn.js";
+import {
+  openParallelTurn,
+  submitUnitPlan,
+  submitReaction,
+  applyWriteQueue,
+  getUnitView,
+} from "../services/queue.js";
 import { openDb } from "../store/db.js";
 import type { ServiceResult } from "../services/util.js";
 import { mcpToolResult, runDbTool, runTool, toEnvelope, unexpectedErrorEnvelope } from "./envelope.js";
@@ -547,6 +554,109 @@ export function buildServer(dbPath: string): McpServer {
       inputSchema: { campaignId: z.string(), factionId: z.string(), power: powerZ },
     },
     dbTool((a) => setPower(db, a as { campaignId: string; factionId: string; power: 1 | 2 | 3 | 4 | 5 })),
+  );
+
+  reg(
+    "get_unit_view",
+    {
+      description: "Frozen privy snapshot for one acting unit",
+      inputSchema: {
+        campaignId: z.string(),
+        unitType: z.enum(["faction", "court", "character", "godbound"]),
+        unitId: z.string(),
+      },
+    },
+    dbTool((a) =>
+      getUnitView(db, {
+        campaignId: a.campaignId as string,
+        unitType: a.unitType as string,
+        unitId: a.unitId as string,
+      }),
+    ),
+  );
+
+  reg(
+    "open_parallel_turn",
+    {
+      description: "Open a parallel agent turn and freeze unit views",
+      inputSchema: {
+        campaignId: z.string(),
+        unitIds: z.array(z.string()).optional(),
+        missing: z.enum(["idle", "mechanical"]).optional(),
+        advanceMonth: z.boolean().optional(),
+      },
+    },
+    dbTool((a) =>
+      openParallelTurn(db, dbPath, {
+        campaignId: a.campaignId as string,
+        unitIds: a.unitIds as string[] | undefined,
+        missing: a.missing as "idle" | "mechanical" | undefined,
+        advanceMonth: a.advanceMonth as boolean | undefined,
+      }),
+    ),
+  );
+
+  reg(
+    "submit_unit_plan",
+    {
+      description: "Queue or replace a unit plan for the open turn",
+      inputSchema: {
+        campaignId: z.string(),
+        unitType: z.enum(["faction", "court", "character", "godbound"]),
+        unitId: z.string(),
+        plan: z.record(z.unknown()),
+      },
+    },
+    dbTool((a) =>
+      submitUnitPlan(db, dbPath, {
+        campaignId: a.campaignId as string,
+        unitType: a.unitType as string,
+        unitId: a.unitId as string,
+        plan: a.plan as FactionAction,
+      }),
+    ),
+  );
+
+  reg(
+    "submit_reaction",
+    {
+      description: "Resume apply after a defender choice",
+      inputSchema: {
+        campaignId: z.string(),
+        unitType: z.enum(["faction", "court", "character", "godbound"]),
+        unitId: z.string(),
+        defenderChoice: z.enum(["cohesion", "sacrifice", "problem"]),
+        problemId: z.string().optional(),
+      },
+    },
+    dbTool((a) =>
+      submitReaction(db, dbPath, {
+        campaignId: a.campaignId as string,
+        unitType: a.unitType as string,
+        unitId: a.unitId as string,
+        defenderChoice: a.defenderChoice as "cohesion" | "sacrifice" | "problem",
+        problemId: a.problemId as string | undefined,
+      }),
+    ),
+  );
+
+  reg(
+    "apply_write_queue",
+    {
+      description: "Apply queued plans in shuffled unit order",
+      inputSchema: {
+        campaignId: z.string(),
+        missing: z.enum(["idle", "mechanical"]).optional(),
+        advanceMonth: z.boolean().optional(),
+      },
+    },
+    dbTool((a) =>
+      applyWriteQueue(db, dbPath, {
+        campaignId: a.campaignId as string,
+        missing: a.missing as "idle" | "mechanical" | undefined,
+        advanceMonth: a.advanceMonth as boolean | undefined,
+      }),
+    ),
   );
 
   reg(

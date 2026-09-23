@@ -86,7 +86,7 @@ function shuffleIds(ids: string[], rng: { next(): number }): string[] {
   return order;
 }
 
-function loadFactionRow(
+export function loadFactionRow(
   db: Database.Database,
   factionId: string,
 ): {
@@ -642,7 +642,7 @@ function resolveStrategy(
   return { type: "build_strength" };
 }
 
-function planFactionAction(
+export function planFactionAction(
   db: Database.Database,
   faction: ReturnType<typeof loadFactionRow>,
   explicit?: FactionAction,

@@ -255,13 +255,15 @@ CREATE TABLE IF NOT EXISTS unit_views (
 
 CREATE TABLE IF NOT EXISTS write_queue (
   id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   turn_id TEXT NOT NULL REFERENCES turns(id),
   unit_type TEXT NOT NULL,
   unit_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
   payload TEXT NOT NULL,
   status TEXT NOT NULL,
   error_code TEXT,
-  created_at INTEGER NOT NULL
+  enqueued_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS rolls (
