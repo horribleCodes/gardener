@@ -215,10 +215,25 @@ export function loadCampaignWorld(db: Database.Database, campaignId: string): Ca
   const godbound = (
     db
       .prepare(
-        `SELECT id, name, acts_on_own AS actsOnOwn FROM godbound WHERE campaign_id = ?`,
+        `SELECT id, name, level, divinity, cult_faction_id AS cultFactionId, dominion, influence,
+                acts_on_own AS actsOnOwn
+         FROM godbound WHERE campaign_id = ?`,
       )
-      .all(campaignId) as { id: string; name: string; actsOnOwn: number }[]
-  ).map((g) => ({ ...g, actsOnOwn: g.actsOnOwn !== 0 }));
+      .all(campaignId) as {
+        id: string;
+        name: string;
+        level: number;
+        divinity: string;
+        cultFactionId: string | null;
+        dominion: number;
+        influence: number;
+        actsOnOwn: number;
+      }[]
+  ).map((g) => ({
+    ...g,
+    cultFactionId: g.cultFactionId ?? null,
+    actsOnOwn: g.actsOnOwn !== 0,
+  }));
 
   const events = (
     db
@@ -719,7 +734,6 @@ function applyUnitsInOrder(
         continue;
       }
       if (row?.status === "rejected") {
-        db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
         continue;
       }
       let actionType = "idle";
@@ -747,7 +761,6 @@ function applyUnitsInOrder(
     if (row?.status === "done") continue;
 
     if (row?.status === "rejected") {
-      db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
       continue;
     }
 

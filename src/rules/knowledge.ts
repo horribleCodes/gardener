@@ -96,7 +96,18 @@ export type CampaignWorld = {
   characters: WorldCharacter[];
   facts: WorldFact[];
   events: WorldEvent[];
-  godbound?: { id: string; name: string; actsOnOwn?: boolean | number }[];
+  godbound?: WorldGodbound[];
+};
+
+export type WorldGodbound = {
+  id: string;
+  name: string;
+  level: number;
+  divinity: string;
+  cultFactionId: string | null;
+  dominion: number;
+  influence: number;
+  actsOnOwn?: boolean | number;
 };
 
 function isCovert(f: WorldFeature): boolean {
@@ -134,6 +145,10 @@ function placesTouch(world: CampaignWorld, a: string | null, b: string | null): 
 
 function viewerFactionId(unit: UnitRef, world: CampaignWorld): string | undefined {
   if (unit.type === "faction") return unit.id;
+  if (unit.type === "godbound") {
+    const gb = world.godbound?.find((g) => g.id === unit.id);
+    return gb?.cultFactionId ?? undefined;
+  }
   if (unit.type === "character") {
     const ch = world.characters.find((c) => c.id === unit.id);
     if (ch?.factionId) return ch.factionId;
@@ -143,6 +158,12 @@ function viewerFactionId(unit: UnitRef, world: CampaignWorld): string | undefine
     return court?.rulesFactionId ?? undefined;
   }
   return undefined;
+}
+
+function publicFactNamesFaction(world: CampaignWorld, factionId: string): boolean {
+  return world.facts.some(
+    (f) => f.subject === "faction" && f.subjectId === factionId && f.visibility === "public",
+  );
 }
 
 function interestFrom(
@@ -229,7 +250,23 @@ function projectOtherFaction(
   world: CampaignWorld,
   viewerFactionId: string,
   target: WorldFaction,
+  options?: { publicFactOnly?: boolean },
 ): Record<string, unknown> | null {
+  if (options?.publicFactOnly) {
+    const allFeatures = world.features.filter((fe) => fe.factionId === target.id);
+    const features = allFeatures
+      .filter((fe) => !isCovert(fe))
+      .map((fe) => ({ id: fe.id, text: fe.text, domain: fe.domain }));
+    return {
+      id: target.id,
+      name: target.name,
+      power: target.power,
+      homePlaceId: target.homePlaceId,
+      features,
+      problems: [],
+    };
+  }
+
   const viewerUnit: UnitRef = { type: "faction", id: viewerFactionId };
   const viewerPlaces = viewerKnownPlaces(world, viewerUnit);
   if (!factionIncluded(world, viewerFactionId, target.id, viewerPlaces)) return null;
@@ -541,6 +578,25 @@ export function projectUnitView(world: CampaignWorld, unit: UnitRef): { unit: Un
     } else if (viewerFaction) {
       const projected = projectOtherFaction(world, viewerFaction, f);
       if (projected) factions.push(projected);
+    } else if (unit.type === "godbound" && publicFactNamesFaction(world, f.id)) {
+      const projected = projectOtherFaction(world, f.id, f, { publicFactOnly: true });
+      if (projected) factions.push(projected);
+    }
+  }
+
+  const godbound: Record<string, unknown>[] = [];
+  if (unit.type === "godbound") {
+    const gb = world.godbound?.find((g) => g.id === unit.id);
+    if (gb) {
+      godbound.push({
+        id: gb.id,
+        name: gb.name,
+        level: gb.level,
+        divinity: gb.divinity,
+        cultFactionId: gb.cultFactionId,
+        dominion: gb.dominion,
+        influence: gb.influence,
+      });
     }
   }
 
@@ -587,6 +643,7 @@ export function projectUnitView(world: CampaignWorld, unit: UnitRef): { unit: Un
       characters,
       facts,
       rumors,
+      ...(godbound.length > 0 ? { godbound } : {}),
     },
   };
 }
@@ -613,7 +670,8 @@ function projectRumors(
     const targetId = payload.targetId as string | undefined;
     const unitMatches =
       (unit.type === "faction" && (actorId === unit.id || targetId === unit.id)) ||
-      (unit.type === "character" && (actorId === unit.id || targetId === unit.id));
+      (unit.type === "character" && (actorId === unit.id || targetId === unit.id)) ||
+      (unit.type === "godbound" && (actorId === unit.id || targetId === unit.id));
     const isPublic =
       ev.visibility === "public" || (ev.placeId != null && viewerPlaces.has(ev.placeId));
     if (!unitMatches && !isPublic) continue;

@@ -68,6 +68,71 @@ test("public fact naming a distant faction includes that faction", () => {
   expect(view.known.factions.some((f) => f.id === "them")).toBe(true);
 });
 
+test("godbound with cult sees cult dominion not unrelated distant faction", () => {
+  const cultWorld = {
+    factions: [
+      {
+        id: "cult",
+        name: "Cult",
+        power: 2,
+        cohesion: 3,
+        dominion: 7,
+        homePlaceId: "p",
+        behavior: "directed",
+        status: "active",
+      },
+      {
+        id: "stranger",
+        name: "Stranger",
+        power: 1,
+        cohesion: 1,
+        dominion: 4,
+        homePlaceId: "far",
+        behavior: "self_absorbed_survivor",
+        status: "active",
+      },
+    ],
+    places: [
+      { id: "p", name: "Home", scope: "village", parentPlaceId: null },
+      { id: "far", name: "Far", scope: "city", parentPlaceId: null },
+    ],
+    features: [],
+    problems: [],
+    interests: [],
+    courts: [],
+    characters: [],
+    facts: [],
+    events: [],
+    godbound: [
+      {
+        id: "gb1",
+        name: "Saint",
+        level: 3,
+        divinity: "cult",
+        cultFactionId: "cult",
+        dominion: 5,
+        influence: 4,
+        actsOnOwn: true,
+      },
+    ],
+  };
+  const view = projectUnitView(cultWorld, { type: "godbound", id: "gb1" });
+  const cult = view.known.factions.find((faction) => faction.id === "cult");
+  expect(cult?.dominion).toBe(7);
+  expect(view.known.factions.some((faction) => faction.id === "stranger")).toBe(false);
+  expect(view.known.godbound).toEqual([
+    {
+      id: "gb1",
+      name: "Saint",
+      level: 3,
+      divinity: "cult",
+      cultFactionId: "cult",
+      dominion: 5,
+      influence: 4,
+    },
+  ]);
+});
+
 test("local fact at unknown place is absent from the view", () => {
   const isolated = {
     ...world,
