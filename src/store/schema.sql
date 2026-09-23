@@ -221,9 +221,10 @@ CREATE TABLE IF NOT EXISTS resisters (
 
 CREATE TABLE IF NOT EXISTS challenges (
   id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   kind TEXT NOT NULL,
   text TEXT NOT NULL,
-  change_id TEXT NOT NULL REFERENCES changes(id),
+  change_id TEXT REFERENCES changes(id),
   status TEXT NOT NULL
 );
 
@@ -233,6 +234,10 @@ CREATE TABLE IF NOT EXISTS setpieces (
   key TEXT NOT NULL,
   need TEXT NOT NULL,
   status TEXT NOT NULL,
+  court_id TEXT REFERENCES courts(id),
+  challenge_id TEXT REFERENCES challenges(id),
+  character_id TEXT REFERENCES characters(id),
+  fact_id TEXT REFERENCES facts(id),
   UNIQUE(campaign_id, key)
 );
 
