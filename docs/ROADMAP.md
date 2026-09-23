@@ -2,6 +2,8 @@
 
 Replaces the earlier stretch-goal list. v1 (the Godbound strain server in `docs/superpowers/plans/2026-09-21-godbound-faction-mcp.md`) is implemented. The next shape is `docs/superpowers/specs/2026-09-23-agnostic-world-system-design.md`: one actor model, a `strain` or `assets` profile, and presets that only flip flags and catalogs.
 
+The project is still in its early phases. Changes do not need to consider legacy systems, old files, or old call shapes. Backwards compatibility only matters at the end of the module wave (after item 16). Until then, replace the current shape instead of carrying it forward.
+
 Scores are 1–5. **Criticality** is how wrong the current server is if the item waits. **Complexity** is build size. **Impact** is how much play it unlocks. **Gates** names the later work that cannot start cleanly before it.
 
 ## Names
