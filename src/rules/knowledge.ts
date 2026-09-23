@@ -230,7 +230,8 @@ function projectOtherFaction(
   viewerFactionId: string,
   target: WorldFaction,
 ): Record<string, unknown> | null {
-  const viewerPlaces = placeAncestors(world, world.factions.find((f) => f.id === viewerFactionId)?.homePlaceId ?? null);
+  const viewerUnit: UnitRef = { type: "faction", id: viewerFactionId };
+  const viewerPlaces = viewerKnownPlaces(world, viewerUnit);
   if (!factionIncluded(world, viewerFactionId, target.id, viewerPlaces)) return null;
 
   const edge = interestFrom(world, viewerFactionId, target.id);

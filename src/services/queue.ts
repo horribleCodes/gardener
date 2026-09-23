@@ -206,7 +206,7 @@ export function loadCampaignWorld(db: Database.Database, campaignId: string): Ca
   const facts = (
     db
       .prepare(
-        `SELECT id, subject, subject_id AS subjectId, statement, visibility
+        `SELECT id, subject, subject_id AS subjectId, statement, visibility, place_id AS placeId
          FROM facts WHERE campaign_id = ? AND superseded_by IS NULL`,
       )
       .all(campaignId) as CampaignWorld["facts"]

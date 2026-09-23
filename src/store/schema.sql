@@ -167,7 +167,8 @@ CREATE TABLE IF NOT EXISTS facts (
   kind TEXT NOT NULL,
   source_change_id TEXT,
   superseded_by TEXT,
-  visibility TEXT NOT NULL DEFAULT 'public'
+  visibility TEXT NOT NULL DEFAULT 'public',
+  place_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS godbound (

@@ -32,6 +32,24 @@ test("a rival sees military secrets and not dominion", () => {
   expect(JSON.stringify(view)).not.toContain("despotic_tyrant");
 });
 
+test("hidden faction fact does not include distant faction without max spy network", () => {
+  const isolated = {
+    ...world,
+    interests: [] as typeof world.interests,
+    facts: [
+      {
+        id: "hf1",
+        subject: "faction",
+        subjectId: "them",
+        statement: "Classified dossier",
+        visibility: "hidden",
+      },
+    ],
+  };
+  const view = projectUnitView(isolated, { type: "faction", id: "us" });
+  expect(view.known.factions.some((f) => f.id === "them")).toBe(false);
+});
+
 test("public fact naming a distant faction includes that faction", () => {
   const distant = {
     ...world,
