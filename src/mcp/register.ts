@@ -667,9 +667,17 @@ export function buildServer(dbPath: string): McpServer {
         campaignId: z.string(),
         advanceMonth: z.boolean().optional(),
         resume: z.boolean().optional(),
+        actions: z.record(z.unknown()).optional(),
       },
     },
-    dbTool((a) => runFactionTurn(db, a)),
+    dbTool((a) =>
+      runFactionTurn(db, dbPath, {
+        campaignId: a.campaignId as string,
+        advanceMonth: a.advanceMonth as boolean | undefined,
+        resume: a.resume as boolean | undefined,
+        actions: a.actions as Record<string, import("../services/turn.js").FactionAction> | undefined,
+      }),
+    ),
   );
 
   reg(

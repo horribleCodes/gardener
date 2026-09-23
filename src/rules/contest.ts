@@ -28,6 +28,15 @@ export function featureRoll(input: {
   };
 }
 
+export function defaultRelevance(
+  attackerDomain: string | undefined | null,
+  defenderDomain: string | undefined | null,
+): boolean {
+  if (!attackerDomain || !defenderDomain) return false;
+  if (attackerDomain === "other" || defenderDomain === "other") return false;
+  return attackerDomain !== defenderDomain;
+}
+
 export function resolveContest(input: {
   attackerTotal: number; defenderTotal: number; attackerPower: Power; defenderPower: Power;
 }): "attacker" | "defender" {

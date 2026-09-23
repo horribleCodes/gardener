@@ -25,6 +25,7 @@ import {
   wrapRule,
   type ServiceResult,
 } from "./util.js";
+import { applyCollapseIfNeeded } from "./collapse.js";
 
 function persistCourt(
   db: Database.Database,
@@ -47,6 +48,13 @@ function persistCourt(
     draft.blank ? 1 : 0,
   );
 
+  const idMap = new Map<string, string>();
+  for (const actor of draft.actors) {
+    idMap.set(actor.id, crypto.randomUUID());
+  }
+  const protagonistId = idMap.get(draft.conflict.protagonistId) ?? crypto.randomUUID();
+  const antagonistId = idMap.get(draft.conflict.antagonistId) ?? crypto.randomUUID();
+
   const conflictId = crypto.randomUUID();
   db.prepare(
     `INSERT INTO conflicts (id, court_id, text, fitted_summary, protagonist_id, antagonist_id)
@@ -56,8 +64,8 @@ function persistCourt(
     courtId,
     draft.conflict.text,
     draft.conflict.fittedSummary,
-    draft.conflict.protagonistId,
-    draft.conflict.antagonistId,
+    protagonistId,
+    antagonistId,
   );
 
   const consId = crypto.randomUUID();
@@ -72,7 +80,7 @@ function persistCourt(
   );
 
   for (const actor of draft.actors) {
-    const charId = actor.id;
+    const charId = idMap.get(actor.id) ?? crypto.randomUUID();
     db.prepare(
       `INSERT INTO characters (
         id, campaign_id, name, role, court_id, faction_id, problem_id, power_source, side,
@@ -716,6 +724,13 @@ export function ensureSetpiece(
             input.problemId,
             ch.data.characterId,
           );
+          db.prepare("UPDATE problems SET face_character_id = ? WHERE id = ?").run(
+            ch.data.characterId,
+            input.problemId,
+          );
+        } else {
+          db.prepare("DELETE FROM setpieces WHERE id = ?").run(setpieceId);
+          throw new RuleError("FILL_INCOMPLETE", "could not create problem face");
         }
       }
 
@@ -1130,6 +1145,7 @@ export function setPower(
       if (cult.cult) {
         rescaleIntrinsic(db, input.factionId, input.power, cult.harshness ?? "nominal");
       }
+      applyCollapseIfNeeded(db, input.factionId, null);
       return { power: input.power, cohesion };
     }),
   );

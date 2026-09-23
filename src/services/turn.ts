@@ -9,11 +9,13 @@ import { monthlyDominion } from "../rules/cults.js";
 import type { Harshness } from "../domain/types.js";
 import { rollDie } from "../rules/dice.js";
 import { planGoal } from "../rules/goals.js";
+import { resolveContest } from "../rules/contest.js";
 import { interestCap, interestModifier } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
 import { loadCatalog } from "../tables/catalog.js";
 import { withTransaction } from "../store/db.js";
-import { runAction, type RunActionInput } from "./actions.js";
+import { applyAttackDefense, runAction, type RunActionInput } from "./actions.js";
+import { openParallelTurn, applyWriteQueue, submitUnitPlan } from "./queue.js";
 import {
   ensureOpenTurn,
   loadProblemsOrdered,
@@ -28,7 +30,9 @@ import {
 export type FactionAction =
   | { type: "build_strength"; forcedRoll?: number }
   | { type: "idle" }
-  | { type: "aid"; targetFactionId: string }
+  | { type: "aid"; targetFactionId: string; amount?: number }
+  | { type: "restore_cohesion"; forcedRoll?: number }
+  | { type: "remove_interest"; targetFactionId: string; willing?: boolean; forcedRoll?: number }
   | {
       type: "enact_change";
       magnitude?: "plausible" | "improbable";
@@ -651,7 +655,7 @@ export function planFactionAction(
     return { factionId: faction.id, action: explicit };
   }
   if (faction.behavior === "directed") {
-    throw new RuleError("MAGNITUDE_REJECTED", "directed factions need an explicit plan");
+    return { factionId: faction.id, skipRunAction: true, action: { type: "idle" } };
   }
 
   let roll = pickGoalRoll(db, faction.campaign_id);
@@ -809,87 +813,59 @@ export function advanceMonth(db: Database.Database, campaignId: string): void {
 
 export function runFactionTurn(
   db: Database.Database,
+  dbPath: string,
   input: RunFactionTurnInput,
-): ServiceResult<{ order: string[]; results: FactionPlanResult[] }> {
-  return wrapRule(() =>
-    withTransaction(db, () => {
-      const existing = db
-        .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
-        .get(input.campaignId) as { id: string } | undefined;
-      if (existing && !input.resume) {
-        throw new RuleError("TURN_ALREADY_OPEN", "a turn is already open");
+): ServiceResult<{ order: string[]; paused?: boolean }> {
+  if (input.resume) {
+    if (input.actions) {
+      for (const [factionId, action] of Object.entries(input.actions)) {
+        submitUnitPlan(db, dbPath, {
+          campaignId: input.campaignId,
+          unitType: "faction",
+          unitId: factionId,
+          plan: action,
+        });
       }
+    }
+    const applied = applyWriteQueue(db, dbPath, {
+      campaignId: input.campaignId,
+      advanceMonth: input.advanceMonth,
+    });
+    if (!applied.ok) return applied;
+    const turn = db
+      .prepare("SELECT faction_order FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
+      .get(input.campaignId) as { faction_order: string } | undefined;
+    const order = turn ? (JSON.parse(turn.faction_order) as string[]) : [];
+    return { ok: true, data: { order, paused: applied.data.paused } };
+  }
 
-      const acting = db
-        .prepare(
-          `SELECT id FROM factions
-           WHERE campaign_id = ? AND status = 'active' AND control = 'npc'`,
-        )
-        .all(input.campaignId) as { id: string }[];
+  const opened = openParallelTurn(db, dbPath, {
+    campaignId: input.campaignId,
+    missing: "mechanical",
+    advanceMonth: input.advanceMonth ?? false,
+  });
+  if (!opened.ok) return opened;
 
-      let order: string[];
-      let turnId: string;
-      if (existing) {
-        turnId = existing.id;
-        const turnRow = db
-          .prepare("SELECT faction_order FROM turns WHERE id = ?")
-          .get(turnId) as { faction_order: string };
-        order = JSON.parse(turnRow.faction_order) as string[];
-      } else {
-        const shuffleRng = nextRng(db, input.campaignId);
-        order = shuffleIds(acting.map((f) => f.id), shuffleRng);
-        const campaign = requireCampaign(db, input.campaignId);
-        turnId = crypto.randomUUID();
-        db.prepare(
-          `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order)
-           VALUES (?, ?, ?, 1, 1, ?)`,
-        ).run(turnId, input.campaignId, campaign.month, JSON.stringify(order));
-      }
+  if (input.actions) {
+    for (const [factionId, action] of Object.entries(input.actions)) {
+      submitUnitPlan(db, dbPath, {
+        campaignId: input.campaignId,
+        unitType: "faction",
+        unitId: factionId,
+        plan: action,
+      });
+    }
+  }
 
-      const actedRows = db
-        .prepare(
-          `SELECT DISTINCT actor_id FROM actions WHERE turn_id = ? AND actor_type = 'faction'`,
-        )
-        .all(turnId) as { actor_id: string }[];
-      const alreadyActed = new Set(actedRows.map((r) => r.actor_id));
-
-      const results: FactionPlanResult[] = [];
-      for (const factionId of order) {
-        if (alreadyActed.has(factionId)) continue;
-        const fresh = loadFactionRow(db, factionId);
-        const plan = planFactionAction(db, fresh, input.actions?.[factionId]);
-        if (plan.skipRunAction) {
-          results.push(plan);
-          continue;
-        }
-        const steps =
-          plan.runSteps ??
-          (plan.action.type === "aid" ? [plan.action] : [plan.action]);
-        for (const step of steps) {
-          if (step.type === "aid") {
-            executeAid(db, turnId, factionId, step.targetFactionId);
-            continue;
-          }
-          if (step.type === "idle") continue;
-          const actionInput = { campaignId: input.campaignId, factionId, ...step };
-          const actionResult = runAction(db, actionInput);
-          runGlorifyIfNeeded(db, factionId, turnId, plan.strategy, actionResult);
-        }
-        results.push(plan);
-      }
-
-      db.prepare("UPDATE turns SET open = 0, faction_order = ? WHERE id = ?").run(
-        JSON.stringify(order),
-        turnId,
-      );
-
-      if (input.advanceMonth) {
-        advanceMonth(db, input.campaignId);
-      }
-
-      return { order, results };
-    }),
-  );
+  const applied = applyWriteQueue(db, dbPath, {
+    campaignId: input.campaignId,
+    advanceMonth: input.advanceMonth,
+  });
+  if (!applied.ok) return applied;
+  return {
+    ok: true,
+    data: { order: opened.data.unitIds, paused: applied.data.paused },
+  };
 }
 
 const INTERNAL_ACTIONS = new Set(["build_strength", "enact_change", "restore_cohesion", "set_theology"]);
@@ -990,6 +966,31 @@ export function factionAction(
   );
 }
 
+function refreshContestOutcome(
+  db: Database.Database,
+  action: { id: string; actor_id: string; target_id: string; outcome: string; roll_id: string | null },
+): void {
+  if (!action.roll_id || action.outcome === "PENDING_DEFENDER_CHOICE") return;
+  const roll = db
+    .prepare("SELECT payload FROM rolls WHERE id = ?")
+    .get(action.roll_id) as { payload: string } | undefined;
+  if (!roll) return;
+  const payload = JSON.parse(roll.payload) as Record<string, unknown>;
+  const attacker = payload.attacker as { total?: number } | undefined;
+  if (!attacker || typeof attacker.total !== "number") return;
+  const defenderTotal = typeof payload.defenderTotal === "number" ? payload.defenderTotal : 0;
+  const ap = loadFactionRow(db, action.actor_id).power;
+  const dp = loadFactionRow(db, action.target_id).power;
+  const winner = resolveContest({
+    attackerTotal: attacker.total,
+    defenderTotal,
+    attackerPower: ap,
+    defenderPower: dp,
+  });
+  const newOutcome = winner === "attacker" ? "attacker_win" : "defender_win";
+  db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run(newOutcome, action.id);
+}
+
 function applyBeforeRollModifier(payload: Record<string, unknown>, modifier: number): void {
   const attacker = payload.attacker;
   if (attacker && typeof attacker === "object" && attacker !== null) {
@@ -1067,23 +1068,41 @@ export function spendInterest(
         );
       }
 
-      if (input.timing === "before" && input.actionId) {
+      if ((input.timing === "before" || input.timing === "after") && input.actionId) {
         const action = db
           .prepare(
-            `SELECT roll_id FROM actions WHERE id = ? AND turn_id = ?`,
+            `SELECT id, roll_id, outcome, actor_id, target_id FROM actions WHERE id = ? AND turn_id = ?`,
           )
-          .get(input.actionId, turn.id) as { roll_id: string | null } | undefined;
+          .get(input.actionId, turn.id) as
+          | {
+              id: string;
+              roll_id: string | null;
+              outcome: string;
+              actor_id: string;
+              target_id: string;
+            }
+          | undefined;
         if (action?.roll_id) {
           const roll = db
             .prepare("SELECT payload FROM rolls WHERE id = ?")
             .get(action.roll_id) as { payload: string } | undefined;
           if (roll) {
             const payload = JSON.parse(roll.payload) as Record<string, unknown>;
-            applyBeforeRollModifier(payload, input.modifier);
+            if (input.timing === "before") {
+              applyBeforeRollModifier(payload, input.modifier);
+            } else {
+              const attacker = payload.attacker as { total?: number } | undefined;
+              if (attacker && typeof attacker.total === "number") {
+                attacker.total += input.modifier;
+              } else if (typeof payload.total === "number") {
+                payload.total += input.modifier;
+              }
+            }
             db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(
               JSON.stringify(payload),
               action.roll_id,
             );
+            refreshContestOutcome(db, action);
           }
         }
       }
@@ -1246,20 +1265,18 @@ export function resolvePendingAttack(
   const attackerFeatureId = featureIds[0];
   const defenderFeatureId = featureIds[1] ?? undefined;
 
-  const result = runAction(db, {
+  applyAttackDefense(db, {
     campaignId: input.campaignId,
-    factionId: action.actor_id,
-    type: "attack",
-    targetFactionId: action.target_id,
+    turnId: action.turn_id,
+    actionId: action.id,
+    attackerId: action.actor_id,
+    defenderId: action.target_id,
     attackerFeatureId,
-    defenderFeatureId,
+    defenderFeatureId: defenderFeatureId ?? null,
     defenderChoice: input.defenderChoice,
     problemId: input.problemId,
   });
-  if (!result.ok) {
-    throw new RuleError(result.error.code, result.error.message, result.error.details);
-  }
-  return result.data;
+  return { resolved: true };
 }
 
 export function resolveAttack(

@@ -87,11 +87,52 @@ export function ensureOpenTurn(db: Database.Database, campaignId: string): strin
   if (existing) return existing.id;
   const campaign = requireCampaign(db, campaignId);
   const turnId = crypto.randomUUID();
+  const seqRow = db
+    .prepare("SELECT COALESCE(MAX(sequence), 0) + 1 AS seq FROM turns WHERE campaign_id = ?")
+    .get(campaignId) as { seq: number };
   db.prepare(
     `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order)
-     VALUES (?, ?, ?, 1, 1, '[]')`,
-  ).run(turnId, campaignId, campaign.month);
+     VALUES (?, ?, ?, ?, 1, '[]')`,
+  ).run(turnId, campaignId, campaign.month, seqRow.seq);
   return turnId;
+}
+
+export function troubleRollPayload(
+  roll: { faces: number; natural: number; kept: number; bonus: number; total: number; forced?: boolean },
+  trouble: number,
+  success: boolean,
+  culpritId: string | null,
+): Record<string, unknown> {
+  return { ...roll, trouble, success, culpritId };
+}
+
+export function recordActionEvent(
+  db: Database.Database,
+  input: {
+    campaignId: string;
+    turnId: string;
+    type: string;
+    payload: Record<string, unknown>;
+    visibility?: "public" | "local" | "privileged" | "hidden";
+    placeId?: string | null;
+  },
+): void {
+  const body = {
+    ...input.payload,
+    visibility: input.visibility ?? "public",
+    placeId: input.placeId ?? null,
+  };
+  db.prepare(
+    `INSERT INTO events (id, campaign_id, turn_id, type, payload, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    crypto.randomUUID(),
+    input.campaignId,
+    input.turnId,
+    input.type,
+    JSON.stringify(body),
+    Date.now(),
+  );
 }
 
 export function nextRng(db: Database.Database, campaignId: string) {

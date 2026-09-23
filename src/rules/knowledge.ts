@@ -272,13 +272,7 @@ function projectOtherFaction(
   if (!factionIncluded(world, viewerFactionId, target.id, viewerPlaces)) return null;
 
   const edge = interestFrom(world, viewerFactionId, target.id);
-  const inbound = interestFrom(world, target.id, viewerFactionId);
-  const spyEdge =
-    edge?.nature === "spies"
-      ? edge
-      : inbound?.nature === "spies"
-        ? inbound
-        : undefined;
+  const spyEdge = edge?.nature === "spies" ? edge : undefined;
   const viewer = world.factions.find((f) => f.id === viewerFactionId)!;
   const dieMax = DIE_BY_POWER[viewer.power];
   const spyMax = spyEdge && spyEdge.points >= dieMax;
@@ -489,18 +483,41 @@ function viewerKnownPlaces(world: CampaignWorld, unit: UnitRef): Set<string> {
   return places;
 }
 
+function courtVisibleToUnit(
+  world: CampaignWorld,
+  unit: UnitRef,
+  court: WorldCourt,
+  viewerPlaces: Set<string>,
+  viewerFaction: string | undefined,
+): boolean {
+  if (court.placeId && viewerPlaces.has(court.placeId)) return true;
+  if (court.rulesFactionId && viewerFaction) {
+    if (court.rulesFactionId === viewerFaction) return true;
+    if (factionIncluded(world, viewerFaction, court.rulesFactionId, viewerPlaces)) return true;
+  }
+  return false;
+}
+
 function projectCourt(
   world: CampaignWorld,
   unit: UnitRef,
   court: WorldCourt,
+  viewerPlaces: Set<string>,
 ): Record<string, unknown> | null {
   const viewerFaction = viewerFactionId(unit, world);
   const viewerChar = unit.type === "character" ? unit.id : undefined;
   const members = court.members ?? world.characters.filter((c) => c.courtId === court.id);
 
+  if (!courtVisibleToUnit(world, unit, court, viewerPlaces, viewerFaction)) {
+    const isMember = members.some((m) => m.id === viewerChar);
+    if (!isMember) return null;
+  }
+
   const isMember = members.some((m) => m.id === viewerChar);
   const isHiddenController = members.some(
-    (m) => m.id === viewerChar && (m.isHiddenController === true || m.isHiddenController === 1),
+    (m) =>
+      m.id === viewerChar &&
+      (m.isHiddenController === true || Number(m.isHiddenController) === 1),
   );
 
   let spyMax = false;
@@ -542,7 +559,8 @@ function projectCourt(
       type: court.type,
       placeId: court.placeId,
       atmosphere: court.atmosphere,
-      agreement: court.powerStructure,
+      agreement:
+        court.powerStructure === "figurehead" ? "leader" : court.powerStructure,
       actors: members
         .filter((m) => !m.isHiddenController)
         .map((m) => stripStatNote({ id: m.id, name: m.name })),
@@ -602,7 +620,7 @@ export function projectUnitView(world: CampaignWorld, unit: UnitRef): { unit: Un
 
   const courts: Record<string, unknown>[] = [];
   for (const c of world.courts) {
-    const projected = projectCourt(world, unit, c);
+    const projected = projectCourt(world, unit, c, viewerPlaces);
     if (projected) courts.push(projected);
   }
 
@@ -702,23 +720,26 @@ const ID_FIELDS = [
 
 export function collectSnapshotIds(snapshot: ReturnType<typeof projectUnitView>): Set<string> {
   const ids = new Set<string>();
-  const walk = (val: unknown) => {
-    if (val == null) return;
-    if (typeof val === "string") return;
-    if (Array.isArray(val)) {
-      for (const item of val) walk(item);
-      return;
-    }
-    if (typeof val === "object") {
-      for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
-        if (k === "id" && typeof v === "string") ids.add(v);
-        if (ID_FIELDS.includes(k) && typeof v === "string") ids.add(v);
-        walk(v);
+  ids.add(snapshot.unit.id);
+  const known = snapshot.known as Record<string, unknown>;
+  const addFromList = (list: unknown) => {
+    if (!Array.isArray(list)) return;
+    for (const item of list) {
+      if (item && typeof item === "object" && typeof (item as { id?: string }).id === "string") {
+        ids.add((item as { id: string }).id);
       }
     }
   };
-  walk(snapshot.known);
-  ids.add(snapshot.unit.id);
+  addFromList(known.factions);
+  addFromList(known.places);
+  addFromList(known.courts);
+  addFromList(known.characters);
+  addFromList(known.facts);
+  addFromList(known.godbound);
+  for (const f of (known.factions as { features?: { id: string }[] }[]) ?? []) {
+    for (const feat of f.features ?? []) ids.add(feat.id);
+    for (const prob of (f as { problems?: { id: string }[] }).problems ?? []) ids.add(prob.id);
+  }
   return ids;
 }
 

@@ -8,6 +8,7 @@ import type { Quote } from "../rules/cost.js";
 import { quoteChange } from "../rules/cost.js";
 import { withTransaction } from "../store/db.js";
 import { loadCatalog } from "../tables/catalog.js";
+import { influenceFromWealth } from "../rules/wealth.js";
 import {
   coveredOnChange,
   insertBacklashProblem,
@@ -35,6 +36,7 @@ export function beginChange(
     petty?: boolean;
     deedsRequired?: number;
     challengesRequired?: number;
+    resisters?: { rating: number; label?: string }[];
   },
 ): ServiceResult<{ changeId: string; quote: Quote }> {
   return wrapRule(() =>
@@ -60,7 +62,7 @@ export function beginChange(
         magnitude: input.magnitude,
         kind: input.kind as "feature" | "fact" | "problem_mitigation" | "creature_population" | "champion" | "other",
         wardRatings,
-        resisterRatings: [],
+        resisterRatings: input.resisters?.map((r) => r.rating) ?? [],
         petty: input.petty,
         deedsRequired: input.deedsRequired,
         challengesRequired: input.challengesRequired,
@@ -83,11 +85,18 @@ export function beginChange(
         quote.deedsRequired,
         quote.challengesRequired,
       );
+      if (input.resisters?.length) {
+        for (const r of input.resisters) {
+          db.prepare(
+            `INSERT INTO resisters (id, change_id, rating, label) VALUES (?, ?, ?, ?)`,
+          ).run(crypto.randomUUID(), changeId, r.rating, r.label ?? "");
+        }
+      }
       if (input.featureText) {
         const factId = crypto.randomUUID();
         db.prepare(
-          `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id)
-           VALUES (?, ?, 'change', ?, ?, 'feature_draft', ?)`,
+          `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id, visibility)
+           VALUES (?, ?, 'change', ?, ?, 'feature_draft', ?, 'privileged')`,
         ).run(factId, input.campaignId, changeId, input.featureText, changeId);
       }
       return { changeId, quote };
@@ -140,11 +149,25 @@ export function commitResources(
         .prepare("SELECT id, influence FROM godbound WHERE id = ?")
         .get(input.godboundId) as { id: string; influence: number } | undefined;
       if (!godbound) throw new RuleError("ENTITY_NOT_FOUND", `godbound ${input.godboundId} not found`);
-      if (godbound.influence < input.influence) {
+      if (input.influence < 0) {
+        throw new RuleError("INSUFFICIENT_INFLUENCE", "cannot commit negative influence");
+      }
+      const wealthSpent = input.wealthSpent ?? 0;
+      let influenceDebit = input.influence;
+      if (wealthSpent > 0) {
+        const gbRow = db
+          .prepare("SELECT wealth FROM godbound WHERE id = ?")
+          .get(input.godboundId) as { wealth: number };
+        const converted = influenceFromWealth(gbRow.wealth, wealthSpent);
+        influenceDebit += converted.influence;
+        db.prepare("UPDATE godbound SET wealth = wealth - ? WHERE id = ?").run(
+          converted.wealthUsed,
+          input.godboundId,
+        );
+      }
+      if (godbound.influence < influenceDebit) {
         throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough influence to commit");
       }
-
-      const wealthSpent = input.wealthSpent ?? 0;
       const existing = db
         .prepare(
           "SELECT influence FROM change_commitments WHERE change_id = ? AND godbound_id = ?",
@@ -162,7 +185,7 @@ export function commitResources(
         ).run(input.changeId, input.godboundId, input.influence, wealthSpent);
       }
       db.prepare("UPDATE godbound SET influence = influence - ? WHERE id = ?").run(
-        input.influence,
+        influenceDebit,
         input.godboundId,
       );
 
@@ -317,9 +340,21 @@ export function withdrawInfluence(
         | undefined;
       if (!change) throw new RuleError("ENTITY_NOT_FOUND", "change not found");
 
+      const prior = db
+        .prepare(
+          "SELECT influence FROM change_commitments WHERE change_id = ? AND godbound_id = ?",
+        )
+        .get(input.changeId, input.godboundId) as { influence: number } | undefined;
+      const returned = prior?.influence ?? 0;
       db.prepare(
         "UPDATE change_commitments SET influence = 0 WHERE change_id = ? AND godbound_id = ?",
       ).run(input.changeId, input.godboundId);
+      if (returned > 0) {
+        db.prepare("UPDATE godbound SET influence = influence + ? WHERE id = ?").run(
+          returned,
+          input.godboundId,
+        );
+      }
 
       const row = db
         .prepare("SELECT id, scope, magnitude, kind, place_ids FROM changes WHERE id = ?")
@@ -435,11 +470,35 @@ export function resolveWithdrawal(
           )
           .all(change.id) as { id: string }[];
         for (const f of facts) {
+          const old = db
+            .prepare(
+              "SELECT campaign_id, subject, subject_id, statement, kind, source_change_id, visibility, place_id FROM facts WHERE id = ?",
+            )
+            .get(f.id) as {
+            campaign_id: string;
+            subject: string;
+            subject_id: string;
+            statement: string;
+            kind: string;
+            source_change_id: string | null;
+            visibility: string;
+            place_id: string | null;
+          };
           const newId = crypto.randomUUID();
           db.prepare(
-            `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id, superseded_by)
-             SELECT ?, campaign_id, subject, subject_id, statement, kind, source_change_id, NULL FROM facts WHERE id = ?`,
-          ).run(newId, f.id);
+            `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id, visibility, place_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).run(
+            newId,
+            old.campaign_id,
+            old.subject,
+            old.subject_id,
+            `${old.statement} (undone)`,
+            old.kind,
+            old.source_change_id,
+            old.visibility,
+            old.place_id,
+          );
           db.prepare("UPDATE facts SET superseded_by = ? WHERE id = ?").run(newId, f.id);
         }
         if (change.feature_id) {
@@ -519,18 +578,18 @@ export function expandChange(
       if (!change) throw new RuleError("ENTITY_NOT_FOUND", "change not found");
 
       const oldQuote = quoteForChangeRow(db, change);
+      const placeIdsForQuote =
+        input.placeIds ?? (JSON.parse(change.place_ids) as string[]);
       const newQuote = quoteChange({
         scope: input.scope,
         magnitude: input.magnitude,
         kind: (input.kind ?? change.kind) as "feature" | "fact" | "problem_mitigation" | "creature_population" | "champion" | "other",
-        wardRatings: input.placeIds
-          ? input.placeIds.flatMap((placeId) => {
-              const wards = db
-                .prepare("SELECT rating FROM wards WHERE place_id = ?")
-                .all(placeId) as { rating: number }[];
-              return wards.map((w) => w.rating);
-            })
-          : [],
+        wardRatings: placeIdsForQuote.flatMap((placeId) => {
+          const wards = db
+            .prepare("SELECT rating FROM wards WHERE place_id = ?")
+            .all(placeId) as { rating: number }[];
+          return wards.map((w) => w.rating);
+        }),
         resisterRatings: resisterRatingsForChange(db, change.id),
       });
 
@@ -549,6 +608,9 @@ export function expandChange(
       const dominion = input.dominion ?? 0;
       if (influence + dominion < deltaPaid) {
         throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough to expand change");
+      }
+      if (!input.godboundId && influence > 0) {
+        throw new RuleError("FILL_INCOMPLETE", "godboundId required for influence payment");
       }
       if (input.godboundId && influence > 0) {
         const gb = db
@@ -577,6 +639,19 @@ export function expandChange(
         }
       }
       if (dominion > 0) {
+        if (!change.faction_id) {
+          throw new RuleError("FILL_INCOMPLETE", "dominion payment requires faction-owned change");
+        }
+        const faction = db
+          .prepare("SELECT dominion FROM factions WHERE id = ?")
+          .get(change.faction_id) as { dominion: number };
+        if (!faction || faction.dominion < dominion) {
+          throw new RuleError("INSUFFICIENT_DOMINION", "not enough dominion to expand");
+        }
+        db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(
+          dominion,
+          change.faction_id,
+        );
         db.prepare("UPDATE changes SET dominion_spent = dominion_spent + ? WHERE id = ?").run(
           dominion,
           change.id,

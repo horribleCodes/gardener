@@ -7,7 +7,17 @@ import {
   type DefenseChoice,
 } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
-import { unevenBonus, featureRoll, resolveContest } from "../rules/contest.js";
+import {
+  defaultRelevance,
+  unevenBonus,
+  featureRoll,
+  resolveContest,
+} from "../rules/contest.js";
+import { restoreCohesionCost } from "../rules/cost.js";
+import { rollDie } from "../rules/dice.js";
+import { applyCollapseIfNeeded } from "./collapse.js";
+import { listUsableFeatures, resolveDefenderFeature, type FeatureRow } from "./features.js";
+import type { StandingOrder } from "./unitPlan.js";
 import { troubleCheck } from "../rules/trouble.js";
 import { loadCatalog } from "../tables/catalog.js";
 import { withTransaction } from "../store/db.js";
@@ -18,9 +28,12 @@ import {
   insertFeatureFromText,
   loadProblemsOrdered,
   nextRng,
+  nextProblemPosition,
   persistRoll,
+  recordActionEvent,
   requireFaction,
   sumTrouble,
+  troubleRollPayload,
   wrapRule,
   type ServiceResult,
 } from "./util.js";
@@ -29,8 +42,17 @@ export type RunActionInput = {
   campaignId: string;
   factionId: string;
   forcedRoll?: number;
+  standingOrders?: StandingOrder[];
 } & (
   | { type: "build_strength" }
+  | { type: "restore_cohesion" }
+  | { type: "aid"; targetFactionId: string; amount?: number; changeId?: string }
+  | {
+      type: "remove_interest";
+      targetFactionId: string;
+      willing?: boolean;
+      forcedRoll?: number;
+    }
   | {
       type: "enact_change";
       magnitude?: "plausible" | "improbable";
@@ -88,6 +110,15 @@ export function runAction(db: Database.Database, input: RunActionInput): Service
       if (input.type === "extend_interest") {
         return runExtendInterest(db, faction, turnId, input);
       }
+      if (input.type === "restore_cohesion") {
+        return runRestoreCohesion(db, faction, turnId, input.forcedRoll);
+      }
+      if (input.type === "aid") {
+        return runAid(db, faction, turnId, input);
+      }
+      if (input.type === "remove_interest") {
+        return runRemoveInterest(db, faction, turnId, input);
+      }
       throw new RuleError("FILL_INCOMPLETE", `unknown action type`);
     }),
   );
@@ -111,7 +142,12 @@ function runBuildStrength(
     inverted: false,
     forcedRoll,
   });
-  const rollId = persistRoll(db, faction.campaign_id, turnId, check.roll);
+  const rollId = persistRoll(
+    db,
+    faction.campaign_id,
+    turnId,
+    troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+  );
   const actionId = crypto.randomUUID();
   let dominionDelta = 0;
   if (check.success) {
@@ -132,6 +168,18 @@ function runBuildStrength(
     check.success ? "success" : "failure",
     dominionDelta,
   );
+  recordActionEvent(db, {
+    campaignId: faction.campaign_id,
+    turnId,
+    type: "faction_action",
+    payload: {
+      actorId: faction.id,
+      actionType: "build_strength",
+      outcome: check.success ? "success" : "failure",
+      rollId,
+    },
+  });
+  applyCollapseIfNeeded(db, faction.id, turnId);
   return {
     success: check.success,
     culpritId: check.culpritId,
@@ -191,7 +239,12 @@ function runEnactChange(
     inverted,
     forcedRoll: input.forcedRoll,
   });
-  const rollId = persistRoll(db, faction.campaign_id, turnId, check.roll);
+  const rollId = persistRoll(
+    db,
+    faction.campaign_id,
+    turnId,
+    troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+  );
   const actionId = crypto.randomUUID();
   const enactFeatureIds = input.meansFeatureId
     ? JSON.stringify([input.meansFeatureId])
@@ -205,6 +258,7 @@ function runEnactChange(
       if (updated.changes === 0) {
         throw new RuleError("ENTITY_NOT_FOUND", "problem not found");
       }
+      applyCollapseIfNeeded(db, faction.id, turnId);
     }
     db.prepare(
       `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, roll_id, outcome, dominion_delta, feature_ids)
@@ -277,9 +331,149 @@ function runEnactChange(
   return { success: true, roll: check.roll };
 }
 
+function spendStandingOrdersOnContest(
+  db: Database.Database,
+  campaignId: string,
+  turnId: string,
+  spenderId: string,
+  attackerId: string,
+  defenderId: string,
+  attackerTotal: number,
+  defenderTotal: number,
+  orders: StandingOrder[],
+): { attackerTotal: number; defenderTotal: number } {
+  let aTotal = attackerTotal;
+  let dTotal = defenderTotal;
+  const spender = requireFaction(db, spenderId);
+  const dieMax = DIE_BY_POWER[spender.power];
+
+  for (const order of orders) {
+    const edge = db
+      .prepare(
+        "SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?",
+      )
+      .get(spenderId, order.targetFactionId) as { points: number } | undefined;
+    const cap = Math.min(order.maxSpend, dieMax, edge?.points ?? 0);
+    if (cap <= 0) continue;
+
+    const helpsAttacker = order.side === "help" && order.targetFactionId === attackerId;
+    const helpsDefender = order.side === "help" && order.targetFactionId === defenderId;
+    const harmsAttacker = order.side === "harm" && order.targetFactionId === attackerId;
+    const harmsDefender = order.side === "harm" && order.targetFactionId === defenderId;
+
+    let spent = 0;
+    for (let m = 1; m <= cap; m++) {
+      let na = aTotal;
+      let nd = dTotal;
+      if (helpsAttacker) na += m;
+      if (helpsDefender) nd += m;
+      if (harmsAttacker) na -= m;
+      if (harmsDefender) nd -= m;
+      const before = resolveContest({
+        attackerTotal: aTotal,
+        defenderTotal: dTotal,
+        attackerPower: requireFaction(db, attackerId).power,
+        defenderPower: requireFaction(db, defenderId).power,
+      });
+      const after = resolveContest({
+        attackerTotal: na,
+        defenderTotal: nd,
+        attackerPower: requireFaction(db, attackerId).power,
+        defenderPower: requireFaction(db, defenderId).power,
+      });
+      if (before !== after) {
+        spent = m;
+        aTotal = na;
+        dTotal = nd;
+        break;
+      }
+    }
+    if (spent > 0 && edge) {
+      db.prepare(
+        "UPDATE interests SET points = points - ? WHERE from_faction_id = ? AND to_faction_id = ?",
+      ).run(spent, spenderId, order.targetFactionId);
+      db.prepare(
+        `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, outcome)
+         VALUES (?, ?, 'spend_interest', 'faction', ?, 'faction', ?, 'success')`,
+      ).run(crypto.randomUUID(), turnId, spenderId, order.targetFactionId);
+    }
+  }
+  return { attackerTotal: aTotal, defenderTotal: dTotal };
+}
+
+export function applyAttackDefense(
+  db: Database.Database,
+  input: {
+    campaignId: string;
+    turnId: string;
+    actionId: string;
+    attackerId: string;
+    defenderId: string;
+    attackerFeatureId: string;
+    defenderFeatureId: string | null;
+    defenderChoice: DefenseChoice;
+    problemId?: string;
+  },
+): void {
+  const defender = requireFaction(db, input.defenderId);
+  const attacker = requireFaction(db, input.attackerId);
+  let defenderFeature: FeatureRow | undefined;
+  if (input.defenderFeatureId) {
+    defenderFeature = resolveDefenderFeature(db, defender.id, input.defenderFeatureId);
+  }
+
+  const problems = loadProblemsOrdered(db, defender.id);
+  const trouble = sumTrouble(problems);
+  const dieMax = facesForPower(defender.power);
+  const damage = attackProblemDamage(attacker.power, defender.power);
+  const canSacrifice = Boolean(defenderFeature);
+  const choice = input.defenderChoice;
+  if (choice === "sacrifice" && !canSacrifice) {
+    throw new RuleError("NO_USABLE_FEATURE", "no feature to sacrifice");
+  }
+
+  if (choice === "cohesion") {
+    db.prepare("UPDATE factions SET cohesion = cohesion - 1 WHERE id = ?").run(defender.id);
+  } else if (choice === "sacrifice" && defenderFeature) {
+    db.prepare("DELETE FROM feature_parts WHERE feature_id = ?").run(defenderFeature.id);
+    db.prepare("DELETE FROM features WHERE id = ?").run(defenderFeature.id);
+  } else {
+    if (input.problemId) {
+      const updated = db
+        .prepare("UPDATE problems SET points = points + ? WHERE id = ? AND faction_id = ?")
+        .run(damage, input.problemId, defender.id);
+      if (updated.changes === 0) {
+        throw new RuleError("ENTITY_NOT_FOUND", "problem not found");
+      }
+    } else {
+      const problemId = crypto.randomUUID();
+      const problemText = loadCatalog().problems.military[0];
+      db.prepare(
+        `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+         VALUES (?, ?, ?, ?, 'military', 0, 0, 0, ?)`,
+      ).run(problemId, defender.id, problemText, damage, nextProblemPosition(db, defender.id));
+    }
+  }
+
+  db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("attacker_win", input.actionId);
+  applyCollapseIfNeeded(db, defender.id, input.turnId);
+  recordActionEvent(db, {
+    campaignId: input.campaignId,
+    turnId: input.turnId,
+    type: "faction_action",
+    payload: {
+      actorId: attacker.id,
+      targetId: defender.id,
+      actionType: "attack",
+      outcome: "attacker_win",
+      featureId: input.attackerFeatureId,
+    },
+  });
+}
+
 function runAttack(
   db: Database.Database,
-  attacker: { id: string; campaign_id: string; power: Power },
+  attacker: { id: string; campaign_id: string; power: Power; control: string },
   turnId: string,
   input: Extract<RunActionInput, { type: "attack" }>,
 ) {
@@ -316,21 +510,17 @@ function runAttack(
 
   const rng = nextRng(db, attacker.campaign_id);
   const attackerFaces = DIE_BY_POWER[attacker.power];
-  let defenderFeature: typeof attackerFeature | undefined;
+  const defenderFeature = resolveDefenderFeature(
+    db,
+    defender.id,
+    input.defenderFeatureId,
+  );
   let defenderTags: FeatureTags | null = null;
   let defenderTotal = 0;
 
-  if (input.defenderFeatureId) {
-    defenderFeature = db
-      .prepare(
-        `SELECT id, faction_id, domain, size, quality, magical, origin FROM features WHERE id = ?`,
-      )
-      .get(input.defenderFeatureId) as typeof attackerFeature | undefined;
-  }
-
   let attackerRoll;
   let winner: "attacker" | "defender";
-  if (!defenderFeature || defenderFeature.faction_id !== defender.id) {
+  if (!defenderFeature) {
     attackerRoll = featureRoll({
       rng,
       faces: attackerFaces,
@@ -350,27 +540,51 @@ function runAttack(
     const defenderFaces = DIE_BY_POWER[defender.power];
     const attackerBonus = unevenBonus(attackerTags, defenderTags);
     const defenderBonus = unevenBonus(defenderTags, attackerTags);
+    const attackerMarginal =
+      input.marginal ??
+      defaultRelevance(attackerTags.domain, defenderTags.domain);
+    const defenderMarginal =
+      input.marginal ??
+      defaultRelevance(defenderTags.domain, attackerTags.domain);
     attackerRoll = featureRoll({
       rng,
       faces: attackerFaces,
-      marginal: input.marginal ?? false,
+      marginal: attackerMarginal,
       bonus: attackerBonus,
       forced: input.forcedAttackerRoll,
     });
     const defenderRoll = featureRoll({
       rng,
       faces: defenderFaces,
-      marginal: defender.power < attacker.power,
+      marginal: defenderMarginal,
       bonus: defenderBonus,
       forced: input.forcedDefenderRoll,
     });
     defenderTotal = defenderRoll.total;
+    let aTotal = attackerRoll.total;
+    let dTotal = defenderTotal;
+    if (input.standingOrders?.length) {
+      const adjusted = spendStandingOrdersOnContest(
+        db,
+        attacker.campaign_id,
+        turnId,
+        attacker.id,
+        attacker.id,
+        defender.id,
+        aTotal,
+        dTotal,
+        input.standingOrders,
+      );
+      aTotal = adjusted.attackerTotal;
+      dTotal = adjusted.defenderTotal;
+    }
     winner = resolveContest({
-      attackerTotal: attackerRoll.total,
-      defenderTotal: defenderRoll.total,
+      attackerTotal: aTotal,
+      defenderTotal: dTotal,
       attackerPower: attacker.power,
       defenderPower: defender.power,
     });
+    defenderTotal = dTotal;
   }
 
   const rollId = persistRoll(db, attacker.campaign_id, turnId, {
@@ -389,9 +603,21 @@ function runAttack(
       turnId,
       attacker.id,
       defender.id,
-      JSON.stringify([input.attackerFeatureId, input.defenderFeatureId ?? null]),
+      JSON.stringify([input.attackerFeatureId, defenderFeature?.id ?? null]),
       rollId,
     );
+    recordActionEvent(db, {
+      campaignId: attacker.campaign_id,
+      turnId,
+      type: "faction_action",
+      payload: {
+        actorId: attacker.id,
+        targetId: defender.id,
+        actionType: "attack",
+        outcome: "defender_win",
+        featureId: input.attackerFeatureId,
+      },
+    });
     return { success: false, winner: "defender" };
   }
 
@@ -404,10 +630,10 @@ function runAttack(
       turnId,
       attacker.id,
       defender.id,
-      JSON.stringify([input.attackerFeatureId, input.defenderFeatureId ?? null]),
+      JSON.stringify([input.attackerFeatureId, defenderFeature?.id ?? null]),
       rollId,
     );
-    return { pending: true, code: "PENDING_DEFENDER_CHOICE" };
+    return { pending: true, code: "PENDING_DEFENDER_CHOICE", actionId };
   }
 
   const problems = loadProblemsOrdered(db, defender.id);
@@ -426,29 +652,6 @@ function runAttack(
       canSacrifice,
     });
 
-  if (choice === "cohesion") {
-    db.prepare("UPDATE factions SET cohesion = cohesion - 1 WHERE id = ?").run(defender.id);
-  } else if (choice === "sacrifice" && defenderFeature) {
-    db.prepare("DELETE FROM feature_parts WHERE feature_id = ?").run(defenderFeature.id);
-    db.prepare("DELETE FROM features WHERE id = ?").run(defenderFeature.id);
-  } else {
-    if (input.problemId) {
-      const updated = db
-        .prepare("UPDATE problems SET points = points + ? WHERE id = ? AND faction_id = ?")
-        .run(damage, input.problemId, defender.id);
-      if (updated.changes === 0) {
-        throw new RuleError("ENTITY_NOT_FOUND", "problem not found");
-      }
-    } else {
-      const problemId = crypto.randomUUID();
-      const problemText = loadCatalog().problems.military[0];
-      db.prepare(
-        `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
-         VALUES (?, ?, ?, ?, 'military', 0, 0, 0, ?)`,
-      ).run(problemId, defender.id, problemText, damage, problems.length);
-    }
-  }
-
   db.prepare(
     `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, feature_ids, roll_id, outcome)
      VALUES (?, ?, 'attack', 'faction', ?, 'faction', ?, ?, ?, 'attacker_win')`,
@@ -457,10 +660,23 @@ function runAttack(
     turnId,
     attacker.id,
     defender.id,
-    JSON.stringify([input.attackerFeatureId, input.defenderFeatureId ?? null]),
+    JSON.stringify([input.attackerFeatureId, defenderFeature?.id ?? null]),
     rollId,
   );
-  return { success: true, winner: "attacker", defense: choice };
+
+  applyAttackDefense(db, {
+    campaignId: attacker.campaign_id,
+    turnId,
+    actionId,
+    attackerId: attacker.id,
+    defenderId: defender.id,
+    attackerFeatureId: input.attackerFeatureId,
+    defenderFeatureId: defenderFeature?.id ?? null,
+    defenderChoice: choice,
+    problemId: input.problemId,
+  });
+
+  return { success: true, winner: "attacker", defense: choice, actionId };
 }
 
 function runExtendInterest(
@@ -520,13 +736,7 @@ function runExtendInterest(
   let defenderTags: FeatureTags | null = null;
   let defenderTotal = 0;
 
-  if (input.defenderFeatureId) {
-    defenderFeature = db
-      .prepare(
-        `SELECT id, faction_id, domain, size, quality, magical, origin FROM features WHERE id = ?`,
-      )
-      .get(input.defenderFeatureId) as typeof attackerFeature | undefined;
-  }
+  defenderFeature = resolveDefenderFeature(db, defender.id, input.defenderFeatureId);
 
   let attackerRoll;
   let winner: "attacker" | "defender";
@@ -534,7 +744,7 @@ function runExtendInterest(
   if (input.willing) {
     winner = "attacker";
     rollId = persistRoll(db, attacker.campaign_id, turnId, { willing: true, winner: "attacker" });
-  } else if (!defenderFeature || defenderFeature.faction_id !== defender.id) {
+  } else if (!defenderFeature) {
     const rng = nextRng(db, attacker.campaign_id);
     attackerRoll = featureRoll({
       rng,
@@ -561,27 +771,51 @@ function runExtendInterest(
     const defenderFaces = DIE_BY_POWER[defender.power];
     const attackerBonus = unevenBonus(attackerTags, defenderTags);
     const defenderBonus = unevenBonus(defenderTags, attackerTags);
+    const attackerMarginal =
+      input.marginal ??
+      defaultRelevance(attackerTags.domain, defenderTags.domain);
+    const defenderMarginal =
+      input.marginal ??
+      defaultRelevance(defenderTags.domain, attackerTags.domain);
     attackerRoll = featureRoll({
       rng,
       faces: attackerFaces,
-      marginal: input.marginal ?? false,
+      marginal: attackerMarginal,
       bonus: attackerBonus,
       forced: input.forcedAttackerRoll,
     });
     const defenderRoll = featureRoll({
       rng,
       faces: defenderFaces,
-      marginal: defender.power < attacker.power,
+      marginal: defenderMarginal,
       bonus: defenderBonus,
       forced: input.forcedDefenderRoll,
     });
     defenderTotal = defenderRoll.total;
+    let aTotal = attackerRoll.total;
+    let dTotal = defenderTotal;
+    if (input.standingOrders?.length) {
+      const adjusted = spendStandingOrdersOnContest(
+        db,
+        attacker.campaign_id,
+        turnId,
+        attacker.id,
+        attacker.id,
+        defender.id,
+        aTotal,
+        dTotal,
+        input.standingOrders,
+      );
+      aTotal = adjusted.attackerTotal;
+      dTotal = adjusted.defenderTotal;
+    }
     winner = resolveContest({
-      attackerTotal: attackerRoll.total,
-      defenderTotal: defenderRoll.total,
+      attackerTotal: aTotal,
+      defenderTotal: dTotal,
       attackerPower: attacker.power,
       defenderPower: defender.power,
     });
+    defenderTotal = dTotal;
     rollId = persistRoll(db, attacker.campaign_id, turnId, {
       attacker: attackerRoll,
       defenderTotal,
@@ -606,7 +840,11 @@ function runExtendInterest(
     return { success: false, winner: "defender" };
   }
 
-  const natureDefault = loadCatalog().interestNature[0].id;
+  const catalog = loadCatalog();
+  const natureKeys = catalog.interestNature.map((n) => n.id);
+  const natureRng = nextRng(db, attacker.campaign_id);
+  const natureIndex = Math.floor(natureRng.next() * natureKeys.length);
+  const natureDefault = natureKeys[natureIndex];
   if (existing) {
     db.prepare(
       "UPDATE interests SET points = points + 1 WHERE from_faction_id = ? AND to_faction_id = ?",
@@ -629,5 +867,205 @@ function runExtendInterest(
     JSON.stringify([input.attackerFeatureId, input.defenderFeatureId ?? null]),
     rollId,
   );
+  recordActionEvent(db, {
+    campaignId: attacker.campaign_id,
+    turnId,
+    type: "faction_action",
+    payload: {
+      actorId: attacker.id,
+      targetId: defender.id,
+      actionType: "extend_interest",
+      outcome: "attacker_win",
+      featureId: input.attackerFeatureId,
+    },
+  });
   return { success: true, winner: "attacker" };
+}
+
+function runRestoreCohesion(
+  db: Database.Database,
+  faction: { id: string; campaign_id: string; power: Power; dominion: number; cohesion: number },
+  turnId: string,
+  forcedRoll?: number,
+) {
+  if (listUsableFeatures(db, faction.id).length === 0) {
+    throw new RuleError("NO_USABLE_FEATURE", "no usable feature");
+  }
+  if (faction.cohesion >= faction.power) {
+    throw new RuleError("COHESION_AT_CAP", "cohesion at cap");
+  }
+  const cost = restoreCohesionCost(faction.power);
+  if (faction.dominion < cost) {
+    throw new RuleError("INSUFFICIENT_DOMINION", "not enough dominion");
+  }
+  db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(cost, faction.id);
+  const problems = loadProblemsOrdered(db, faction.id);
+  const trouble = sumTrouble(problems);
+  const faces = facesForPower(faction.power);
+  const rng = nextRng(db, faction.campaign_id);
+  const check = troubleCheck({
+    rng,
+    faces,
+    trouble,
+    problems,
+    inverted: false,
+    forcedRoll,
+  });
+  const rollId = persistRoll(
+    db,
+    faction.campaign_id,
+    turnId,
+    troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+  );
+  const actionId = crypto.randomUUID();
+  if (check.success) {
+    db.prepare("UPDATE factions SET cohesion = cohesion + 1 WHERE id = ?").run(faction.id);
+  }
+  db.prepare(
+    `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, roll_id, outcome, dominion_delta)
+     VALUES (?, ?, 'restore_cohesion', 'faction', ?, ?, ?, ?)`,
+  ).run(
+    actionId,
+    turnId,
+    faction.id,
+    rollId,
+    check.success ? "success" : "failure",
+    -cost,
+  );
+  applyCollapseIfNeeded(db, faction.id, turnId);
+  return { success: check.success, roll: check.roll };
+}
+
+function runAid(
+  db: Database.Database,
+  faction: { id: string; campaign_id: string; power: Power; dominion: number },
+  turnId: string,
+  input: Extract<RunActionInput, { type: "aid" }>,
+) {
+  const amount = input.amount ?? 1;
+  if (amount < 1) throw new RuleError("FILL_INCOMPLETE", "aid amount must be at least 1");
+  if (faction.dominion < amount) {
+    throw new RuleError("INSUFFICIENT_DOMINION", "not enough dominion to aid");
+  }
+  requireFaction(db, input.targetFactionId);
+  const problems = loadProblemsOrdered(db, faction.id);
+  const trouble = sumTrouble(problems);
+  const faces = facesForPower(faction.power);
+  const rng = nextRng(db, faction.campaign_id);
+  const check = troubleCheck({
+    rng,
+    faces,
+    trouble,
+    problems,
+    inverted: false,
+    forcedRoll: input.forcedRoll,
+  });
+  const rollId = persistRoll(
+    db,
+    faction.campaign_id,
+    turnId,
+    troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+  );
+  const actionId = crypto.randomUUID();
+  if (check.success) {
+    db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(amount, faction.id);
+    db.prepare("UPDATE factions SET dominion = dominion + ? WHERE id = ?").run(
+      amount,
+      input.targetFactionId,
+    );
+  } else {
+    db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(amount, faction.id);
+  }
+  db.prepare(
+    `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, roll_id, outcome, dominion_delta)
+     VALUES (?, ?, 'aid', 'faction', ?, 'faction', ?, ?, ?, ?)`,
+  ).run(
+    actionId,
+    turnId,
+    faction.id,
+    input.targetFactionId,
+    rollId,
+    check.success ? "success" : "failure",
+    -amount,
+  );
+  recordActionEvent(db, {
+    campaignId: faction.campaign_id,
+    turnId,
+    type: "faction_action",
+    payload: {
+      actorId: faction.id,
+      targetId: input.targetFactionId,
+      actionType: "aid",
+      outcome: check.success ? "success" : "failure",
+      rollId,
+    },
+  });
+  applyCollapseIfNeeded(db, faction.id, turnId);
+  return { success: check.success };
+}
+
+function runRemoveInterest(
+  db: Database.Database,
+  faction: { id: string; campaign_id: string; power: Power },
+  turnId: string,
+  input: Extract<RunActionInput, { type: "remove_interest" }>,
+) {
+  if (faction.id === input.targetFactionId) {
+    throw new RuleError("FILL_INCOMPLETE", "cannot remove interest to self");
+  }
+  const edge = db
+    .prepare(
+      "SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?",
+    )
+    .get(faction.id, input.targetFactionId) as { points: number } | undefined;
+  if (!edge || edge.points <= 0) {
+    throw new RuleError("ENTITY_NOT_FOUND", "no interest to remove");
+  }
+
+  const actionId = crypto.randomUUID();
+  let rollId: string | null = null;
+  let outcome: string;
+
+  if (input.willing) {
+    outcome = "attacker_win";
+    rollId = persistRoll(db, faction.campaign_id, turnId, { willing: true, winner: "attacker" });
+  } else {
+    const rng = nextRng(db, faction.campaign_id);
+    const faces = DIE_BY_POWER[faction.power];
+    const attackerRoll = rollDie(rng, faces, input.forcedRoll);
+    const defender = requireFaction(db, input.targetFactionId);
+    const defenderRoll = rollDie(rng, DIE_BY_POWER[defender.power]);
+    const winner = resolveContest({
+      attackerTotal: attackerRoll.total,
+      defenderTotal: defenderRoll.total,
+      attackerPower: faction.power,
+      defenderPower: defender.power,
+    });
+    rollId = persistRoll(db, faction.campaign_id, turnId, {
+      attacker: attackerRoll,
+      defenderTotal: defenderRoll.total,
+      winner,
+    });
+    outcome = winner === "attacker" ? "attacker_win" : "defender_win";
+  }
+
+  if (outcome === "attacker_win") {
+    const newPoints = Math.max(0, edge.points - 1);
+    if (newPoints === 0) {
+      db.prepare(
+        "DELETE FROM interests WHERE from_faction_id = ? AND to_faction_id = ?",
+      ).run(faction.id, input.targetFactionId);
+    } else {
+      db.prepare(
+        "UPDATE interests SET points = ? WHERE from_faction_id = ? AND to_faction_id = ?",
+      ).run(newPoints, faction.id, input.targetFactionId);
+    }
+  }
+
+  db.prepare(
+    `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, roll_id, outcome)
+     VALUES (?, ?, 'remove_interest', 'faction', ?, 'faction', ?, ?, ?)`,
+  ).run(actionId, turnId, faction.id, input.targetFactionId, rollId, outcome);
+
+  return { success: outcome === "attacker_win" };
 }

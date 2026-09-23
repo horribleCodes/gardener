@@ -55,8 +55,6 @@ test("pause keeps attacker plan applying and second apply does not add idle", ()
       type: "attack",
       targetFactionId: "village",
       attackerFeatureId: "mil-feature",
-      forcedAttackerRoll: 8,
-      forcedDefenderRoll: 1,
     },
   });
 
@@ -147,8 +145,6 @@ test("advanceMonth after defender reaction closes via submitReaction only once",
       type: "attack",
       targetFactionId: "village",
       attackerFeatureId: "mil-feature",
-      forcedAttackerRoll: 8,
-      forcedDefenderRoll: 1,
     },
   });
   applyWriteQueue(db, dbPath, { campaignId, missing: "idle", advanceMonth: false });
@@ -194,9 +190,12 @@ test("persisted missing mechanical is not overridden by applyWriteQueue idle arg
 
   openParallelTurn(db, dbPath, { campaignId, unitIds: ["f1"], missing: "mechanical" });
   const applied = applyWriteQueue(db, dbPath, { campaignId, missing: "idle" });
-  expect(applied.ok).toBe(false);
-  if (applied.ok) return;
-  expect(applied.error.code).toBe("MAGNITUDE_REJECTED");
+  expect(applied.ok).toBe(true);
+  if (!applied.ok) return;
+  const idle = db
+    .prepare(`SELECT COUNT(*) AS c FROM actions WHERE type = 'idle' AND actor_id = 'f1'`)
+    .get() as { c: number };
+  expect(idle.c).toBe(1);
 });
 
 test("court in faction_order gets idle action when it submits nothing", () => {

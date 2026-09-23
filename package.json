@@ -5,9 +5,10 @@
   "type": "module",
   "engines": { "node": ">=22" },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "test": "vitest run",
-    "start": "node --experimental-strip-types src/server.ts"
+    "start": "node dist/server.js",
+    "prestart": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
