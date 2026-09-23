@@ -6,3 +6,5 @@ data/*.sqlite-*
 uploads/
 .superpowers/
 .docs/
+.cursor/mcp.json
+./mcp.json
