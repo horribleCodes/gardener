@@ -32,6 +32,24 @@ test("a rival sees military secrets and not dominion", () => {
   expect(JSON.stringify(view)).not.toContain("despotic_tyrant");
 });
 
+test("public fact naming a distant faction includes that faction", () => {
+  const distant = {
+    ...world,
+    interests: [] as typeof world.interests,
+    facts: [
+      {
+        id: "ff1",
+        subject: "faction",
+        subjectId: "them",
+        statement: "Rumors of their armies",
+        visibility: "public",
+      },
+    ],
+  };
+  const view = projectUnitView(distant, { type: "faction", id: "us" });
+  expect(view.known.factions.some((f) => f.id === "them")).toBe(true);
+});
+
 test("local fact at unknown place is absent from the view", () => {
   const isolated = {
     ...world,

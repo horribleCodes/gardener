@@ -241,7 +241,9 @@ CREATE TABLE IF NOT EXISTS turns (
   month INTEGER NOT NULL,
   sequence INTEGER NOT NULL,
   open INTEGER NOT NULL,
-  faction_order TEXT NOT NULL
+  faction_order TEXT NOT NULL,
+  missing TEXT NOT NULL DEFAULT 'idle',
+  advance_month INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS unit_views (

@@ -7,6 +7,7 @@ import {
   openParallelTurn,
   submitUnitPlan,
   applyWriteQueue,
+  submitReaction,
 } from "../../src/services/queue.js";
 
 function pauseDb(dbPath: string) {
@@ -91,6 +92,152 @@ test("pause keeps attacker plan applying and second apply does not add idle", ()
     )
     .get(turn.id) as { c: number };
   expect(idleAfter.c).toBe(0);
+});
+
+test("advanceMonth on open applies when apply closes the turn", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb-advance-"));
+  const dbPath = join(dir, "campaign.sqlite");
+  const db = openDb(dbPath);
+  const campaignId = "c1";
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 42, 0)",
+  ).run(campaignId, "Advance");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('f1', ?, 'Faction', 1, 1, 0, 'existing', 'martial_conqueror', 'npc', 0, 'active')`,
+  ).run(campaignId);
+
+  openParallelTurn(db, dbPath, { campaignId, unitIds: ["f1"], advanceMonth: true });
+  applyWriteQueue(db, dbPath, { campaignId });
+
+  const month = db.prepare("SELECT month FROM campaigns WHERE id = ?").get(campaignId) as {
+    month: number;
+  };
+  expect(month.month).toBe(2);
+  const turn = db.prepare("SELECT advance_month FROM turns WHERE campaign_id = ?").get(campaignId) as {
+    advance_month: number;
+  };
+  expect(turn.advance_month).toBe(0);
+});
+
+test("advanceMonth after defender reaction closes via submitReaction only once", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb-advance-pause-"));
+  const dbPath = join(dir, "campaign.sqlite");
+  const campaignId = pauseDb(dbPath);
+  const db = openDb(dbPath);
+
+  openParallelTurn(db, dbPath, {
+    campaignId,
+    unitIds: ["neighbor", "village"],
+    advanceMonth: true,
+    missing: "mechanical",
+  });
+  const stored = db.prepare("SELECT missing, advance_month FROM turns WHERE open = 1").get() as {
+    missing: string;
+    advance_month: number;
+  };
+  expect(stored.missing).toBe("mechanical");
+  expect(stored.advance_month).toBe(1);
+
+  submitUnitPlan(db, dbPath, {
+    campaignId,
+    unitType: "faction",
+    unitId: "neighbor",
+    plan: {
+      type: "attack",
+      targetFactionId: "village",
+      attackerFeatureId: "mil-feature",
+      forcedAttackerRoll: 8,
+      forcedDefenderRoll: 1,
+    },
+  });
+  applyWriteQueue(db, dbPath, { campaignId, missing: "idle", advanceMonth: false });
+
+  const monthMid = db.prepare("SELECT month FROM campaigns WHERE id = ?").get(campaignId) as {
+    month: number;
+  };
+  expect(monthMid.month).toBe(1);
+
+  submitReaction(db, dbPath, {
+    campaignId,
+    unitType: "faction",
+    unitId: "village",
+    defenderChoice: "cohesion",
+  });
+
+  const monthAfter = db.prepare("SELECT month FROM campaigns WHERE id = ?").get(campaignId) as {
+    month: number;
+  };
+  expect(monthAfter.month).toBe(2);
+  const closed = db
+    .prepare("SELECT open, advance_month FROM turns WHERE campaign_id = ?")
+    .get(campaignId) as {
+    open: number;
+    advance_month: number;
+  };
+  expect(closed.open).toBe(0);
+  expect(closed.advance_month).toBe(0);
+});
+
+test("persisted missing mechanical is not overridden by applyWriteQueue idle argument", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb-missing-"));
+  const dbPath = join(dir, "campaign.sqlite");
+  const db = openDb(dbPath);
+  const campaignId = "c1";
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 99, 0)",
+  ).run(campaignId, "Missing");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('f1', ?, 'NPC', 1, 1, 0, 'existing', 'directed', 'npc', 0, 'active')`,
+  ).run(campaignId);
+
+  openParallelTurn(db, dbPath, { campaignId, unitIds: ["f1"], missing: "mechanical" });
+  const applied = applyWriteQueue(db, dbPath, { campaignId, missing: "idle" });
+  expect(applied.ok).toBe(false);
+  if (applied.ok) return;
+  expect(applied.error.code).toBe("MAGNITUDE_REJECTED");
+});
+
+test("court in faction_order gets idle action when it submits nothing", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb-court-idle-"));
+  const dbPath = join(dir, "campaign.sqlite");
+  const db = openDb(dbPath);
+  const campaignId = "c1";
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, 1, 0)",
+  ).run(campaignId, "Court idle");
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('f1', ?, 'Faction', 1, 1, 0, 'existing', 'directed', 'npc', 0, 'active')`,
+  ).run(campaignId);
+  db.prepare(
+    `INSERT INTO courts (id, campaign_id, type, power_structure, atmosphere, rules_faction_id, blank, acts_on_own)
+     VALUES ('court1', ?, 'royal', 'autocratic', 'grim', 'f1', 0, 1)`,
+  ).run(campaignId);
+
+  openParallelTurn(db, dbPath, { campaignId });
+  db.prepare(
+    `UPDATE turns SET faction_order = ? WHERE campaign_id = ? AND open = 1`,
+  ).run(
+    JSON.stringify([{ type: "court", id: "court1" }, { type: "faction", id: "f1" }]),
+    campaignId,
+  );
+  submitUnitPlan(db, dbPath, {
+    campaignId,
+    unitType: "faction",
+    unitId: "f1",
+    plan: { type: "idle" },
+  });
+  applyWriteQueue(db, dbPath, { campaignId });
+
+  const turn = db.prepare("SELECT id FROM turns WHERE campaign_id = ?").get(campaignId) as { id: string };
+  const courtAction = db
+    .prepare(
+      `SELECT type, actor_type FROM actions WHERE turn_id = ? AND actor_type = 'court' AND actor_id = 'court1'`,
+    )
+    .get(turn.id) as { type: string; actor_type: string };
+  expect(courtAction).toEqual({ type: "idle", actor_type: "court" });
 });
 
 test("openParallelTurn default order includes court with acts_on_own", () => {

@@ -92,23 +92,98 @@ export function loadCampaignWorld(db: Database.Database, campaignId: string): Ca
     )
     .all(campaignId) as CampaignWorld["interests"];
 
-  const courts = (
-    db
-      .prepare(
-        `SELECT id, type, power_structure AS powerStructure, atmosphere, place_id AS placeId,
-                rules_faction_id AS rulesFactionId, acts_on_own AS actsOnOwn
-         FROM courts WHERE campaign_id = ?`,
-      )
-      .all(campaignId) as {
-      id: string;
-      type: string;
-      powerStructure: string;
-      atmosphere: string;
-      placeId: string | null;
-      rulesFactionId: string | null;
-      actsOnOwn: number;
-    }[]
-  ).map((c) => ({ ...c, members: [] }));
+  const courtRows = db
+    .prepare(
+      `SELECT id, type, power_structure AS powerStructure, atmosphere, place_id AS placeId,
+              rules_faction_id AS rulesFactionId, acts_on_own AS actsOnOwn
+       FROM courts WHERE campaign_id = ?`,
+    )
+    .all(campaignId) as {
+    id: string;
+    type: string;
+    powerStructure: string;
+    atmosphere: string;
+    placeId: string | null;
+    rulesFactionId: string | null;
+    actsOnOwn: number;
+  }[];
+
+  type MemberRow = {
+    courtId: string;
+    id: string;
+    name: string | null;
+    isLeader: number;
+    isHiddenController: number;
+    powerSource: string | null;
+  };
+  const memberRows =
+    courtRows.length === 0
+      ? []
+      : (db
+          .prepare(
+            `SELECT cm.court_id AS courtId, c.id, c.name, cm.is_leader AS isLeader,
+                    cm.is_hidden_controller AS isHiddenController, c.power_source AS powerSource
+             FROM court_memberships cm
+             JOIN characters c ON c.id = cm.character_id
+             WHERE cm.court_id IN (${courtRows.map(() => "?").join(",")})`,
+          )
+          .all(...courtRows.map((c) => c.id)) as MemberRow[]);
+
+  const conflictRows = (
+    courtRows.length === 0
+      ? []
+      : db
+          .prepare(
+            `SELECT court_id AS courtId, text FROM conflicts
+             WHERE court_id IN (${courtRows.map(() => "?").join(",")})`,
+          )
+          .all(...courtRows.map((c) => c.id))
+  ) as { courtId: string; text: string }[];
+
+  const defenseRows = (
+    courtRows.length === 0
+      ? []
+      : db
+          .prepare(
+            `SELECT court_id AS courtId, text FROM court_defenses
+             WHERE court_id IN (${courtRows.map(() => "?").join(",")})`,
+          )
+          .all(...courtRows.map((c) => c.id))
+  ) as { courtId: string; text: string }[];
+
+  const consequenceRows = (
+    courtRows.length === 0
+      ? []
+      : db
+          .prepare(
+            `SELECT court_id AS courtId, text FROM court_consequences
+             WHERE court_id IN (${courtRows.map(() => "?").join(",")})`,
+          )
+          .all(...courtRows.map((c) => c.id))
+  ) as { courtId: string; text: string }[];
+
+  const courts = courtRows.map((c) => ({
+    ...c,
+    actsOnOwn: c.actsOnOwn !== 0,
+    members: memberRows
+      .filter((m) => m.courtId === c.id)
+      .map((m) => ({
+        id: m.id,
+        name: m.name,
+        courtId: c.id,
+        isLeader: m.isLeader !== 0,
+        isHiddenController: m.isHiddenController !== 0,
+        powerSource: m.powerSource,
+      })),
+    conflict: (() => {
+      const row = conflictRows.find((x) => x.courtId === c.id);
+      return row ? { text: row.text } : null;
+    })(),
+    defenses: defenseRows.filter((d) => d.courtId === c.id).map((d) => ({ text: d.text })),
+    consequences: consequenceRows
+      .filter((d) => d.courtId === c.id)
+      .map((d) => ({ text: d.text })),
+  }));
 
   const characters = (
     db
@@ -296,9 +371,17 @@ export function openParallelTurn(
           .get(input.campaignId) as { seq: number };
 
         db.prepare(
-          `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order)
-           VALUES (?, ?, ?, ?, 1, ?)`,
-        ).run(turnId, input.campaignId, campaign.month, seqRow.seq, JSON.stringify(orderStored));
+          `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order, missing, advance_month)
+           VALUES (?, ?, ?, ?, 1, ?, ?, ?)`,
+        ).run(
+          turnId,
+          input.campaignId,
+          campaign.month,
+          seqRow.seq,
+          JSON.stringify(orderStored),
+          missing,
+          advanceMonthFlag ? 1 : 0,
+        );
 
         const world = loadCampaignWorld(db, input.campaignId);
         for (const unit of orderUnits) {
@@ -421,10 +504,46 @@ export function submitUnitPlan(
 }
 
 function recordIdleAction(db: Database.Database, turnId: string, factionId: string): void {
+  recordUnitAction(db, turnId, "faction", factionId, "idle");
+}
+
+function recordUnitAction(
+  db: Database.Database,
+  turnId: string,
+  actorType: string,
+  actorId: string,
+  actionType: string,
+): void {
+  const outcome = actionType === "idle" ? "idle" : null;
   db.prepare(
     `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, feature_ids, outcome)
-     VALUES (?, ?, 'idle', 'faction', ?, '[]', 'idle')`,
-  ).run(crypto.randomUUID(), turnId, factionId);
+     VALUES (?, ?, ?, ?, ?, '[]', ?)`,
+  ).run(crypto.randomUUID(), turnId, actionType, actorType, actorId, outcome);
+}
+
+type TurnRow = {
+  id: string;
+  faction_order: string;
+  missing: "idle" | "mechanical";
+  advance_month: number;
+};
+
+function loadOpenTurn(db: Database.Database, campaignId: string): TurnRow | undefined {
+  return db
+    .prepare(
+      `SELECT id, faction_order, missing, advance_month FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1`,
+    )
+    .get(campaignId) as TurnRow | undefined;
+}
+
+function closeTurn(db: Database.Database, turnId: string, campaignId: string): void {
+  const row = db
+    .prepare("SELECT advance_month FROM turns WHERE id = ?")
+    .get(turnId) as { advance_month: number };
+  db.prepare("UPDATE turns SET open = 0, advance_month = 0 WHERE id = ?").run(turnId);
+  if (row.advance_month === 1) {
+    advanceMonth(db, campaignId);
+  }
 }
 
 function sanitizeActionForSnapshot(
@@ -596,15 +715,20 @@ function applyUnitsInOrder(
     const unit = order[i];
     if (unit.type !== "faction") {
       const row = queueRowForUnit(db, turnId, unit.type, unit.id);
+      if (row?.status === "done") {
+        continue;
+      }
       if (row?.status === "rejected") {
         db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
-      } else if (row?.status === "done") {
         continue;
-      } else if (!row || row.status === "queued") {
-        if (row) {
-          db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
-        }
       }
+      let actionType = "idle";
+      if (row?.status === "queued") {
+        const payload = JSON.parse(row.payload) as { type?: string };
+        actionType = typeof payload.type === "string" ? payload.type : "idle";
+        db.prepare(`UPDATE write_queue SET status = 'done' WHERE id = ?`).run(row.id);
+      }
+      recordUnitAction(db, turnId, unit.type, unit.id, actionType);
       continue;
     }
 
@@ -682,9 +806,7 @@ export function applyWriteQueue(
   return wrapRule(() =>
     withWriteLock(dbPath, () =>
       withTransaction(db, () => {
-        const turn = db
-          .prepare("SELECT id, faction_order FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
-          .get(input.campaignId) as { id: string; faction_order: string } | undefined;
+        const turn = loadOpenTurn(db, input.campaignId);
         if (!turn) throw new RuleError("ENTITY_NOT_FOUND", "no open turn");
 
         const reactionWait = queuedReactionDefender(db, turn.id);
@@ -693,7 +815,7 @@ export function applyWriteQueue(
         }
 
         const order = parseTurnOrder(turn.faction_order);
-        const missing = input.missing ?? "idle";
+        const missing = turn.missing ?? "idle";
 
         const result = applyUnitsInOrder(db, {
           campaignId: input.campaignId,
@@ -707,10 +829,7 @@ export function applyWriteQueue(
           return result;
         }
 
-        db.prepare("UPDATE turns SET open = 0 WHERE id = ?").run(turn.id);
-        if (input.advanceMonth) {
-          advanceMonth(db, input.campaignId);
-        }
+        closeTurn(db, turn.id, input.campaignId);
 
         return {};
       }),
@@ -732,9 +851,7 @@ export function submitReaction(
   return wrapRule(() =>
     withWriteLock(dbPath, () =>
       withTransaction(db, () => {
-        const turn = db
-          .prepare("SELECT id, faction_order FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
-          .get(input.campaignId) as { id: string; faction_order: string } | undefined;
+        const turn = loadOpenTurn(db, input.campaignId);
         if (!turn) throw new RuleError("ENTITY_NOT_FOUND", "no open turn");
 
         const pending = db
@@ -777,12 +894,12 @@ export function submitReaction(
           campaignId: input.campaignId,
           turnId: turn.id,
           order,
-          missing: "idle",
+          missing: turn.missing ?? "idle",
           startIndex: resumeFrom,
         });
 
         if (!continueResult.paused) {
-          db.prepare("UPDATE turns SET open = 0 WHERE id = ?").run(turn.id);
+          closeTurn(db, turn.id, input.campaignId);
         }
 
         return data;
