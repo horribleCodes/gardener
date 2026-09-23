@@ -268,7 +268,9 @@ Once each turn, or between sessions if no actors are active, each background act
 
 ## Generation
 
-The v1 contract stands. Create and ensure take `require`, `missing`, or `blank`. Caller text wins. Omitted color is rolled from a catalog of original prompts, not from the books. Facts are never invented from a table: the caller states them or leaves them blank.
+The v1 contract stands. Create and ensure take `require`, `missing`, or `blank`. Caller text wins. Omitted color is rolled from a chart catalog of original prompts, not from the books. Facts are never invented from a chart: the caller states them or leaves them blank.
+
+A **chart** is a generation list: an array of strings, or of dictionaries that may include an optional weight. `docs/superpowers/specs/generator-catalog.json` is the current chart file. A **table** is a database table. A chart catalog is a folder whose names tell the server which charts to load. New writing uses those words so the two are not confused.
 
 New catalog groups, still original sentences:
 
@@ -352,4 +354,4 @@ Left out of the core, kept here so they can be picked up as a preset or a pack. 
 
 ## Implementation note
 
-This document does not change `src/`. The next implementation pass should add the campaign flags and the `ashes` and `cities` presets on the existing strain engine before building the asset profile. The asset profile is a second rules module, not a rewrite of features into hit-point units. Setting packs, if added, are JSON catalogs of assets and tags, swappable the way `src/tables/catalog.json` already is.
+This document does not change `src/`. The next implementation pass should add the campaign flags and the `ashes` and `cities` presets on the existing strain engine before building the asset profile. The asset profile is a second rules module, not a rewrite of features into hit-point units. Setting packs, if added, are chart catalogs of assets and tags, swappable the way `src/tables/catalog.json` already is. A later module manifest, chosen when the campaign is created, loads those charts and only the database tables they need. Changing that set during play is a separate, later feature.
