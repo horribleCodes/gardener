@@ -1,6 +1,6 @@
 # Gardener roadmap
 
-Replaces the earlier stretch-goal list. v1 (the Godbound strain server in `docs/superpowers/plans/2026-09-21-godbound-faction-mcp.md`) is implemented. The next shape is `docs/superpowers/specs/2026-09-23-agnostic-world-system-design.md`: one actor model, a `strain` or `assets` profile, and presets that only flip flags and catalogs.
+v1 (the Godbound strain server in `docs/superpowers/plans/2026-09-21-godbound-faction-mcp.md`) is implemented. The next shape is `docs/superpowers/specs/2026-09-23-agnostic-world-system-design.md`: one actor model, a `strain` or `assets` profile, and presets that only flip flags and catalogs.
 
 The project is still in its early phases. Changes do not need to consider legacy systems, old files, or old call shapes. Backwards compatibility only matters at the end of the module wave (after item 16). Until then, replace the current shape instead of carrying it forward.
 
@@ -14,7 +14,7 @@ A **chart catalog** is a folder of charts. Folder names and file names tell the 
 
 A **module** declares the database tables it needs, a chart catalog, actions, interactions, generation config, instructions, dependencies, and its own version. The campaign file is created with only the tables of the modules chosen for it. The first implementation sets that list when the campaign is created and does not change it afterward. Adding, removing, or updating a module during play is a later feature. Exactly one included module owns the turn. The others must not also spend the action or count income.
 
-The v1 final review (`.superpowers/sdd/final-review.md`) is stale and stops mid-sentence on setpieces. Its critical findings — the server not starting, trusted unit plans, attacks that auto-win, collapse never firing, and a second generated court crashing on draft ids — are fixed in the current tree, along with per-unit savepoints, directed factions idling, domain-based contests, the missing faction actions, the influence ledger, and `run_faction_turn` going through the parallel queue. They are not on this roadmap.
+The v1 final review (`.workspaces/initial-design/.superpowers/sdd/final-review.md`) is stale and stops mid-sentence on setpieces. Its critical findings — the server not starting, trusted unit plans, attacks that auto-win, collapse never firing, and a second generated court crashing on draft ids — are fixed in the current tree, along with per-unit savepoints, directed factions idling, domain-based contests, the missing faction actions, the influence ledger, and `run_faction_turn` going through the parallel queue. They are not on this roadmap.
 
 ## Now: close the strain contract
 

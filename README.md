@@ -1,6 +1,7 @@
-# Godbound faction world MCP
+# Gardener
 
-A local MCP that stores one campaign world, fills omitted court and faction fields from `src/tables/catalog.json`, runs faction turns, and quotes Influence and Dominion. Ruin layouts are absent.
+A local MCP designed for tracking and running a world for an RPG setting.
+It stores one campaign world, fills omitted court and faction fields from `src/tables/catalog.json`, runs faction turns, and quotes Influence and Dominion.
 
 ## How to run
 
@@ -12,10 +13,8 @@ GODBOUND_WORLD_DB=./data/campaign.sqlite npm start
 ```
 
 The process speaks MCP on stdin and stdout. Point a client at that command. There is no HTTP port.
+See [AGENTS.md](AGEMTS.md) for more information.
 
-## Design docs
+## Roadmap
 
-- `docs/superpowers/specs/2026-09-21-godbound-faction-mcp-design.md`
-- `docs/superpowers/plans/2026-09-21-godbound-faction-mcp.md`
-
-Generator sentences are original category prompts. A caller can pass any field in full instead of rolling.
+Check [ROADMAP.md](./docs/ROADMAP.md) for upcoming features.
