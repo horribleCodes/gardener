@@ -14,12 +14,12 @@ You run on **every ready** (non-draft) merge request in this repository. The tri
 Identify the PR number from this run’s trigger. Then:
 
 ```bash
-origin pr view N --json status,description
+gh pr view N --json isDraft,body
 ```
 
-Stop if `status` is draft.
+Stop if `isDraft` is true.
 
-A checklist is any GitHub-style task list in **this** description (optional leading whitespace):
+A checklist is any GitHub-style task list in **this** description (`body`; optional leading whitespace):
 
 - `- [ ] …` / `* [ ] …` — incomplete
 - `- [x] …` / `- [X] …` — already done (leave them)
@@ -47,7 +47,7 @@ Only after the runs finish: tick items that **passed**.
 - Change those lines from `- [ ]` to `- [x]` (keep the same bullet and spacing).
 - Leave failures, blocked items, already-ticked rows, and every other line of the description untouched.
 - If nothing passed, skip this step.
-- Write the full body to a temp file and apply it with `origin pr edit N -F /tmp/…`. That is a PR-description edit, not a file change in the repo.
+- Write the full body to a temp file and apply it with `gh pr edit N --body-file /tmp/…`. That is a PR-description edit, not a file change in the repo.
 
 ## 4. Leave a review
 
@@ -55,10 +55,10 @@ Write a short review that lists each incomplete item as **pass**, **fail**, or *
 
 ```bash
 # all performed items passed
-origin pr review N --comment -F /tmp/review.md
+gh pr review N --comment --body-file /tmp/review.md
 
 # any fail or blocked
-origin pr review N --request-changes -F /tmp/review.md
+gh pr review N --request-changes --body-file /tmp/review.md
 ```
 
 Do not use `--approve`.
