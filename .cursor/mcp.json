@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "godbound-world": {
+      "command": "node",
+      "args": ["${workspaceFolder}/dist/server.js"]
+    }
+  }
+}

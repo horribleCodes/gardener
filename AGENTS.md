@@ -1,46 +1,23 @@
 # Installing the Godbound world MCP
 
-Local stdio MCP named `godbound-world`. It stores one campaign in SQLite. There is no HTTP port.
+Follow [README.md](./README.md). This file is the instruct path for an agent told to install Gardener.
 
-Requires Node.js 22 or newer.
+Requires Node.js 22 or newer. Stdio server; no HTTP port.
 
-## Install
-
-From this repository:
+1. Clone this repository if it is not already the workspace.
+2. From the repo root:
 
 ```bash
 npm install
+npm run build
 mkdir -p data
 ```
 
-`npm start` builds TypeScript, then runs `node dist/server.js`. The process speaks MCP on stdin and stdout. The database path is `GODBOUND_WORLD_DB`, defaulting to `./data/campaign.sqlite` relative to the working directory. The file is created on first use.
+3. Do not run `npm start` or `node dist/server.js`. The MCP client starts the process on stdin/stdout.
+4. Point the client at `node` + `dist/server.js`:
+   - This repo as the Cursor workspace: `.cursor/mcp.json` is already committed. Reload MCP servers.
+   - Another Cursor project: add a `godbound-world` entry to `~/.cursor/mcp.json` or that project's `.cursor/mcp.json`, with `args` set to this clone's `dist/server.js`.
+   - Claude Desktop: the same `mcpServers` block in `claude_desktop_config.json`.
+5. One database file is one campaign (`./data/campaign.sqlite` by default).
 
-## Cursor
-
-Add a server entry in `.cursor/mcp.json` (project) or the user MCP config. Use the absolute path to this repo, and an absolute database path so the file does not depend on the client’s working directory.
-
-```json
-{
-  "mcpServers": {
-    "godbound-world": {
-      "command": "npm",
-      "args": ["start"],
-      "cwd": "/absolute/path/to/gardener",
-      "env": {
-        "GODBOUND_WORLD_DB": "/absolute/path/to/gardener/data/campaign.sqlite"
-      }
-    }
-  }
-}
-```
-
-Reload MCP servers after saving. One database file is one campaign world.
-
-## Check
-
-```bash
-npm test
-GODBOUND_WORLD_DB=./data/campaign.sqlite npm start
-```
-
-`npm start` waits on stdin. A client that connects over stdio is the readiness check. `npm test` does not need a running server.
+`npm test` is for developing this repo and does not need a running server.
