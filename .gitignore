@@ -8,3 +8,7 @@ uploads/
 .docs/
 .cursor/mcp.json
 ./mcp.json
+.cursor/automations/.terraform/
+.cursor/automations/*.tfstate
+.cursor/automations/*.tfstate.*
+.cursor/automations/.terraform.tfstate.lock.info
