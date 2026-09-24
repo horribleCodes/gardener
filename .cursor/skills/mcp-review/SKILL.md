@@ -12,7 +12,7 @@ description: >-
 
 Record how an agent uses the project MCP. Do the user's task. Do not edit server source, tool schemas, or skill files to fill a gap. Record the gap.
 
-Scratch notes live in `.docs/mcp-review-notes-<id>.md` (gitignored). Create the ID using `openssl rand -hex 8`. The finished review is `docs/reviews/YYYY-MM-DD-<review-theme>.md`, same directory and date pattern as [docs/reviews/2026-09-24-init-campaign.md](../../../docs/reviews/2026-09-24-init-campaign.md).
+Scratch notes live in `.docs/mcp-review-notes-<id>.md` (gitignored). Create the ID with `openssl rand -hex 8`. The finished review is `docs/reviews/YYYY-MM-DD-<review-theme>.md`, same directory and date pattern as [docs/reviews/2026-09-24-init-campaign.md](../../../docs/reviews/2026-09-24-init-campaign.md).
 
 ## Start
 
@@ -23,14 +23,18 @@ On the first turn of a review, if the scratch file is missing, create it with th
 
 - Commit:
 - Agent:
+- Script:
 - Theme:
 
 ## Log
 ```
 
-Fill **Commit** with `git rev-parse --short HEAD` and **Agent** with the model name. Set **Theme** from the user's subject, as a short hyphenated slug. If they did not name one, pick one from the first request and correct it later if the subject shifts.
+Fill **Commit** with `git rev-parse --short HEAD` (a * at the end notes a dirty) and **Agent** with the model name. Write the name of the script in **Script** if it is provided, otherwise "None". Set **Theme** from the user's subject, as a short hyphenated slug. If they did not name one, pick one from the first request and correct it later if the subject shifts. If a script is provided, use the name of the script instead.
 
-If the scratch file already exists, continue it. Do not start a second review.
+## Scripts
+
+The user may provide a script file located in `./docs/scripts` at the start of the review. Script files contain a **Notes** section for additional instructions. The **Steps** section lists user messages to be simulated for this review.
+Treat every list item as a user message. If you can't perform a step because a tool isn't available, an error occurs or a required previous step was skipped, skip it and make a note. When finishing all steps, the review is complete.
 
 ## During the review
 
@@ -54,7 +58,7 @@ When the user asks to end the review, stop the task and write the finished file.
 1. Read the scratch file and [docs/reviews/2026-09-24-init-campaign.md](../../../docs/reviews/2026-09-24-init-campaign.md).
 2. Write `docs/reviews/YYYY-MM-DD-<review-theme>.md`. Use today's date. Use the scratch theme as the slug.
 3. Compress the log into the sections below. Drop repeated discovery. Keep every user request, every MCP call in order, every failure, and every error.
-4. Delete `.docs/mcp-review-notes.md`.
+4. Delete `.docs/mcp-review-notes-<id>.md`.
 5. Reply with the path of the finished review.
 
 ```markdown
@@ -64,6 +68,7 @@ When the user asks to end the review, stop the task and write the finished file.
 
 - **Commit:** <short hash>
 - **Agent:** <model name>
+- **Script:** (<script name>)[<rel. path to script>]
 
 ## User requests
 
