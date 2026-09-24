@@ -224,12 +224,12 @@ export function loadCampaignWorld(db: Database.Database, campaignId: string): Ca
       .all(campaignId) as CampaignWorld["facts"]
   );
 
-  const godbound = (
+  const heroes = (
     db
       .prepare(
         `SELECT id, name, level, divinity, cult_faction_id AS cultFactionId, dominion, influence,
                 acts_on_own AS actsOnOwn
-         FROM godbound WHERE campaign_id = ?`,
+         FROM heroes WHERE campaign_id = ?`,
       )
       .all(campaignId) as {
         id: string;
@@ -272,7 +272,7 @@ export function loadCampaignWorld(db: Database.Database, campaignId: string): Ca
     characters,
     facts,
     events,
-    godbound,
+    heroes,
   };
 }
 
@@ -338,10 +338,10 @@ function defaultActingUnits(db: Database.Database, campaignId: string): UnitRef[
     .all(campaignId) as { id: string }[];
   for (const c of characters) units.push({ type: "character", id: c.id });
 
-  const godbound = db
-    .prepare(`SELECT id FROM godbound WHERE campaign_id = ? AND acts_on_own = 1`)
+  const heroesActing = db
+    .prepare(`SELECT id FROM heroes WHERE campaign_id = ? AND acts_on_own = 1`)
     .all(campaignId) as { id: string }[];
-  for (const g of godbound) units.push({ type: "godbound", id: g.id });
+  for (const g of heroesActing) units.push({ type: "hero", id: g.id });
 
   return units;
 }

@@ -764,9 +764,9 @@ export function advanceMonth(db: Database.Database, campaignId: string): void {
 
   db.prepare("UPDATE campaigns SET month = month + 1 WHERE id = ?").run(campaignId);
 
-  const godbound = db
+  const heroes = db
     .prepare(
-      `SELECT id, level, divinity, cult_faction_id, dominion FROM godbound WHERE campaign_id = ?`,
+      `SELECT id, level, divinity, cult_faction_id, dominion FROM heroes WHERE campaign_id = ?`,
     )
     .all(campaignId) as {
     id: string;
@@ -776,7 +776,7 @@ export function advanceMonth(db: Database.Database, campaignId: string): void {
     dominion: number;
   }[];
 
-  for (const gb of godbound) {
+  for (const gb of heroes) {
     let grant = 0;
     let kind: "free" | "cult" | "none" = "none";
     if (gb.divinity === "free") {
@@ -797,14 +797,14 @@ export function advanceMonth(db: Database.Database, campaignId: string): void {
       }
     }
     if (grant > 0) {
-      db.prepare("UPDATE godbound SET dominion = dominion + ? WHERE id = ?").run(grant, gb.id);
+      db.prepare("UPDATE heroes SET dominion = dominion + ? WHERE id = ?").run(grant, gb.id);
       db.prepare(
         `INSERT INTO events (id, campaign_id, type, payload, created_at)
          VALUES (?, ?, 'income', ?, ?)`,
       ).run(
         crypto.randomUUID(),
         campaignId,
-        JSON.stringify({ godboundId: gb.id, kind, amount: grant, month: campaign.month + 1 }),
+        JSON.stringify({ heroId: gb.id, kind, amount: grant, month: campaign.month + 1 }),
         Date.now(),
       );
     }

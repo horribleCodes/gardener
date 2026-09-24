@@ -1,6 +1,6 @@
 import { DIE_BY_POWER, type Behavior, type InterestNature, type Power } from "../domain/types.js";
 
-export type UnitRef = { type: "faction" | "court" | "character" | "godbound"; id: string };
+export type UnitRef = { type: "faction" | "court" | "character" | "hero"; id: string };
 
 export type WorldFaction = {
   id: string;
@@ -96,10 +96,10 @@ export type CampaignWorld = {
   characters: WorldCharacter[];
   facts: WorldFact[];
   events: WorldEvent[];
-  godbound?: WorldGodbound[];
+  heroes?: WorldHero[];
 };
 
-export type WorldGodbound = {
+export type WorldHero = {
   id: string;
   name: string;
   level: number;
@@ -145,8 +145,8 @@ function placesTouch(world: CampaignWorld, a: string | null, b: string | null): 
 
 function viewerFactionId(unit: UnitRef, world: CampaignWorld): string | undefined {
   if (unit.type === "faction") return unit.id;
-  if (unit.type === "godbound") {
-    const gb = world.godbound?.find((g) => g.id === unit.id);
+  if (unit.type === "hero") {
+    const gb = world.heroes?.find((g) => g.id === unit.id);
     return gb?.cultFactionId ?? undefined;
   }
   if (unit.type === "character") {
@@ -596,17 +596,17 @@ export function projectUnitView(world: CampaignWorld, unit: UnitRef): { unit: Un
     } else if (viewerFaction) {
       const projected = projectOtherFaction(world, viewerFaction, f);
       if (projected) factions.push(projected);
-    } else if (unit.type === "godbound" && publicFactNamesFaction(world, f.id)) {
+    } else if (unit.type === "hero" && publicFactNamesFaction(world, f.id)) {
       const projected = projectOtherFaction(world, f.id, f, { publicFactOnly: true });
       if (projected) factions.push(projected);
     }
   }
 
-  const godbound: Record<string, unknown>[] = [];
-  if (unit.type === "godbound") {
-    const gb = world.godbound?.find((g) => g.id === unit.id);
+  const heroes: Record<string, unknown>[] = [];
+  if (unit.type === "hero") {
+    const gb = world.heroes?.find((g) => g.id === unit.id);
     if (gb) {
-      godbound.push({
+      heroes.push({
         id: gb.id,
         name: gb.name,
         level: gb.level,
@@ -661,7 +661,7 @@ export function projectUnitView(world: CampaignWorld, unit: UnitRef): { unit: Un
       characters,
       facts,
       rumors,
-      ...(godbound.length > 0 ? { godbound } : {}),
+      ...(heroes.length > 0 ? { heroes } : {}),
     },
   };
 }
@@ -689,7 +689,7 @@ function projectRumors(
     const unitMatches =
       (unit.type === "faction" && (actorId === unit.id || targetId === unit.id)) ||
       (unit.type === "character" && (actorId === unit.id || targetId === unit.id)) ||
-      (unit.type === "godbound" && (actorId === unit.id || targetId === unit.id));
+      (unit.type === "hero" && (actorId === unit.id || targetId === unit.id));
     const isPublic =
       ev.visibility === "public" || (ev.placeId != null && viewerPlaces.has(ev.placeId));
     if (!unitMatches && !isPublic) continue;
@@ -735,7 +735,7 @@ export function collectSnapshotIds(snapshot: ReturnType<typeof projectUnitView>)
   addFromList(known.courts);
   addFromList(known.characters);
   addFromList(known.facts);
-  addFromList(known.godbound);
+  addFromList(known.heroes);
   for (const f of (known.factions as { features?: { id: string }[] }[]) ?? []) {
     for (const feat of f.features ?? []) ids.add(feat.id);
     for (const prob of (f as { problems?: { id: string }[] }).problems ?? []) ids.add(prob.id);

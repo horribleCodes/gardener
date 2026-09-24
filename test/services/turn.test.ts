@@ -81,7 +81,7 @@ function createTurnDb(): Database.Database {
   }
 
   db.prepare(
-    `INSERT INTO godbound (id, campaign_id, name, level, words, influence, dominion, wealth, divinity)
+    `INSERT INTO heroes (id, campaign_id, name, level, words, influence, dominion, wealth, divinity)
      VALUES (?, ?, ?, ?, '[]', 0, 0, 0, 'free')`,
   ).run("gb1", "c1", "Hero", 6);
 
@@ -107,7 +107,7 @@ test("runFactionTurn advances month and grants free divinity income", () => {
   });
   expect(result.ok).toBe(true);
 
-  const gb = db.prepare("SELECT dominion FROM godbound WHERE id = ?").get("gb1") as {
+  const gb = db.prepare("SELECT dominion FROM heroes WHERE id = ?").get("gb1") as {
     dominion: number;
   };
   expect(gb.dominion).toBe(3);

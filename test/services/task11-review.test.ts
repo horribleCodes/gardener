@@ -32,7 +32,7 @@ test("swayCourt favor upserts disposition and writes a fact", () => {
   const result = swayCourt(db, {
     campaignId: "c1",
     courtId: "court1",
-    targetType: "godbound",
+    targetType: "hero",
     targetId: "gb1",
     mode: "favor",
   });
@@ -41,7 +41,7 @@ test("swayCourt favor upserts disposition and writes a fact", () => {
     .prepare(
       "SELECT disposition FROM court_dispositions WHERE court_id = ? AND target_type = ? AND target_id = ?",
     )
-    .get("court1", "godbound", "gb1") as { disposition: string };
+    .get("court1", "hero", "gb1") as { disposition: string };
   expect(disposition.disposition).toBe("favor");
   const facts = db
     .prepare("SELECT statement FROM facts WHERE subject = 'court' AND subject_id = 'court1'")
@@ -79,13 +79,13 @@ test("getCourt includes favor disposition after swayCourt", () => {
   swayCourt(db, {
     campaignId: "c1",
     courtId: "court1",
-    targetType: "godbound",
+    targetType: "hero",
     targetId: "gb1",
     mode: "favor",
   });
   const court = getCourt(db, "court1");
   expect(court?.dispositions).toEqual([
-    { targetType: "godbound", targetId: "gb1", disposition: "favor" },
+    { targetType: "hero", targetId: "gb1", disposition: "favor" },
   ]);
 });
 
@@ -93,7 +93,7 @@ test("listHooks returns one consequence when the court has two disposition rows"
   const db = courtDb();
   db.prepare(
     `INSERT INTO court_dispositions (court_id, target_type, target_id, disposition)
-     VALUES ('court1', 'godbound', 'gb1', 'favor'), ('court1', 'godbound', 'gb2', 'control')`,
+     VALUES ('court1', 'hero', 'gb1', 'favor'), ('court1', 'hero', 'gb2', 'control')`,
   ).run();
   const hooks = listHooks(db, "c1");
   expect(hooks.ok).toBe(true);
@@ -157,7 +157,7 @@ test("listHooks includes court consequences only with favor or control dispositi
   swayCourt(db, {
     campaignId: "c1",
     courtId: "court1",
-    targetType: "godbound",
+    targetType: "hero",
     targetId: "gb1",
     mode: "favor",
   });

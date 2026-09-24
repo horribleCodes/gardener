@@ -68,7 +68,7 @@ test("public fact naming a distant faction includes that faction", () => {
   expect(view.known.factions.some((f) => f.id === "them")).toBe(true);
 });
 
-test("godbound with cult sees cult dominion not unrelated distant faction", () => {
+test("hero with cult sees cult dominion not unrelated distant faction", () => {
   const cultWorld = {
     factions: [
       {
@@ -103,7 +103,7 @@ test("godbound with cult sees cult dominion not unrelated distant faction", () =
     characters: [],
     facts: [],
     events: [],
-    godbound: [
+    heroes: [
       {
         id: "gb1",
         name: "Saint",
@@ -116,11 +116,11 @@ test("godbound with cult sees cult dominion not unrelated distant faction", () =
       },
     ],
   };
-  const view = projectUnitView(cultWorld, { type: "godbound", id: "gb1" });
+  const view = projectUnitView(cultWorld, { type: "hero", id: "gb1" });
   const cult = view.known.factions.find((faction) => faction.id === "cult");
   expect(cult?.dominion).toBe(7);
   expect(view.known.factions.some((faction) => faction.id === "stranger")).toBe(false);
-  expect(view.known.godbound).toEqual([
+  expect(view.known.heroes).toEqual([
     {
       id: "gb1",
       name: "Saint",

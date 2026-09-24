@@ -9,6 +9,20 @@ import { runTool } from "../src/mcp/envelope.js";
 import { openDb } from "../src/store/db.js";
 import { openParallelTurn } from "../src/services/queue.js";
 
+test("MCP server is named gardener and registers create_hero", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+  expect(client.getServerVersion()).toEqual({ name: "gardener", version: "0.1.0" });
+  const tools = await client.listTools();
+  const names = tools.tools.map((t) => t.name);
+  expect(names).toContain("create_hero");
+  expect(names).not.toContain("create_hero");
+  await client.close();
+});
+
 test("quote_change through MCP returns the ward example", async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = buildServer(":memory:");
