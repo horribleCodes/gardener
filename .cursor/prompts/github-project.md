@@ -17,15 +17,19 @@ Use this when the user asks to set up the GitHub project, sync the roadmap into 
 
 Titles for roadmap children: `Roadmap #<n>: <short name>`. Host items that used to live in `TODO.md` (4, 5, 19, 24, 25) are already numbered in `docs/ROADMAP.md`. There is no `TODO.md` in the tree; do not invent one.
 
-Default labels only: `enhancement`, `documentation`, `bug`. GitHub MCP cannot create labels or Projects.
+Default labels only: `enhancement`, `documentation`, `bug`. GitHub MCP cannot create labels.
 
-## MCP first
+**Project:** public user Project [Gardener](https://github.com/users/horribleCodes/projects/2) (`horribleCodes`, number `2`). Issue #6 links this URL.
 
-Inspect namespace `Github` with GetDynamicTools before any write. If it needs auth, call `mcp_auth`. Do not assume a tool you have not inspected.
+## MCP vs `gh`
 
-Typical writable tools (re-check; this list has gone stale before): `get_me`, `list_issue_types`, `list_issue_fields`, `list_issues`, `search_issues`, `get_label`, `issue_read`, `issue_write` (create/update, types, labels, `parent_issue_number`), `sub_issue_write`, `add_issue_comment`.
+Inspect namespace `Github` with GetDynamicTools before any issue/PR write. If it needs auth, call `mcp_auth`. Do not assume a tool you have not inspected.
 
-**Not in this MCP (as of 24 Sep 2026):** GitHub Projects, project fields, creating labels, milestones. Issue custom fields: `list_issue_fields` was empty. Do not use `gh` for writes in Cloud Agent runs.
+Typical issue/PR tools (re-check; this list has gone stale before): `get_me`, `list_issue_types`, `list_issue_fields`, `list_issues`, `search_issues`, `get_label`, `issue_read`, `issue_write` (create/update, types, labels, `parent_issue_number`), `sub_issue_write`, `add_issue_comment`.
+
+**Not in GitHub MCP:** Projects, project fields, adding/editing Project items, creating labels, milestones. Issue custom fields: `list_issue_fields` was empty.
+
+Use `gh` for the Project: `gh project view 2 --owner horribleCodes`, `gh project item-list 2 --owner horribleCodes`, `gh project item-add 2 --owner horribleCodes --url <issue-or-pr>`, `gh project item-edit 2 --owner horribleCodes --url <issue-or-pr> --field Status --value "<option>"`. Status options: Backlog, Ready, In progress, In review, Done. Cloud `gh` can read this Project. Writes may fail with GraphQL `Resource not accessible by integration`; then leave Status unchanged and say so.
 
 ## Do
 
@@ -34,8 +38,8 @@ Typical writable tools (re-check; this list has gone stale before): `get_me`, `l
 3. `search_issues` and `list_issues` (open). Reuse a hit; do not duplicate.
 4. Ensure the board index, Now parents, Now children, and later-waves checklist exist. Create only the missing ones. Child creates use `parent_issue_number`.
 5. Feature requests and bugs: follow `.cursor/prompts/intake.md` (type Feature or Bug). Search first.
-6. If a human GitHub Project named Gardener already exists (read-only `gh project list` / GraphQL is fine), say its URL. If none exists, tell the user to create one user project named **Gardener**, attach this repo, and auto-add issues. Do not pretend MCP created it.
-7. Reply with the board issue URL, Now issue URLs, the Project URL or the create step, and stop.
+6. Ensure each of those issues (and open PRs that belong on the board) is a Project item. Add missing ones with `gh project item-add`. Set Status to match reality. Do not invent extra items.
+7. Reply with the board issue URL, Now issue URLs, and https://github.com/users/horribleCodes/projects/2, and stop.
 
 ## Do not
 
