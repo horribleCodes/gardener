@@ -1,21 +1,43 @@
-# Godbound faction world MCP
+# Gardener
 
-A local MCP that stores one campaign world, fills omitted court and faction fields from `src/tables/catalog.json`, runs faction turns, and quotes Influence and Dominion. Ruin layouts are absent.
+A local MCP for tracking and running a world for an RPG setting.
+It stores one campaign world, fills omitted court and faction fields from `src/tables/catalog.json`, runs faction turns, and quotes Influence and Dominion.
 
-## How to run
+Stdio server named `godbound-world`. There is no HTTP port. Requires Node.js 22 or newer.
+
+## Install
+
+Clone this repository, then install and build. Do not start the server; the MCP client launches it.
 
 ```bash
 npm install
-npm test
+npm run build
 mkdir -p data
-GODBOUND_WORLD_DB=./data/campaign.sqlite npm start
 ```
 
-The process speaks MCP on stdin and stdout. Point a client at that command. There is no HTTP port.
+One SQLite file is one campaign. The default path is `./data/campaign.sqlite` (created on first use). Set `GODBOUND_WORLD_DB` only to use a different file.
 
-## Design docs
+### Cursor
 
-- `docs/superpowers/specs/2026-09-21-godbound-faction-mcp-design.md`
-- `docs/superpowers/plans/2026-09-21-godbound-faction-mcp.md`
+If this repo is the workspace, project config is already in `.cursor/mcp.json`. Reload MCP servers after the build.
 
-Generator sentences are original category prompts. A caller can pass any field in full instead of rolling.
+To use Gardener from another Cursor project, add this to `~/.cursor/mcp.json` or that project's `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "godbound-world": {
+      "command": "node",
+      "args": ["/absolute/path/to/gardener/dist/server.js"]
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Use the same `mcpServers` block in `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows: `%APPDATA%\Claude\claude_desktop_config.json`).
+
+## Roadmap
+
+See [docs/ROADMAP.md](./docs/ROADMAP.md).

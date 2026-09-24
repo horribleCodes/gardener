@@ -6,3 +6,8 @@ data/*.sqlite-*
 uploads/
 .superpowers/
 .docs/
+./mcp.json
+.cursor/automations/.terraform/
+.cursor/automations/*.tfstate
+.cursor/automations/*.tfstate.*
+.cursor/automations/.terraform.tfstate.lock.info
