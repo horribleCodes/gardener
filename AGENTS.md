@@ -9,11 +9,24 @@ Requires Node.js 22 or newer.
 From this repository:
 
 ```bash
-npm install
+npm ci
+npm run build
 mkdir -p data
 ```
 
-`npm start` builds TypeScript, then runs `node dist/server.js`. The process speaks MCP on stdin and stdout. The database path is `GODBOUND_WORLD_DB`, defaulting to `./data/campaign.sqlite` relative to the working directory. The file is created on first use.
+`npm ci` installs locked dependencies. `npm run build` compiles TypeScript and copies schema/catalog assets into `dist/`. `mkdir -p data` prepares the SQLite directory (`GODBOUND_WORLD_DB` defaults to `./data/campaign.sqlite` relative to the working directory; the file is created on first use).
+
+Do not start the MCP server as part of install. It speaks stdio and waits on stdin.
+
+## Start (development and testing only)
+
+Start the server only when a client is attached — Cursor MCP, a playtest, or an end-to-end stdio check. Do not run it as a daemon or boot script.
+
+```bash
+GODBOUND_WORLD_DB=./data/campaign.sqlite npm start
+```
+
+`npm start` runs `prestart` (`npm run build`) then `node dist/server.js`. The process speaks MCP on stdin and stdout. After a build you can also run `node dist/server.js` directly.
 
 ## Cursor
 
@@ -40,7 +53,12 @@ Reload MCP servers after saving. One database file is one campaign world.
 
 ```bash
 npm test
-GODBOUND_WORLD_DB=./data/campaign.sqlite npm start
 ```
 
-`npm start` waits on stdin. A client that connects over stdio is the readiness check. `npm test` does not need a running server.
+`npm test` does not need a running server. Do not use `npm start` as an install readiness check: it waits on stdin until a client connects.
+
+## Cursor Cloud specific instructions
+
+Cloud Agent `install` (`.cursor/environment.json`) is the same three commands: `npm ci`, `npm run build`, `mkdir -p data`. It must terminate. Do not set `start` and do not run `npm start` during install or as a boot script.
+
+Start the MCP only for development or testing, when a stdio client is connected.
