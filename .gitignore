@@ -6,7 +6,6 @@ data/*.sqlite-*
 uploads/
 .superpowers/
 .docs/
-.cursor/mcp.json
 ./mcp.json
 .cursor/automations/.terraform/
 .cursor/automations/*.tfstate
