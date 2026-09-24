@@ -169,7 +169,7 @@ export function createPlace(
   );
 }
 
-export function createGodbound(
+export function createHero(
   db: Database.Database,
   input: {
     campaignId: string;
@@ -181,17 +181,17 @@ export function createGodbound(
     wealth?: number;
     divinity?: "none" | "free" | "cult";
   },
-): ServiceResult<{ godboundId: string }> {
+): ServiceResult<{ heroId: string }> {
   return wrapRule(() =>
     withTransaction(db, () => {
       requireCampaign(db, input.campaignId);
-      const godboundId = crypto.randomUUID();
+      const heroId = crypto.randomUUID();
       const influence = input.influence ?? 1 + input.level;
       db.prepare(
-        `INSERT INTO godbound (id, campaign_id, name, level, words, influence, dominion, wealth, divinity)
+        `INSERT INTO heroes (id, campaign_id, name, level, words, influence, dominion, wealth, divinity)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
-        godboundId,
+        heroId,
         input.campaignId,
         input.name,
         input.level,
@@ -201,7 +201,7 @@ export function createGodbound(
         input.wealth ?? 0,
         input.divinity ?? "none",
       );
-      return { godboundId };
+      return { heroId };
     }),
   );
 }
@@ -805,17 +805,17 @@ export function recordChallengeOutcome(
 
 export function createChampion(
   db: Database.Database,
-  input: { campaignId: string; godboundId: string; level: number; loyal?: boolean },
+  input: { campaignId: string; heroId: string; level: number; loyal?: boolean },
 ): ServiceResult<{ stats: ReturnType<typeof championStats> }> {
   return wrapRule(() =>
     withTransaction(db, () => {
       requireCampaign(db, input.campaignId);
       const gb = db
-        .prepare("SELECT dominion FROM godbound WHERE id = ? AND campaign_id = ?")
-        .get(input.godboundId, input.campaignId) as { dominion: number } | undefined;
-      if (!gb) throw new RuleError("ENTITY_NOT_FOUND", "godbound not found");
+        .prepare("SELECT dominion FROM heroes WHERE id = ? AND campaign_id = ?")
+        .get(input.heroId, input.campaignId) as { dominion: number } | undefined;
+      if (!gb) throw new RuleError("ENTITY_NOT_FOUND", "hero not found");
       if (gb.dominion < 8) throw new RuleError("INSUFFICIENT_DOMINION", "champion costs 8 dominion");
-      db.prepare("UPDATE godbound SET dominion = dominion - 8 WHERE id = ?").run(input.godboundId);
+      db.prepare("UPDATE heroes SET dominion = dominion - 8 WHERE id = ?").run(input.heroId);
       const stats = championStats(input.level, input.loyal ?? false);
       const changeId = crypto.randomUUID();
       db.prepare(
@@ -858,7 +858,7 @@ export function swayCourt(
   input: {
     campaignId: string;
     courtId: string;
-    targetType: "godbound" | "faction";
+    targetType: "hero" | "faction";
     targetId: string;
     mode: "favor" | "control";
     prepared?: boolean;
@@ -913,7 +913,7 @@ export function formCult(
   db: Database.Database,
   input: {
     campaignId: string;
-    godboundId: string;
+    heroId: string;
     featureText: string;
     harshness?: string;
     acknowledged?: boolean;
@@ -928,9 +928,9 @@ export function formCult(
       }
       requireCampaign(db, input.campaignId);
       const gb = db
-        .prepare("SELECT id, divinity FROM godbound WHERE id = ? AND campaign_id = ?")
-        .get(input.godboundId, input.campaignId) as { id: string; divinity: string } | undefined;
-      if (!gb) throw new RuleError("ENTITY_NOT_FOUND", "godbound not found");
+        .prepare("SELECT id, divinity FROM heroes WHERE id = ? AND campaign_id = ?")
+        .get(input.heroId, input.campaignId) as { id: string; divinity: string } | undefined;
+      if (!gb) throw new RuleError("ENTITY_NOT_FOUND", "hero not found");
 
       let factionId = input.adoptFactionId;
       if (!factionId) {
@@ -943,15 +943,15 @@ export function formCult(
         });
         if (!created.ok) throw new RuleError(created.error.code, created.error.message);
         factionId = created.data.factionId;
-        db.prepare("UPDATE factions SET cult = 1, patron_godbound_id = ?, harshness = ? WHERE id = ?").run(
-          input.godboundId,
+        db.prepare("UPDATE factions SET cult = 1, patron_hero_id = ?, harshness = ? WHERE id = ?").run(
+          input.heroId,
           input.harshness ?? "nominal",
           factionId,
         );
       } else {
         db.prepare(
-          "UPDATE factions SET cult = 1, patron_godbound_id = ?, harshness = ? WHERE id = ?",
-        ).run(input.godboundId, input.harshness ?? "nominal", factionId);
+          "UPDATE factions SET cult = 1, patron_hero_id = ?, harshness = ? WHERE id = ?",
+        ).run(input.heroId, input.harshness ?? "nominal", factionId);
       }
 
       insertFeatureFromText(db, factionId, input.featureText);
@@ -964,9 +964,9 @@ export function formCult(
         ).run(crypto.randomUUID(), factionId, input.featureText, budget);
       }
 
-      db.prepare("UPDATE godbound SET divinity = 'cult', cult_faction_id = ? WHERE id = ?").run(
+      db.prepare("UPDATE heroes SET divinity = 'cult', cult_faction_id = ? WHERE id = ?").run(
         factionId,
-        input.godboundId,
+        input.heroId,
       );
       return { factionId };
     }),
@@ -1093,7 +1093,7 @@ export function setDivinity(
   db: Database.Database,
   input: {
     campaignId: string;
-    godboundId: string;
+    heroId: string;
     divinity: "none" | "free" | "cult";
     gmOverride?: boolean;
   },
@@ -1101,19 +1101,19 @@ export function setDivinity(
   return wrapRule(() =>
     withTransaction(db, () => {
       const gb = db
-        .prepare("SELECT id, divinity, cult_faction_id FROM godbound WHERE id = ? AND campaign_id = ?")
-        .get(input.godboundId, input.campaignId) as
+        .prepare("SELECT id, divinity, cult_faction_id FROM heroes WHERE id = ? AND campaign_id = ?")
+        .get(input.heroId, input.campaignId) as
         | { id: string; divinity: string; cult_faction_id: string | null }
         | undefined;
-      if (!gb) throw new RuleError("ENTITY_NOT_FOUND", "godbound not found");
+      if (!gb) throw new RuleError("ENTITY_NOT_FOUND", "hero not found");
       if (input.divinity === "free" && gb.cult_faction_id && !input.gmOverride) {
         throw new RuleError("FILL_INCOMPLETE", "gmOverride required to clear cult");
       }
       const cultFactionId = input.divinity === "free" ? null : gb.cult_faction_id;
-      db.prepare("UPDATE godbound SET divinity = ?, cult_faction_id = ? WHERE id = ?").run(
+      db.prepare("UPDATE heroes SET divinity = ?, cult_faction_id = ? WHERE id = ?").run(
         input.divinity,
         cultFactionId,
-        input.godboundId,
+        input.heroId,
       );
       return { divinity: input.divinity };
     }),

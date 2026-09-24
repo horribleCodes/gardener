@@ -9,7 +9,7 @@ It stores one campaign world, fills omitted court and faction fields from `src/t
 npm install
 npm test
 mkdir -p data
-GODBOUND_WORLD_DB=./data/campaign.sqlite npm start
+GARDENER_WORLD_DB=./data/campaign.sqlite npm start
 ```
 
 The process speaks MCP on stdin and stdout. Point a client at that command. There is no HTTP port.

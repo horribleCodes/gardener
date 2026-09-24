@@ -5,7 +5,7 @@ const STALE_MS = 30_000;
 const memoryMutexes = new Map<string, symbol | null>();
 
 function lockTimeoutMs(): number {
-  const raw = process.env.GODBOUND_LOCK_TIMEOUT_MS;
+  const raw = process.env.GARDENER_LOCK_TIMEOUT_MS;
   if (raw != null && raw !== "") {
     const n = Number(raw);
     if (!Number.isNaN(n) && n > 0) return n;

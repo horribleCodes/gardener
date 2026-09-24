@@ -17,7 +17,7 @@ import { beginChange, commitResources, applyOutcome, withdrawInfluence, assessWi
 import {
   createCampaign,
   createPlace,
-  createGodbound,
+  createHero,
   seedCampaign,
   createFaction,
   createCourt,
@@ -71,7 +71,7 @@ export function buildServer(dbPath: string): McpServer {
   const dbTool = (fn: (args: any) => ServiceResult<unknown>): ToolHandler => {
     return (args) => runDbTool(db, () => fn(args), args);
   };
-  const server = new McpServer({ name: "godbound-world", version: "0.1.0" });
+  const server = new McpServer({ name: "gardener", version: "0.1.0" });
   const reg = (
     name: string,
     config: { description?: string; inputSchema?: ZodShape },
@@ -202,9 +202,9 @@ export function buildServer(dbPath: string): McpServer {
   );
 
   reg(
-    "create_godbound",
+    "create_hero",
     {
-      description: "Create a Godbound PC",
+      description: "Create a hero PC",
       inputSchema: {
         campaignId: z.string(),
         name: z.string(),
@@ -216,7 +216,7 @@ export function buildServer(dbPath: string): McpServer {
         divinity: z.enum(["none", "free", "cult"]).optional(),
       },
     },
-    dbTool((a) => createGodbound(db, a)),
+    dbTool((a) => createHero(db, a)),
   );
 
   reg(
@@ -366,7 +366,7 @@ export function buildServer(dbPath: string): McpServer {
         factionId: z.string().optional(),
         placeIds: z.array(z.string()).optional(),
         featureText: z.string().optional(),
-        godboundId: z.string().optional(),
+        heroId: z.string().optional(),
         petty: z.boolean().optional(),
       },
     },
@@ -379,7 +379,7 @@ export function buildServer(dbPath: string): McpServer {
       description: "Commit influence or wealth to a change",
       inputSchema: {
         changeId: z.string(),
-        godboundId: z.string(),
+        heroId: z.string(),
         influence: z.number().int(),
         wealthSpent: z.number().int().optional(),
         backlash: z.string().optional(),
@@ -393,7 +393,7 @@ export function buildServer(dbPath: string): McpServer {
     "withdraw_influence",
     {
       description: "Withdraw committed influence from a change",
-      inputSchema: { changeId: z.string(), godboundId: z.string() },
+      inputSchema: { changeId: z.string(), heroId: z.string() },
     },
     dbTool((a) => withdrawInfluence(db, a)),
   );
@@ -446,7 +446,7 @@ export function buildServer(dbPath: string): McpServer {
         placeIds: z.array(z.string()).optional(),
         influence: z.number().int().optional(),
         dominion: z.number().int().optional(),
-        godboundId: z.string().optional(),
+        heroId: z.string().optional(),
         childStatement: z.string(),
       },
     },
@@ -459,7 +459,7 @@ export function buildServer(dbPath: string): McpServer {
       description: "Spend dominion to create a champion",
       inputSchema: {
         campaignId: z.string(),
-        godboundId: z.string(),
+        heroId: z.string(),
         level: z.number().int(),
         loyal: z.boolean().optional(),
       },
@@ -492,7 +492,7 @@ export function buildServer(dbPath: string): McpServer {
       inputSchema: {
         campaignId: z.string(),
         courtId: z.string(),
-        targetType: z.enum(["godbound", "faction"]),
+        targetType: z.enum(["hero", "faction"]),
         targetId: z.string(),
         mode: z.enum(["favor", "control"]),
         prepared: z.boolean().optional(),
@@ -505,10 +505,10 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "form_cult",
     {
-      description: "Bind a Godbound to a cult faction",
+      description: "Bind a hero to a cult faction",
       inputSchema: {
         campaignId: z.string(),
-        godboundId: z.string(),
+        heroId: z.string(),
         featureText: z.string(),
         harshness: z.string().optional(),
         acknowledged: z.boolean().optional(),
@@ -536,10 +536,10 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "set_divinity",
     {
-      description: "Set a Godbound divinity track",
+      description: "Set a hero divinity track",
       inputSchema: {
         campaignId: z.string(),
-        godboundId: z.string(),
+        heroId: z.string(),
         divinity: z.enum(["none", "free", "cult"]),
         gmOverride: z.boolean().optional(),
       },
@@ -562,7 +562,7 @@ export function buildServer(dbPath: string): McpServer {
       description: "Frozen privy snapshot for one acting unit",
       inputSchema: {
         campaignId: z.string(),
-        unitType: z.enum(["faction", "court", "character", "godbound"]),
+        unitType: z.enum(["faction", "court", "character", "hero"]),
         unitId: z.string(),
       },
     },
@@ -602,7 +602,7 @@ export function buildServer(dbPath: string): McpServer {
       description: "Queue or replace a unit plan for the open turn",
       inputSchema: {
         campaignId: z.string(),
-        unitType: z.enum(["faction", "court", "character", "godbound"]),
+        unitType: z.enum(["faction", "court", "character", "hero"]),
         unitId: z.string(),
         plan: z.record(z.unknown()),
       },
@@ -623,7 +623,7 @@ export function buildServer(dbPath: string): McpServer {
       description: "Resume apply after a defender choice",
       inputSchema: {
         campaignId: z.string(),
-        unitType: z.enum(["faction", "court", "character", "godbound"]),
+        unitType: z.enum(["faction", "court", "character", "hero"]),
         unitId: z.string(),
         defenderChoice: z.enum(["cohesion", "sacrifice", "problem"]),
         problemId: z.string().optional(),

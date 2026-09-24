@@ -43,7 +43,7 @@ function createKistelekDb(): Database.Database {
   ).run("mil-part", featureId, "Standing army", 0);
 
   db.prepare(
-    `INSERT INTO godbound (id, campaign_id, name, level, words, influence, dominion, wealth, divinity)
+    `INSERT INTO heroes (id, campaign_id, name, level, words, influence, dominion, wealth, divinity)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run("sword", "c1", "Sword", 3, "[]", 2, 0, 0, "free");
 
@@ -79,7 +79,7 @@ test("pc feature creation adds one backlash problem and not a trouble check", ()
     magnitude: "plausible",
     kind: "feature",
     featureText: "The village has a band of trained warriors.",
-    godboundId: "sword",
+    heroId: "sword",
   });
   expect(begun.ok).toBe(true);
   if (!begun.ok) return;
@@ -87,7 +87,7 @@ test("pc feature creation adds one backlash problem and not a trouble check", ()
 
   const committed = commitResources(db, {
     changeId: begun.data.changeId,
-    godboundId: "sword",
+    heroId: "sword",
     influence: 1,
   });
   expect(committed.ok).toBe(true);
@@ -141,14 +141,14 @@ test("commitResources rejects feature activation without featureText or draft", 
     scope: "village",
     magnitude: "plausible",
     kind: "feature",
-    godboundId: "sword",
+    heroId: "sword",
   });
   expect(begun.ok).toBe(true);
   if (!begun.ok) return;
 
   const committed = commitResources(db, {
     changeId: begun.data.changeId,
-    godboundId: "sword",
+    heroId: "sword",
     influence: 1,
   });
   expect(committed.ok).toBe(false);

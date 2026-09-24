@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS factions (
   control TEXT NOT NULL,
   auto_intervene INTEGER NOT NULL,
   status TEXT NOT NULL,
-  patron_godbound_id TEXT,
+  patron_hero_id TEXT,
   contested_control INTEGER NOT NULL DEFAULT 0,
   home_place_id TEXT,
   harshness TEXT,
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS facts (
   place_id TEXT
 );
 
-CREATE TABLE IF NOT EXISTS godbound (
+CREATE TABLE IF NOT EXISTS heroes (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   name TEXT NOT NULL,
@@ -206,10 +206,10 @@ CREATE TABLE IF NOT EXISTS changes (
 
 CREATE TABLE IF NOT EXISTS change_commitments (
   change_id TEXT NOT NULL REFERENCES changes(id),
-  godbound_id TEXT NOT NULL REFERENCES godbound(id),
+  hero_id TEXT NOT NULL REFERENCES heroes(id),
   influence INTEGER NOT NULL,
   wealth_spent INTEGER NOT NULL,
-  PRIMARY KEY (change_id, godbound_id)
+  PRIMARY KEY (change_id, hero_id)
 );
 
 CREATE TABLE IF NOT EXISTS resisters (
