@@ -1,0 +1,4 @@
+{
+  "name": "Godbound world MCP",
+  "install": "npm ci && npm run build && mkdir -p data"
+}
