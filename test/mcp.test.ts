@@ -19,7 +19,7 @@ test("MCP server is named gardener and registers create_hero", async () => {
   const tools = await client.listTools();
   const names = tools.tools.map((t) => t.name);
   expect(names).toContain("create_hero");
-  expect(names).not.toContain("create_hero");
+  expect(names).not.toContain("create_godbound");
   await client.close();
 });
 

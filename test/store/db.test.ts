@@ -53,13 +53,13 @@ test("openDb migrates legacy PC tables and columns to heroes", () => {
         control TEXT,
         auto_intervene INTEGER,
         status TEXT,
-        patron_hero_id TEXT,
+        patron_godbound_id TEXT,
         contested_control INTEGER DEFAULT 0,
         home_place_id TEXT,
         harshness TEXT,
         cult INTEGER DEFAULT 0
       );
-      CREATE TABLE heroes (
+      CREATE TABLE godbound (
         id TEXT PRIMARY KEY,
         campaign_id TEXT,
         name TEXT,
@@ -74,10 +74,10 @@ test("openDb migrates legacy PC tables and columns to heroes", () => {
       );
       CREATE TABLE change_commitments (
         change_id TEXT,
-        hero_id TEXT,
+        godbound_id TEXT,
         influence INTEGER,
         wealth_spent INTEGER,
-        PRIMARY KEY (change_id, hero_id)
+        PRIMARY KEY (change_id, godbound_id)
       );
       CREATE TABLE court_dispositions (
         court_id TEXT,
@@ -86,26 +86,26 @@ test("openDb migrates legacy PC tables and columns to heroes", () => {
         disposition TEXT,
         PRIMARY KEY (court_id, target_type, target_id)
       );
-      INSERT INTO heroes (id, campaign_id, name, level, influence, dominion, wealth, divinity)
+      INSERT INTO godbound (id, campaign_id, name, level, influence, dominion, wealth, divinity)
       VALUES ('gb1', 'c1', 'Saint', 3, 4, 1, 0, 'none');
       INSERT INTO court_dispositions (court_id, target_type, target_id, disposition)
-      VALUES ('court1', 'hero', 'gb1', 'favor');
+      VALUES ('court1', 'godbound', 'gb1', 'favor');
     `);
     raw.close();
 
     const db = openDb(path);
     const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('hero', 'heroes')")
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('godbound', 'heroes')")
       .all() as { name: string }[];
     expect(tables.map((t) => t.name).sort()).toEqual(["heroes"]);
     const hero = db.prepare("SELECT name FROM heroes WHERE id = ?").get("gb1") as { name: string };
     expect(hero.name).toBe("Saint");
     const factionCols = db.prepare("PRAGMA table_info(factions)").all() as { name: string }[];
     expect(factionCols.some((c) => c.name === "patron_hero_id")).toBe(true);
-    expect(factionCols.some((c) => c.name === "patron_hero_id")).toBe(false);
+    expect(factionCols.some((c) => c.name === "patron_godbound_id")).toBe(false);
     const commitCols = db.prepare("PRAGMA table_info(change_commitments)").all() as { name: string }[];
     expect(commitCols.some((c) => c.name === "hero_id")).toBe(true);
-    expect(commitCols.some((c) => c.name === "hero_id")).toBe(false);
+    expect(commitCols.some((c) => c.name === "godbound_id")).toBe(false);
     const disp = db
       .prepare("SELECT target_type FROM court_dispositions WHERE target_id = 'gb1'")
       .get() as { target_type: string };
