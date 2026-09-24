@@ -38,10 +38,6 @@ To use Gardener from another Cursor project, add this to `~/.cursor/mcp.json` or
 
 Use the same `mcpServers` block in `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows: `%APPDATA%\Claude\claude_desktop_config.json`).
 
-## Development
-
-This repository is developed with agents in the Gardener Cursor Project. `npm test` does not need a running MCP server.
-
 ## Roadmap
 
 See [docs/ROADMAP.md](./docs/ROADMAP.md).
