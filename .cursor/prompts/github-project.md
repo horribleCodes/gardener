@@ -39,8 +39,6 @@ Typical writable tools (re-check; this list has gone stale before): `get_me`, `l
 
 ## Do not
 
-- Rename Godbound in code, package names, or MCP ids.
-- Save a Cursor dashboard environment proposal.
 - Edit `docs/ROADMAP.md` unless the user asked to change the plan.
 - File later-wave items as their own issues while they are still Later.
 - Open product-code PRs; this skill only adds skill/agent files when the user asked for those.
