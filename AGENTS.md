@@ -1,4 +1,4 @@
-# Installing the Godbound world MCP
+# Installing the Gardener world MCP
 
 Follow [README.md](./README.md). This file is the instruct path for an agent told to install Gardener.
 
@@ -16,7 +16,7 @@ mkdir -p data
 3. Do not run `npm start` or `node dist/server.js`. The MCP client starts the process on stdin/stdout.
 4. Point the client at `node` + `dist/server.js`:
    - This repo as the Cursor workspace: `.cursor/mcp.json` is already committed. Reload MCP servers.
-   - Another Cursor project: add a `godbound-world` entry to `~/.cursor/mcp.json` or that project's `.cursor/mcp.json`, with `args` set to this clone's `dist/server.js`.
+   - Another Cursor project: add a `gardener` entry to `~/.cursor/mcp.json` or that project's `.cursor/mcp.json`, with `args` set to this clone's `dist/server.js`.
    - Claude Desktop: the same `mcpServers` block in `claude_desktop_config.json`.
 5. One database file is one campaign (`./data/campaign.sqlite` by default).
 

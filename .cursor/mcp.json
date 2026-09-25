@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "godbound-world": {
+    "gardener": {
       "command": "node",
       "args": ["${workspaceFolder}/dist/server.js"]
     }

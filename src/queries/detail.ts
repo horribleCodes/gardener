@@ -176,7 +176,7 @@ export function cultIncome(db: Database.Database, campaignId: string) {
   const rows = db
     .prepare(
       `SELECT g.id, g.name, g.level, g.divinity, g.cult_faction_id, f.power, f.harshness
-       FROM godbound g
+       FROM heroes g
        LEFT JOIN factions f ON f.id = g.cult_faction_id
        WHERE g.campaign_id = ?`,
     )
@@ -204,7 +204,7 @@ export function cultIncome(db: Database.Database, campaignId: string) {
           level: g.level,
         });
       }
-      return { godboundId: g.id, name: g.name, divinity: g.divinity, grant };
+      return { heroId: g.id, name: g.name, divinity: g.divinity, grant };
     });
 }
 

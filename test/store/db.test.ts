@@ -27,7 +27,7 @@ test("migrate creates campaigns and rolls back a failed transaction", () => {
 });
 
 test("openDb reopens an existing file database in WAL mode", () => {
-  const dir = mkdtempSync(join(tmpdir(), "godbound-db-"));
+  const dir = mkdtempSync(join(tmpdir(), "gardener-db-"));
   const path = join(dir, "campaign.sqlite");
   try {
     const db1 = openDb(path);

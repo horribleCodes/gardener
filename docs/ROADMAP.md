@@ -34,7 +34,7 @@ These do not wait on the strain items. They also do not block them.
 
 | # | Item | Crit | Cmplx | Impact | Gates |
 | --- | --- | --- | --- | --- | --- |
-| 4 | Committed MCP config with no machine-absolute paths. The server resolves the database from its install directory (`./data/campaign.sqlite` is already the default when `GODBOUND_WORLD_DB` is unset). Project `mcp.json` sets neither that variable nor an absolute `cwd`. | 2 | 2 | 2 | Campaign directories |
+| 4 | Committed MCP config with no machine-absolute paths. The server resolves the database from its install directory (`./data/campaign.sqlite` is already the default when `GARDENER_WORLD_DB` is unset). Project `mcp.json` sets neither that variable nor an absolute `cwd`. | 2 | 2 | 2 | Campaign directories |
 | 5 | A short agent instruction file for the tools that exist today. It states the interest natures (`alliance`, `rivalry`, `trade`, `marriage`, `spies`, `aid`, `tribute`); that `seed_campaign` writes the starting interest edges; that `create_faction` leaves interests empty; that `extend_interest` is a contest inside a turn; and that the open database file is the campaign in play. On 24 Sep 2026 the agent stored a war as facts because those limits lived only in source. Module instructions (item 17) and the prompt split (item 26) replace this file. | 4 | 2 | 4 | Prompt split |
 
 Item 5 is a current-surface card, written while the Godbound tools are still the whole server. It will be rewritten. Waiting for the tool list to freeze leaves the next playtest with the same gap.

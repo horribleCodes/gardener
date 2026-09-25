@@ -32,7 +32,7 @@ export function beginChange(
     factionId?: string;
     placeIds?: string[];
     featureText?: string;
-    godboundId?: string;
+    heroId?: string;
     petty?: boolean;
     deedsRequired?: number;
     challengesRequired?: number;
@@ -108,7 +108,7 @@ export function commitResources(
   db: Database.Database,
   input: {
     changeId: string;
-    godboundId: string;
+    heroId: string;
     influence: number;
     wealthSpent?: number;
     backlash?: string;
@@ -145,10 +145,10 @@ export function commitResources(
         | undefined;
       if (!change) throw new RuleError("ENTITY_NOT_FOUND", `change ${input.changeId} not found`);
 
-      const godbound = db
-        .prepare("SELECT id, influence FROM godbound WHERE id = ?")
-        .get(input.godboundId) as { id: string; influence: number } | undefined;
-      if (!godbound) throw new RuleError("ENTITY_NOT_FOUND", `godbound ${input.godboundId} not found`);
+      const hero = db
+        .prepare("SELECT id, influence FROM heroes WHERE id = ?")
+        .get(input.heroId) as { id: string; influence: number } | undefined;
+      if (!hero) throw new RuleError("ENTITY_NOT_FOUND", `hero ${input.heroId} not found`);
       if (input.influence < 0) {
         throw new RuleError("INSUFFICIENT_INFLUENCE", "cannot commit negative influence");
       }
@@ -156,37 +156,37 @@ export function commitResources(
       let influenceDebit = input.influence;
       if (wealthSpent > 0) {
         const gbRow = db
-          .prepare("SELECT wealth FROM godbound WHERE id = ?")
-          .get(input.godboundId) as { wealth: number };
+          .prepare("SELECT wealth FROM heroes WHERE id = ?")
+          .get(input.heroId) as { wealth: number };
         const converted = influenceFromWealth(gbRow.wealth, wealthSpent);
         influenceDebit += converted.influence;
-        db.prepare("UPDATE godbound SET wealth = wealth - ? WHERE id = ?").run(
+        db.prepare("UPDATE heroes SET wealth = wealth - ? WHERE id = ?").run(
           converted.wealthUsed,
-          input.godboundId,
+          input.heroId,
         );
       }
-      if (godbound.influence < influenceDebit) {
+      if (hero.influence < influenceDebit) {
         throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough influence to commit");
       }
       const existing = db
         .prepare(
-          "SELECT influence FROM change_commitments WHERE change_id = ? AND godbound_id = ?",
+          "SELECT influence FROM change_commitments WHERE change_id = ? AND hero_id = ?",
         )
-        .get(input.changeId, input.godboundId) as { influence: number } | undefined;
+        .get(input.changeId, input.heroId) as { influence: number } | undefined;
       if (existing) {
         db.prepare(
           `UPDATE change_commitments SET influence = influence + ?, wealth_spent = wealth_spent + ?
-           WHERE change_id = ? AND godbound_id = ?`,
-        ).run(input.influence, wealthSpent, input.changeId, input.godboundId);
+           WHERE change_id = ? AND hero_id = ?`,
+        ).run(input.influence, wealthSpent, input.changeId, input.heroId);
       } else {
         db.prepare(
-          `INSERT INTO change_commitments (change_id, godbound_id, influence, wealth_spent)
+          `INSERT INTO change_commitments (change_id, hero_id, influence, wealth_spent)
            VALUES (?, ?, ?, ?)`,
-        ).run(input.changeId, input.godboundId, input.influence, wealthSpent);
+        ).run(input.changeId, input.heroId, input.influence, wealthSpent);
       }
-      db.prepare("UPDATE godbound SET influence = influence - ? WHERE id = ?").run(
+      db.prepare("UPDATE heroes SET influence = influence - ? WHERE id = ?").run(
         influenceDebit,
-        input.godboundId,
+        input.heroId,
       );
 
       const quote = quoteForChangeRow(db, change);
@@ -317,7 +317,7 @@ export function applyOutcome(
 
 export function withdrawInfluence(
   db: Database.Database,
-  input: { changeId: string; godboundId: string },
+  input: { changeId: string; heroId: string },
 ): ServiceResult<{ status: string; covered: number }> {
   return wrapRule(() =>
     withTransaction(db, () => {
@@ -342,17 +342,17 @@ export function withdrawInfluence(
 
       const prior = db
         .prepare(
-          "SELECT influence FROM change_commitments WHERE change_id = ? AND godbound_id = ?",
+          "SELECT influence FROM change_commitments WHERE change_id = ? AND hero_id = ?",
         )
-        .get(input.changeId, input.godboundId) as { influence: number } | undefined;
+        .get(input.changeId, input.heroId) as { influence: number } | undefined;
       const returned = prior?.influence ?? 0;
       db.prepare(
-        "UPDATE change_commitments SET influence = 0 WHERE change_id = ? AND godbound_id = ?",
-      ).run(input.changeId, input.godboundId);
+        "UPDATE change_commitments SET influence = 0 WHERE change_id = ? AND hero_id = ?",
+      ).run(input.changeId, input.heroId);
       if (returned > 0) {
-        db.prepare("UPDATE godbound SET influence = influence + ? WHERE id = ?").run(
+        db.prepare("UPDATE heroes SET influence = influence + ? WHERE id = ?").run(
           returned,
-          input.godboundId,
+          input.heroId,
         );
       }
 
@@ -546,7 +546,7 @@ export function expandChange(
     placeIds?: string[];
     influence?: number;
     dominion?: number;
-    godboundId?: string;
+    heroId?: string;
     childStatement: string;
   },
 ): ServiceResult<{ quote: Quote; deltaPaid: number }> {
@@ -609,33 +609,33 @@ export function expandChange(
       if (influence + dominion < deltaPaid) {
         throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough to expand change");
       }
-      if (!input.godboundId && influence > 0) {
-        throw new RuleError("FILL_INCOMPLETE", "godboundId required for influence payment");
+      if (!input.heroId && influence > 0) {
+        throw new RuleError("FILL_INCOMPLETE", "heroId required for influence payment");
       }
-      if (input.godboundId && influence > 0) {
+      if (input.heroId && influence > 0) {
         const gb = db
-          .prepare("SELECT influence FROM godbound WHERE id = ?")
-          .get(input.godboundId) as { influence: number } | undefined;
+          .prepare("SELECT influence FROM heroes WHERE id = ?")
+          .get(input.heroId) as { influence: number } | undefined;
         if (!gb || gb.influence < influence) {
           throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough influence");
         }
-        db.prepare("UPDATE godbound SET influence = influence - ? WHERE id = ?").run(
+        db.prepare("UPDATE heroes SET influence = influence - ? WHERE id = ?").run(
           influence,
-          input.godboundId,
+          input.heroId,
         );
         const existing = db
           .prepare(
-            "SELECT influence FROM change_commitments WHERE change_id = ? AND godbound_id = ?",
+            "SELECT influence FROM change_commitments WHERE change_id = ? AND hero_id = ?",
           )
-          .get(change.id, input.godboundId) as { influence: number } | undefined;
+          .get(change.id, input.heroId) as { influence: number } | undefined;
         if (existing) {
           db.prepare(
-            "UPDATE change_commitments SET influence = influence + ? WHERE change_id = ? AND godbound_id = ?",
-          ).run(influence, change.id, input.godboundId);
+            "UPDATE change_commitments SET influence = influence + ? WHERE change_id = ? AND hero_id = ?",
+          ).run(influence, change.id, input.heroId);
         } else {
           db.prepare(
-            `INSERT INTO change_commitments (change_id, godbound_id, influence, wealth_spent) VALUES (?, ?, ?, 0)`,
-          ).run(change.id, input.godboundId, influence);
+            `INSERT INTO change_commitments (change_id, hero_id, influence, wealth_spent) VALUES (?, ?, ?, 0)`,
+          ).run(change.id, input.heroId, influence);
         }
       }
       if (dominion > 0) {
