@@ -17,6 +17,10 @@ mkdir -p data
 
 One SQLite file is one campaign. The default path is `./data/campaign.sqlite` (created on first use). Set `GARDENER_WORLD_DB` only to use a different file.
 
+### Play
+
+When running or GMing a campaign through the MCP, read [docs/agent/current-mcp-tools.md](./docs/agent/current-mcp-tools.md) first. It explains interest natures, which tools write edges, and common setup mistakes (see the [24 Sep 2026 playtest](./docs/reviews/2026-09-24-init-campaign.md)).
+
 ### Cursor
 
 If this repo is the workspace, project config is already in `.cursor/mcp.json`. Reload MCP servers after the build.
