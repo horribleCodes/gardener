@@ -608,6 +608,20 @@ export function createCharacter(
   );
 }
 
+function unwrap<T>(result: ServiceResult<T>): T {
+  if (!result.ok) throw new RuleError(result.error.code, result.error.message, result.error.details);
+  return result.data;
+}
+
+function linkSetpiece(
+  db: Database.Database,
+  setpieceId: string,
+  column: "court_id" | "challenge_id" | "character_id" | "fact_id",
+  entityId: string,
+): void {
+  db.prepare(`UPDATE setpieces SET ${column} = ? WHERE id = ?`).run(entityId, setpieceId);
+}
+
 export function createFact(
   db: Database.Database,
   input: {
@@ -661,6 +675,7 @@ export function ensureSetpiece(
     courtId?: string;
     fill?: FillMode;
     seed?: number;
+    kind?: string;
   },
 ): ServiceResult<{ setpieceId: string; created: boolean }> {
   return wrapRule(() =>
@@ -680,28 +695,57 @@ export function ensureSetpiece(
       const seed = input.seed ?? Math.floor(Math.random() * 0xffffffff);
 
       if (input.need === "court") {
-        createCourt(db, { campaignId: input.campaignId, fill, seed, placeId: input.placeId });
+        const court = unwrap(
+          createCourt(db, { campaignId: input.campaignId, fill, seed, placeId: input.placeId }),
+        );
+        linkSetpiece(db, setpieceId, "court_id", court.courtId);
       } else if (input.need === "challenge") {
-        if (!input.changeId) throw new RuleError("FILL_INCOMPLETE", "changeId required");
         const catalog = loadCatalog();
+        const rng = mulberry32(seed);
         const kinds = Object.keys(catalog.challenges);
-        const kind = kinds[0];
-        const text = catalog.challenges[kind][0];
+        const kind = input.kind ?? kinds[Math.floor(rng.next() * kinds.length)];
+        if (!catalog.challenges[kind]) {
+          throw new RuleError("PICK_UNKNOWN", `${kind} is not a challenge kind`);
+        }
+        let changeId: string | null = null;
+        if (input.changeId) {
+          const change = db
+            .prepare("SELECT campaign_id FROM changes WHERE id = ?")
+            .get(input.changeId) as { campaign_id: string } | undefined;
+          if (!change || change.campaign_id !== input.campaignId) {
+            throw new RuleError("ENTITY_NOT_FOUND", "change not found");
+          }
+          changeId = input.changeId;
+        }
+        const text = pickOrRoll(catalog, `challenges.${kind}`, rng).text;
+        const challengeId = crypto.randomUUID();
         db.prepare(
-          "INSERT INTO challenges (id, kind, text, change_id, status) VALUES (?, ?, ?, ?, 'open')",
-        ).run(crypto.randomUUID(), kind, text, input.changeId);
+          "INSERT INTO challenges (id, campaign_id, kind, text, change_id, status) VALUES (?, ?, ?, ?, ?, 'open')",
+        ).run(challengeId, input.campaignId, kind, text, changeId);
+        linkSetpiece(db, setpieceId, "challenge_id", challengeId);
       } else if (input.need === "character") {
-        createCharacter(db, { campaignId: input.campaignId, role: "Local figure", fill });
+        const character = unwrap(
+          createCharacter(db, {
+            campaignId: input.campaignId,
+            role: "Local figure",
+            fill,
+            courtId: input.courtId,
+          }),
+        );
+        linkSetpiece(db, setpieceId, "character_id", character.characterId);
       } else if (input.need === "fact") {
         if (fill === "missing" && !input.placeId) {
           throw new RuleError("FILL_INCOMPLETE", "statement or subject required for fact");
         }
-        createFact(db, {
-          campaignId: input.campaignId,
-          subject: "place",
-          subjectId: input.placeId ?? input.campaignId,
-          fill,
-        });
+        const fact = unwrap(
+          createFact(db, {
+            campaignId: input.campaignId,
+            subject: "place",
+            subjectId: input.placeId ?? input.campaignId,
+            fill,
+          }),
+        );
+        linkSetpiece(db, setpieceId, "fact_id", fact.factId);
       } else if (input.need === "problem_face") {
         if (!input.problemId) throw new RuleError("FILL_INCOMPLETE", "problemId required");
         const roles = [
@@ -714,24 +758,22 @@ export function ensureSetpiece(
         ];
         const rng = mulberry32(seed);
         const role = roles[Math.floor(rng.next() * roles.length)];
-        const ch = createCharacter(db, {
-          campaignId: input.campaignId,
-          role,
-          fill,
-        });
-        if (ch.ok) {
-          db.prepare("UPDATE characters SET problem_id = ? WHERE id = ?").run(
-            input.problemId,
-            ch.data.characterId,
-          );
-          db.prepare("UPDATE problems SET face_character_id = ? WHERE id = ?").run(
-            ch.data.characterId,
-            input.problemId,
-          );
-        } else {
-          db.prepare("DELETE FROM setpieces WHERE id = ?").run(setpieceId);
-          throw new RuleError("FILL_INCOMPLETE", "could not create problem face");
-        }
+        const character = unwrap(
+          createCharacter(db, {
+            campaignId: input.campaignId,
+            role,
+            fill,
+          }),
+        );
+        db.prepare("UPDATE characters SET problem_id = ? WHERE id = ?").run(
+          input.problemId,
+          character.characterId,
+        );
+        db.prepare("UPDATE problems SET face_character_id = ? WHERE id = ?").run(
+          character.characterId,
+          input.problemId,
+        );
+        linkSetpiece(db, setpieceId, "character_id", character.characterId);
       }
 
       return { setpieceId, created: true };
@@ -745,7 +787,9 @@ export function createChallenge(
 ): ServiceResult<{ challengeId: string }> {
   return wrapRule(() =>
     withTransaction(db, () => {
-      const change = db.prepare("SELECT id FROM changes WHERE id = ?").get(input.changeId);
+      const change = db
+        .prepare("SELECT id, campaign_id FROM changes WHERE id = ?")
+        .get(input.changeId) as { id: string; campaign_id: string } | undefined;
       if (!change) throw new RuleError("ENTITY_NOT_FOUND", "change not found");
       const catalog = loadCatalog();
       const seed = input.seed ?? 1;
@@ -754,8 +798,8 @@ export function createChallenge(
         input.text ?? pickOrRoll(catalog, `challenges.${input.kind}`, rng).text;
       const challengeId = crypto.randomUUID();
       db.prepare(
-        "INSERT INTO challenges (id, kind, text, change_id, status) VALUES (?, ?, ?, ?, 'open')",
-      ).run(challengeId, input.kind, text, input.changeId);
+        "INSERT INTO challenges (id, campaign_id, kind, text, change_id, status) VALUES (?, ?, ?, ?, ?, 'open')",
+      ).run(challengeId, change.campaign_id, input.kind, text, input.changeId);
       return { challengeId };
     }),
   );
@@ -789,10 +833,11 @@ export function recordChallengeOutcome(
     withTransaction(db, () => {
       const ch = db
         .prepare("SELECT id, change_id, status FROM challenges WHERE id = ?")
-        .get(input.challengeId) as { id: string; change_id: string; status: string } | undefined;
+        .get(input.challengeId) as { id: string; change_id: string | null; status: string } | undefined;
       if (!ch) throw new RuleError("ENTITY_NOT_FOUND", "challenge not found");
       if (!input.overcome) return { status: ch.status };
       db.prepare("UPDATE challenges SET status = 'overcome' WHERE id = ?").run(ch.id);
+      if (ch.change_id === null) return { status: "overcome" };
       const change = db
         .prepare("SELECT challenges_done, challenges_required FROM changes WHERE id = ?")
         .get(ch.change_id) as { challenges_done: number; challenges_required: number };

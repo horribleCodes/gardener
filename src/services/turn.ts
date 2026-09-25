@@ -1191,7 +1191,7 @@ export function listHooks(db: Database.Database, campaignId: string): ServiceRes
     const challenges = db
       .prepare(
         `SELECT c.id, c.text, c.change_id FROM challenges c
-         JOIN changes ch ON ch.id = c.change_id WHERE ch.campaign_id = ? AND c.status = 'open'`,
+         WHERE c.campaign_id = ? AND c.status = 'open'`,
       )
       .all(campaignId);
     const decaying = db

@@ -329,6 +329,7 @@ export function buildServer(dbPath: string): McpServer {
         need: z.enum(["court", "challenge", "character", "fact", "problem_face"]),
         placeId: z.string().optional(),
         changeId: z.string().optional(),
+        kind: z.string().optional(),
         problemId: z.string().optional(),
         courtId: z.string().optional(),
         fill: fillZ,
