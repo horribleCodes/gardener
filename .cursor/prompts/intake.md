@@ -7,9 +7,8 @@ Use this when the user is reporting a bug, proposing a feature, or asking for an
 ## Do
 
 1. Restate the report in one sentence. If it mixes several independent problems, say so and file one issue for the problem they care about first.
-2. Search open issues (`gh issue list --state open --limit 50`) so a blocker can be a link to an existing issue.
-3. Score complexity and impact from 1 to 5. Complexity is build size. Impact is how much is unblocked or repaired. These scores describe the issue. They do not update `docs/ROADMAP.md`.
-4. Create the issue with `gh issue create`. Title is a short statement of the problem. Body is only this:
+2. Search open issues with `gh issue list --state open --limit 50` so a blocker can be a link to an existing issue.
+3. Create the issue with `gh issue create -l "<type>,triage required"`, whereas `<type>` is either `documentation`, `enhancement` or `bug`. Title is a short statement of the problem. Body is only this:
 
 ```markdown
 ## Problem
@@ -20,11 +19,6 @@ Use this when the user is reporting a bug, proposing a feature, or asking for an
 
 <one or two sentences>
 
-## Scores
-
-- Complexity: <1-5>
-- Impact: <1-5>
-
 ## Blockers
 
 - <issue link, or "None">
@@ -34,10 +28,13 @@ Use this when the user is reporting a bug, proposing a feature, or asking for an
 - <a decision this issue does not make, or "None">
 ```
 
-5. Reply with the issue URL and stop.
+4. Reply with the issue URL and stop.
 
 ## Do not
 
 - Choose a design, an API, a schema, or a file layout. Put that choice under **Open questions** if the report depends on it.
-- Edit the roadmap, the code, or another issue's body.
+- Edit any tracked files or another issue.
 - Open a pull request.
+- Assign any other labels to the new issue.
+- Assign any `Criticality: n`, `Complexity: n`, or `Impact: n` label (n is 1–5). Humans assign those after triage.
+- Look for duplicate issues.
