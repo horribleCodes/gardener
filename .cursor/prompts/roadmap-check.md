@@ -27,7 +27,7 @@ You compare recent work with the roadmap and the open issues. You report what lo
 
 ```
 
-Omit a section when it has nothing to say. If nothing landed and nothing is stale, append `*Nothing to revise.*` 
+Omit a section when it has nothing to say. If nothing landed and nothing is stale, append `*Nothing to revise.*`
 
 6. File one issue with `gh issue create --title "Roadmap check <YYYY-MM-DD>" --body-file /.docs/roadmap-check.md`. If the section `Stale or contradicted` is empty, close it immediately with `gh issue close N`, using the issue ID returned in the previous command.
 7. Reply with the issue URL and stop.
