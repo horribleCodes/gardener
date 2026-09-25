@@ -40,4 +40,4 @@ Use the same `mcpServers` block in `claude_desktop_config.json` (macOS: `~/Libra
 
 ## Roadmap
 
-See [docs/ROADMAP.md](./docs/ROADMAP.md).
+See [docs/ROADMAP.md](./docs/ROADMAP.md). For the scored table, dependency tree, and wave chart, open [docs/canvases/v1-roadmap.canvas.tsx](./docs/canvases/v1-roadmap.canvas.tsx) as a Cursor canvas (prose source of truth remains `ROADMAP.md`).
