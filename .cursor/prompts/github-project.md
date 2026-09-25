@@ -17,7 +17,7 @@ Use this when the user asks to set up the GitHub project, sync the roadmap into 
 
 Titles for roadmap children: `Roadmap #<n>: <short name>`. Host items that used to live in `TODO.md` (4, 5, 19, 24, 25) are already numbered in `docs/ROADMAP.md`. There is no `TODO.md` in the tree; do not invent one.
 
-Default labels only: `enhancement`, `documentation`, `bug`. GitHub MCP cannot create labels.
+Default labels only: `enhancement`, `documentation`, `bug`. Do not assign any `Criticality: n`, `Complexity: n`, or `Impact: n` label (n is 1–5); humans assign those after triage. GitHub MCP cannot create labels.
 
 **Project:** public user Project [Gardener](https://github.com/users/horribleCodes/projects/2) (`horribleCodes`, number `2`). Issue #6 links this URL.
 

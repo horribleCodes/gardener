@@ -41,3 +41,4 @@ Use this when the user is reporting a bug, proposing a feature, or asking for an
 - Choose a design, an API, a schema, or a file layout. Put that choice under **Open questions** if the report depends on it.
 - Edit the roadmap, the code, or another issue's body.
 - Open a pull request.
+- Assign any `Criticality: n`, `Complexity: n`, or `Impact: n` label (n is 1–5). Humans assign those after triage; intake only records Complexity and Impact in the issue body under **Scores**.
