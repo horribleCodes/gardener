@@ -14,39 +14,11 @@ function columnExists(db: Database.Database, table: string, column: string): boo
   return cols.some((c) => c.name === column);
 }
 
-function migrateLegacyNames(db: Database.Database): void {
-  if (tableExists(db, "godbound") && !tableExists(db, "heroes")) {
-    db.exec("ALTER TABLE godbound RENAME TO heroes");
-  }
-}
-
-function migrateLegacyColumns(db: Database.Database): void {
-  if (tableExists(db, "factions") && columnExists(db, "factions", "patron_godbound_id")) {
-    db.exec("ALTER TABLE factions RENAME COLUMN patron_godbound_id TO patron_hero_id");
-  }
-  if (tableExists(db, "change_commitments") && columnExists(db, "change_commitments", "godbound_id")) {
-    db.exec("ALTER TABLE change_commitments RENAME COLUMN godbound_id TO hero_id");
-  }
-  if (tableExists(db, "court_dispositions")) {
-    db.exec("UPDATE court_dispositions SET target_type = 'hero' WHERE target_type = 'godbound'");
-  }
-  if (tableExists(db, "unit_views")) {
-    db.exec("UPDATE unit_views SET unit_type = 'hero' WHERE unit_type = 'godbound'");
-  }
-  if (tableExists(db, "write_queue")) {
-    db.exec("UPDATE write_queue SET unit_type = 'hero' WHERE unit_type = 'godbound'");
-  }
-  if (tableExists(db, "actions")) {
-    db.exec("UPDATE actions SET actor_type = 'hero' WHERE actor_type = 'godbound'");
-    db.exec("UPDATE actions SET target_type = 'hero' WHERE target_type = 'godbound'");
-  }
-}
 
 export function migrate(db: Database.Database): void {
-  migrateLegacyNames(db);
   const schemaPath = fileURLToPath(new URL("./schema.sql", import.meta.url));
   db.exec(readFileSync(schemaPath, "utf8"));
-  migrateLegacyColumns(db);
+  // TODO: Implement generic migration logic for module upgrades (blocked by module architecture)
 }
 
 export function openDb(path: string): Database.Database {
