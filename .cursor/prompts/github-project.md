@@ -8,7 +8,7 @@ Use this when the user asks to set up the GitHub project, sync the roadmap into 
 
 | Kind | GitHub object | When |
 | --- | --- | --- |
-| Board index | One Task issue titled `Gardener development board` | Always; link the rest |
+| Operational board | GitHub Project [Gardener](https://github.com/users/horribleCodes/projects/2) (`horribleCodes`, number `2`) | Always; track real Task issues and PRs here |
 | Now work | Parent Task per current ROADMAP “Now” section, plus one Task child per numbered item | Only items that are in play |
 | Later waves | One Task with a checklist copied from `docs/ROADMAP.md` | Do not explode into issues until that wave is Now |
 | Feature request | Issue type **Feature**, label `enhancement`, intake body | New play ideas; search first |
@@ -19,7 +19,7 @@ Titles for roadmap children: `Roadmap #<n>: <short name>`. Host items that used 
 
 Default labels only: `enhancement`, `documentation`, `bug`. GitHub MCP cannot create labels.
 
-**Project:** public user Project [Gardener](https://github.com/users/horribleCodes/projects/2) (`horribleCodes`, number `2`). Issue #6 links this URL.
+**Project:** public user Project [Gardener](https://github.com/users/horribleCodes/projects/2) (`horribleCodes`, number `2`) is the operational board. Use Project #2 plus real Task issues (e.g. Now #8, Later #9); do not require or maintain a separate index issue, and do not invent a replacement index issue.
 
 ## MCP vs `gh`
 
@@ -36,13 +36,14 @@ Use `gh` for the Project: `gh project view 2 --owner horribleCodes`, `gh project
 1. `get_me`. Then `list_issue_types` and `list_issue_fields` for `horribleCodes/gardener`.
 2. Read `docs/ROADMAP.md`. If `TODO.md` exists, read it; otherwise treat host items as the roadmap numbers above.
 3. `search_issues` and `list_issues` (open). Reuse a hit; do not duplicate.
-4. Ensure the board index, Now parents, Now children, and later-waves checklist exist. Create only the missing ones. Child creates use `parent_issue_number`.
+4. Ensure Now parents, Now children, and the later-waves checklist exist. Create only the missing ones. Child creates use `parent_issue_number`.
 5. Feature requests and bugs: follow `.cursor/prompts/intake.md` (type Feature or Bug). Search first.
 6. Ensure each of those issues (and open PRs that belong on the board) is a Project item. Add missing ones with `gh project item-add`. Set Status to match reality. Do not invent extra items.
-7. Reply with the board issue URL, Now issue URLs, and https://github.com/users/horribleCodes/projects/2, and stop.
+7. Reply with Now issue URLs, other relevant Task issue URLs, and https://github.com/users/horribleCodes/projects/2, and stop.
 
 ## Do not
 
+- Require or recreate a board index issue (e.g. a Task titled `Gardener development board`); the Project is the board.
 - Edit `docs/ROADMAP.md` unless the user asked to change the plan.
 - File later-wave items as their own issues while they are still Later.
 - Open product-code PRs; this skill only adds skill/agent files when the user asked for those.
