@@ -36,4 +36,5 @@ Use this when the user is reporting a bug, proposing a feature, or asking for an
 - Edit any tracked files or another issue.
 - Open a pull request.
 - Assign any other labels to the new issue.
+- Assign any `Criticality: n`, `Complexity: n`, or `Impact: n` label (n is 1–5). Humans assign those after triage.
 - Look for duplicate issues.
