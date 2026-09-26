@@ -11,6 +11,11 @@ Gardener is a local stateful MCP implementing a virtual world.
 - user-facing play instructions live under `user/`
 - development skills and prompts live under `.cursor/skills` and `.cursor/prompts`
 - finished MCP reviews live under `test/reviews`; playtest scripts under `test/play-scripts`
+- living design framing and naming live under `docs/design/` (for example `overview.md`, `glossary.md`)
+
+## Documentation
+
+`docs/superpowers/` is **historical**: dated plans and specs for past changes, not maintained after merge. Do not treat it as the current design source of truth. Prefer `docs/design/` and the codebase; link to superpowers only for deep historical context.
 
 ## Never
 
