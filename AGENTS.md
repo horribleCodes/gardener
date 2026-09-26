@@ -21,3 +21,7 @@ mkdir -p data
 5. One database file is one campaign (`./data/campaign.sqlite` by default).
 
 `npm test` is for developing this repo and does not need a running server.
+
+## Play a campaign
+
+Before calling Gardener MCP tools for world setup or play, read [docs/agent/mcp_main.md](./docs/agent/mcp_main.md).
