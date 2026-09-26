@@ -19,4 +19,4 @@ You may use this skill at your own behest as the role of the GM **if** it benefi
 
 ## Manuals
 
-Read and follow [gdnr_direct.md](./references/gdnr_direct.md). That file explains how to 
+Read and follow [gdnr_direct.md](./references/gdnr_direct.md). That file explains how to
