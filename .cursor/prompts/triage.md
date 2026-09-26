@@ -21,19 +21,20 @@ Use this when the user names an issue (or asks to triage one) that still has `tr
 
 ## Open questions
 
-- <what is still undecided, or exactly: `None (ready for spec).`>
+- <what is still undecided, or exactly: `None (ready for placement on roadmap or parking).`>
 ```
 
    Fold reporter detail from comments into **Decisions** / **Out of scope** instead of copying whole comments. A short pointer (for example “See also the reporter’s comment on …”) is enough when the comment stays the source of truth.
 
-4. Score the issue using `docs/ROADMAP.md` (1–5 each): **Criticality** (how wrong the server is if this waits), **Complexity** (build size), **Impact** (how much play it unlocks). Pick one label per dimension: `Criticality: n`, `Complexity: n`, `Impact: n`.
-5. Update labels: remove `triage required`. When **Open questions** is `None (ready for spec).`, add `spec required`. Do not add `spec required` while real open questions remain.
+4. Score the issue's criticality from a scale of 1-5. The greater the problem solved by implementing this issue, the higher the score.
+5. Update labels: remove `triage required` and add `Criticality n` and `place required`. Use `gh issue edit <n> --add-label "<comma-separated list of labels>" --remove-label "triage required"`
 6. Reply with the issue URL and stop.
 
 ## Do not
 
 - Edit the reporter’s or anyone else’s issue comments.
 - Change the type label (`bug`, `enhancement`, or `documentation`).
+- Add any labels aside from `Criticality n` or `place required`.
 - Open a pull request or write product code.
 - Run intake (that prompt creates issues; it does not score them).
-- Follow **spec** or **implement** unless the user explicitly starts a new session for that step.
+- Follow any subsequent steps for this issue unless the user explicitly starts a new session for that step.
