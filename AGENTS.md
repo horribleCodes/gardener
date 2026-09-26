@@ -1,27 +1,30 @@
-# Installing the Gardener world MCP
+# Gardener
 
-Follow [README.md](./README.md). This file is the instruct path for an agent told to install Gardener.
+Gardener is a local stateful MCP implementing a virtual world.
 
-Requires Node.js 22 or newer. Stdio server; no HTTP port.
+## Architecture
 
-1. Clone this repository if it is not already the workspace.
-2. From the repo root:
+- domain rules are authoritative
+- services coordinate domain operations and persistence
+- store owns SQLite access
+- MCP layer adapts services to MCP
+- user-facing play instructions live under `user/`
+- development skills and prompts live under `.cursor/skills` and `.cursor/prompts`
+- finished MCP reviews live under `test/reviews`; playtest scripts under `test/play-scripts`
 
-```bash
-npm install
-npm run build
-mkdir -p data
-```
+## Never
 
-3. Do not run `npm start` or `node dist/server.js`. The MCP client starts the process on stdin/stdout.
-4. Point the client at `node` + `dist/server.js`:
-   - This repo as the Cursor workspace: `.cursor/mcp.json` is already committed. Reload MCP servers.
-   - Another Cursor project: add a `gardener` entry to `~/.cursor/mcp.json` or that project's `.cursor/mcp.json`, with `args` set to this clone's `dist/server.js`.
-   - Claude Desktop: the same `mcpServers` block in `claude_desktop_config.json`.
-5. One database file is one campaign (`./data/campaign.sqlite` by default).
+- put game rules in MCP handlers
+- modify SQLite through ad-hoc SQL in MCP handlers
+- treat user-facing skill instructions as development instructions
+- add a tool without corresponding tests
 
-`npm test` is for developing this repo and does not need a running server.
+## Runtime assets
 
-## Play a campaign
+Any runtime asset imported using `new URL(..., import.meta.url)` must be explicitly copied into `dist`.
 
-Before calling Gardener MCP tools for world setup or play, read [docs/agent/mcp_main.md](./docs/agent/mcp_main.md).
+`tsc` does not emit them. Today that means `src/store/schema.sql` and `src/tables/catalog.json`, copied by `scripts/copy-assets.mjs` during `npm run build`.
+
+## Tests and the server
+
+`npm test` does not need a running server. The MCP client owns the stdio process; do not start `npm start` or `node dist/server.js` yourself when wiring a client.

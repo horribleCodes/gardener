@@ -1,6 +1,6 @@
 # Agent instruction file (roadmap item 5)
 
-> Status: superseded by the shipped manuals under `docs/agent/` (`mcp_main.md`, `mcp_guide.md`, `mcp_setup.md`, `mcp_tools.md`). Historical design for a single current-surface card; does not change MCP tools or rules code.
+> Status: superseded by the shipped manuals under `user/skills/gdnr-player/references/` and `user/skills/gdnr-director/references/`. Historical design for a single current-surface card; does not change MCP tools or rules code.
 
 ## Purpose
 

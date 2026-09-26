@@ -12,7 +12,7 @@ description: >-
 
 Record how an agent uses the project MCP. Do the user's task. Do not edit server source, tool schemas, or skill files to fill a gap. Record the gap.
 
-Scratch notes live in `.docs/mcp-review-notes-<id>.md` (gitignored). Create the ID with `openssl rand -hex 8`. The finished review is `docs/reviews/YYYY-MM-DD-<review-theme>.md`, same directory and date pattern as [docs/reviews/2026-09-24-init-campaign.md](../../../docs/reviews/2026-09-24-init-campaign.md).
+Scratch notes live in `.docs/mcp-review-notes-<id>.md` (gitignored). Create the ID with `openssl rand -hex 8`. The finished review is `test/reviews/YYYY-MM-DD-<review-theme>.md`.
 
 ## Start
 
@@ -31,9 +31,9 @@ On the first turn of a review, if the scratch file is missing, create it with th
 
 Fill **Commit** with `git rev-parse --short HEAD` (a * at the end notes a dirty) and **Agent** with the model name. Write the name of the script in **Script** if it is provided, otherwise "None". Set **Theme** from the user's subject, as a short hyphenated slug. If they did not name one, pick one from the first request and correct it later if the subject shifts. If a script is provided, use the name of the script instead.
 
-## Scripts
+## Play scripts
 
-The user may provide a script file located in `./docs/scripts` at the start of the review. Script files contain a **Notes** section for additional instructions. The **Steps** section lists user messages to be simulated for this review.
+The user may provide a play script file located in `./test/play-scripts` at the start of the review. Play script files contain a **Notes** section for additional instructions. The **Steps** section lists user messages to be simulated for this review.
 Treat every list item as a user message. If you can't perform a step because a tool isn't available, an error occurs or a required previous step was skipped, skip it and make a note. When finishing all steps, the review is complete.
 
 ## During the review
@@ -55,8 +55,8 @@ Keep bullets short. The scratch file is the source of truth if the conversation 
 
 When the user asks to end the review, stop the task and write the finished file.
 
-1. Read the scratch file and [docs/reviews/2026-09-24-init-campaign.md](../../../docs/reviews/2026-09-24-init-campaign.md).
-2. Write `docs/reviews/YYYY-MM-DD-<review-theme>.md`. Use today's date. Use the scratch theme as the slug.
+1. Read the scratch file.
+2. Write `test/reviews/YYYY-MM-DD-<review-theme>.md`. Use today's date. Use the scratch theme as the slug.
 3. Compress the log into the sections below. Drop repeated discovery. Keep every user request, every MCP call in order, every failure, and every error.
 4. Delete `.docs/mcp-review-notes-<id>.md`.
 5. Reply with the path of the finished review.

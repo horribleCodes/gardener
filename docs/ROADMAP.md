@@ -6,7 +6,7 @@ The project is still in its early phases. Changes do not need to consider legacy
 
 Scores are 1–5. **Criticality** is how wrong the current server is if the item waits. **Complexity** is build size. **Impact** is how much play it unlocks. **Gates** names the later work that cannot start cleanly before it.
 
-The five items from `TODO.md` (4, 5, 19, 24, 25) are host and agent work. They sit beside the rules waves at the points below. The 24 Sep 2026 playtest (`docs/reviews/2026-09-24-init-campaign.md`) is the evidence for the instruction file and for keeping a direct interest-edge write when the tool list shrinks.
+The five items from `TODO.md` (4, 5, 19, 24, 25) are host and agent work. They sit beside the rules waves at the points below. The 24 Sep 2026 playtest (`test/reviews/2026-09-24-init-campaign.md`) is the evidence for the instruction file and for keeping a direct interest-edge write when the tool list shrinks.
 
 ## Names
 
