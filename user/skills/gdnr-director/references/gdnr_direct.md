@@ -1,7 +1,5 @@
 # Setting up a Gardener world
 
-Use this before generating or expanding a campaign. For month cadence and play, read [mcp_guide.md](./mcp_guide.md). For the tool index, read [mcp_tools.md](./mcp_tools.md).
-
 ## Prefer `seed_campaign`
 
 Pass an outline with places and factions. The call returns `campaignId` and `seed` only.
@@ -70,7 +68,7 @@ Not a free-text adjective like “mercantile.”
 
 ## When the user wants a chosen interest nature
 
-There is **no** post-seed tool that creates an interest edge with a chosen nature. Say so plainly.
+Today, there is **no** post-seed tool that creates an interest edge with a chosen nature. Say so plainly.
 
 Honest alternatives:
 

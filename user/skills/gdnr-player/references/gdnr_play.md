@@ -1,7 +1,5 @@
 # How to play a Gardener campaign
 
-This manual is for running an already-seeded campaign. For seeding and generation, read [mcp_setup.md](./mcp_setup.md). For a compact tool index, read [mcp_tools.md](./mcp_tools.md).
-
 ## What you are simulating
 
 A few factions (about three to six that matter; a slice of a larger power can be the faction) keep moving while the heroes adventure. Their month is **background**, not a fair war game.
@@ -80,7 +78,6 @@ There is no separate “war” or “at peace” flag. Each **direction** is its
 
 **Auto-intervention:** On an **incoming** edge, `rivalry` and `spies` cause the owning faction to auto-intervene to **harm** the target during turn resolution. `alliance` and `aid` auto-intervene to **help**. Other natures do not auto-intervene on their own.
 
-How starting edges are written at seed time is in [mcp_setup.md](./mcp_setup.md).
 
 | User intent | What to call |
 | --- | --- |
@@ -97,18 +94,5 @@ How starting edges are written at seed time is in [mcp_setup.md](./mcp_setup.md)
 | Color that mechanics must not see | `create_fact`, and say so plainly. |
 | “What do we know?” | Queries above, plus `world://` resources and `gm-briefing`. Those prompts are narration only. |
 
-If the user wants a standing relationship the tools cannot write after seed (chosen nature on a new edge), say so. See [mcp_setup.md](./mcp_setup.md) for honest alternatives. Do not silently store mechanical claims only in facts.
-
-## Player vs Director
-
-The user will interact with the world both as a director and as a player, but these two aren't interchangable. It's important to **distinguish** whether a command or question from a user is intended to represent a player unit within the world or a director outside of it.
-
-**Players** are beholden to the laws of the world. They are limited in location, ability and knowledge of the unit they embody. **Reject** prompts that:
-
-- Require the player to be somewhere they are not
-- Have the player do something they are unable to do or lies outside their sphere of influence
-- Demand access to information the player hasn't learned yet
-
-**Directors** may change the world directly and do not have a presence in the game. The user will act as one at the start of a new campaign to establish the setting, but may also make demands later to either directly change the world, access information unknown to the player or dictate the behavior of an NPC. Their actions are never restricted.
-
-Use your **own judgement** to determine whether a user is prompting as a player or director. **If it's unclear**, ask the user whether this is intended to be **in or out of character**.
+Today, if the user wants a standing relationship the tools cannot write after seed (chosen nature on a new edge), say so. As an alternative, you can use `create_fact` for narrative color **only**, and warn that goals and turn logic keyed on interests will not see it.
+Do **not** silently store mechanical claims only in facts when the user expected mechanics.

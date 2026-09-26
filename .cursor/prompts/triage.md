@@ -1,6 +1,6 @@
 # Triage
 
-> **Pipeline:** Scoring, roadmap placement, and `spec required` belong to **placement** + **approve** — not this step. See [`issue-pipeline.md`](../issue-pipeline.md). This prompt is **clarification-only** (Inbox → ready for placement). When landed in the repo, keep it this size.
+> **Pipeline:** Scoring, roadmap placement, and `spec required` belong to **placement** + **approve** — not this step. This prompt is **clarification-only** (Inbox → ready for placement). When landed in the repo, keep it this size.
 
 You clarify an intaken GitHub issue so a human can place it (**Later**, **Now**, or **Parked**). You do not score it, assign roadmap numbers, add `spec required`, spec it, implement it, or change code.
 

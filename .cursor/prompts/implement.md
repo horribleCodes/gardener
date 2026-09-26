@@ -11,7 +11,7 @@ If that URL is missing, stop and say the issue has no draft pull request. Do not
 1. Check out that pull request's branch.
 2. Read the spec and the plan on the branch. Follow the test-driven-development skill to implement the plan.
 3. If the plan cannot be implemented as written, stop and tell the user. Do not rewrite the spec in order to keep going.
-4. When the planned work is done and the tests that cover it pass, put a **Test plan** checklist in the pull request body. Keep the existing summary. Each row is a check the unit tests do not already cover. Name a file under `docs/scripts/` only when this change needs that playtest. Delete empty placeholder rows.
+4. When the planned work is done and the tests that cover it pass, put a **Test plan** checklist in the pull request body. Keep the existing summary. Each row is a check the unit tests do not already cover. Name a file under `test/play-scripts/` only when this change requires that playtest to test. Delete empty placeholder rows.
 5. Mark the pull request ready for review.
 6. Reply with the pull request URL and stop.
 
