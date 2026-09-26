@@ -12,7 +12,7 @@ This MCP constructs and runs one campaign world whose large-scale actors follow 
 
 Adding an element always accepts a full description. Any field the caller omits is filled from the generator catalog, unless the caller asked for a blank that must stay unnamed.
 
-Ruin layout is out of scope. The challenge kind `clear_danger` exists as an adventure card (what goes wrong around a dangerous place). The server never generates a ruin's original purpose, hazards, rewards, inhabitants, or rooms.
+The challenge kind `clear_danger` exists as an adventure card (what goes wrong around a dangerous place). The server never generates a ruin's original purpose, hazards, rewards, inhabitants, or rooms.
 
 The generator catalog is original short prompts with the same die sizes and situation categories as the procedures. It is not a transcription of the rulebook. Callers may replace any table.
 

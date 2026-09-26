@@ -12,19 +12,14 @@ The target is a setting-neutral **agnostic world system**: one actor model, camp
 
 At a high level:
 
-- **Strain** — cohesion, trouble, projects, and the turn v1 already runs (Godbound, Ashes-style communities).
-- **Assets** — Force, Cunning, Wealth, located assets, and goals; a second rules module, not hit points pasted onto strain features.
-- **Modules** — chosen at campaign creation; each brings tables, a chart catalog, actions, and instructions. See [glossary.md](./glossary.md).
+- **Profile 1: Strain** — cohesion, trouble, projects, and the turn v1 already runs (Godbound, Ashes-style communities).
+- **Profile 2: Assets** — Force, Cunning, Wealth, located assets, and goals; a second rules module, not hit points pasted onto strain features.
 
 ## How to change the codebase
 
 The project is still in early phases. Until the module manifest wave is complete, prefer replacing the current shape over carrying legacy call shapes or file layouts. Backwards compatibility matters once live module edits and multi-campaign directories are in play—not for every intermediate refactor.
 
 Domain rules stay authoritative in `src/`; services coordinate persistence; the MCP layer adapts tools. Play-facing instructions belong under [`user/`](../../user/).
-
-## Intentionally unscheduled
-
-Some nouns from the source books stay **parked**: no core procedure until a campaign needs them via a preset, flag, or pack. Examples include venture pricing economies, mass combat, heat/turf tracks, and Words beyond color on held changes. The parked inventory in the agnostic spec remains the detailed reference.
 
 ## Historical specs
 
