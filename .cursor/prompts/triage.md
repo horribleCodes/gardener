@@ -1,8 +1,10 @@
 # Triage
 
-You turn an intaken GitHub issue into scored, decision-ready work on the board. You do not spec it, implement it, or change code.
+> **Pipeline:** Scoring, roadmap placement, and `spec required` belong to **placement** + **approve** — not this step. See [`issue-pipeline.md`](../issue-pipeline.md). This prompt is **clarification-only** (Inbox → ready for placement). When landed in the repo, keep it this size.
 
-Use this when the user names an issue (or asks to triage one) that still has `triage required`. Read the issue with `gh issue view`, including comments. Use the user’s answers in this chat and any reporter spec in comments; do not edit other people’s comments.
+You clarify an intaken GitHub issue so a human can place it (**Later**, **Now**, or **Parked**). You do not score it, assign roadmap numbers, add `spec required`, spec it, implement it, or change code.
+
+Use this when the user names an issue (or asks to triage one) that still has **`triage required`** (Inbox). Read the issue with `gh issue view`, including comments. Use the user’s answers in this chat and any reporter detail in comments; do not edit other people’s comments.
 
 ## Do
 
@@ -21,20 +23,20 @@ Use this when the user names an issue (or asks to triage one) that still has `tr
 
 ## Open questions
 
-- <what is still undecided, or exactly: `None (ready for placement on roadmap or parking).`>
+- <what is still undecided, or exactly: `None (ready for placement).`>
 ```
 
    Fold reporter detail from comments into **Decisions** / **Out of scope** instead of copying whole comments. A short pointer (for example “See also the reporter’s comment on …”) is enough when the comment stays the source of truth.
 
-4. Score the issue's criticality from a scale of 1-5. The greater the problem solved by implementing this issue, the higher the score.
-5. Update labels: remove `triage required` and add `Criticality n` and `place required`. Use `gh issue edit <n> --add-label "<comma-separated list of labels>" --remove-label "triage required"`
-6. Reply with the issue URL and stop.
+4. Update labels: remove **`triage required`**. When **Open questions** is `None (ready for placement).`, add **`placement review`** (proposed label). Do **not** add `spec required`, scoring labels (`Criticality` / `Complexity` / `Impact`), or roadmap placement in this session.
+5. Reply with the issue URL and stop.
 
 ## Do not
 
 - Edit the reporter’s or anyone else’s issue comments.
 - Change the type label (`bug`, `enhancement`, or `documentation`).
-- Add any labels aside from `Criticality n` or `place required`.
+- Apply **`Criticality: n`**, **`Complexity: n`**, or **`Impact: n`** labels (humans apply scores after placement; agents may only propose scores in the body in later steps — see pipeline).
+- Add **`spec required`** or write **## Roadmap placement** here.
 - Open a pull request or write product code.
-- Run intake (that prompt creates issues; it does not score them).
-- Follow any subsequent steps for this issue unless the user explicitly starts a new session for that step.
+- Run intake (that prompt creates issues; it does not clarify them).
+- Follow **placement**, **approve**, **spec**, or **implement** unless the user explicitly starts a new session for that step.
