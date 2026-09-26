@@ -7,8 +7,8 @@ Guide for agents that install or play through the Gardener MCP. A guide for user
 | Doc | When |
 | --- | --- |
 | [docs/install.md](./docs/install.md) | Wire the MCP client to this clone |
-| [skills/gdnr_director/SKILL.md](./skills/gdnr_director/SKILL.md) | Seed or change the world from outside play |
-| [skills/gdnr_player/SKILL.md](./skills/gdnr_player/SKILL.md) | Run an already-seeded campaign |
+| [skills/gdnr-director/SKILL.md](./skills/gdnr-director/SKILL.md) | Seed or change the world from outside play |
+| [skills/gdnr-player/SKILL.md](./skills/gdnr-player/SKILL.md) | Run an already-seeded campaign |
 
 ## Player vs Director
 

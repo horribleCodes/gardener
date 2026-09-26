@@ -16,4 +16,4 @@ Gardener is a local MCP that simulates a world for TRPG or exploration at a broa
 
 ## Manuals
 
-Read and follow [gdnr_play.md](./references/gdnr_play.md). That file explains play procedure.
+Read and follow [gdnr-play.md](./references/gdnr-play.md). That file explains play procedure.
