@@ -24,4 +24,4 @@ mkdir -p data
 
 ## Play a campaign
 
-Before calling Gardener MCP tools for world setup or play, read [docs/agent/current-mcp-tools.md](./docs/agent/current-mcp-tools.md). Wars, trade ties, and spy rings belong on **interest edges**, not in `create_fact` prose alone—the instruction file documents what each tool actually writes today.
+Before calling Gardener MCP tools for world setup or play, read [docs/agent/mcp_main.md](./docs/agent/mcp_main.md).

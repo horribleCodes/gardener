@@ -1,6 +1,6 @@
 # Agent instruction file (roadmap item 5)
 
-> Status: design for a host/agent deliverable. Does not change MCP tools or rules code. Replaced later by module instructions (roadmap item 17) and per-cluster MCP prompts (item 26).
+> Status: superseded by the shipped manuals under `docs/agent/` (`mcp_main.md`, `mcp_guide.md`, `mcp_setup.md`, `mcp_tools.md`). Historical design for a single current-surface card; does not change MCP tools or rules code.
 
 ## Purpose
 

@@ -19,7 +19,7 @@ One SQLite file is one campaign. The default path is `./data/campaign.sqlite` (c
 
 ### Play
 
-When running or GMing a campaign through the MCP, read [docs/agent/current-mcp-tools.md](./docs/agent/current-mcp-tools.md) first. It explains interest natures, which tools write edges, and common setup mistakes (see the [24 Sep 2026 playtest](./docs/reviews/2026-09-24-init-campaign.md)).
+When running or GMing a campaign through the MCP, read [docs/agent/mcp_main.md](./docs/agent/mcp_main.md) first. It links the setup, play, and tool manuals (interest natures, which tools write edges, and month cadence).
 
 ### Cursor
 
