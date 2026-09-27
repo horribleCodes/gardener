@@ -44,4 +44,4 @@ Use the same `mcpServers` block in `claude_desktop_config.json` (macOS: `~/Libra
 
 ## Work tracking
 
-Live placement, waves, and scores (**Priority**, **Complexity**, **Impact**, **Wave / horizon**) are on [Gardener Project](https://github.com/users/horribleCodes/projects/2). Repo issues carry type and pipeline labels; they are not the board.
+Live placement and scores are on [Gardener Project](https://github.com/users/horribleCodes/projects/2): **Status** (Inbox, Ready, In progress, In review, Done, Parked), **Priority** (P0–P2), **Size** (1–5), **Impact** (1–5), and **Wave** (free-text string, not a Project option list). Repo issues carry type and pipeline labels; they are not the board.

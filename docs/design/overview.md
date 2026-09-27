@@ -1,6 +1,6 @@
 # Design overview
 
-Living design framing for Gardener. Work tracking and sequencing live in the repository’s GitHub Project and issues—not in a markdown roadmap.
+Living design framing for Gardener. Work tracking and sequencing live on [Gardener Project](https://github.com/users/horribleCodes/projects/2) and in issues—not in a markdown roadmap. Board fields: **Status** (Inbox, Ready, In progress, In review, Done, Parked), **Priority** (P0–P2), **Size** (1–5), **Impact** (1–5), and **Wave** (free-text string; not a fixed Project option list).
 
 ## What runs today
 
