@@ -1,10 +1,12 @@
 # Triage
 
-> **Pipeline:** Scoring, roadmap placement, and `spec required` belong to **placement** + **approve** — not this step. This prompt is **clarification-only** (Inbox → ready for placement). When landed in the repo, keep it this size.
+> **Pipeline:** **Priority**, **Complexity**, **Impact**, and **Wave / horizon** on [Gardener Project](https://github.com/users/horribleCodes/projects/2) are the only live scores and placement. Repo labels `Criticality: n`, `Complexity: n`, and `Impact: n` are retired — do not apply them. Agents do not set Project fields (Cloud tokens cannot). Scoring, board placement, and `spec required` belong to **placement** + **approve** — not this step. This prompt is **clarification-only** (Inbox → ready for placement). When landed in the repo, keep it this size.
 
-You clarify an intaken GitHub issue so a human can place it (**Later**, **Now**, or **Parked**). You do not score it, assign roadmap numbers, add `spec required`, spec it, implement it, or change code.
+You clarify an intaken GitHub issue so a human can place it on the Project (**Later**, **Now**, **Parked**, and so on). You do not score it, move Project cards, assign roadmap numbers, add `spec required`, spec it, implement it, or change code.
 
 Use this when the user names an issue (or asks to triage one) that still has **`triage required`** (Inbox). Read the issue with `gh issue view`, including comments. Use the user’s answers in this chat and any reporter detail in comments; do not edit other people’s comments.
+
+If the work is still a **draft Project item**, convert it to a real issue first, then run this procedure on that issue.
 
 ## Do
 
@@ -28,15 +30,15 @@ Use this when the user names an issue (or asks to triage one) that still has **`
 
    Fold reporter detail from comments into **Decisions** / **Out of scope** instead of copying whole comments. A short pointer (for example “See also the reporter’s comment on …”) is enough when the comment stays the source of truth.
 
-4. Update labels: remove **`triage required`**. When **Open questions** is `None (ready for placement).`, add **`placement review`** (proposed label). Do **not** add `spec required`, scoring labels (`Criticality` / `Complexity` / `Impact`), or roadmap placement in this session.
+4. Update labels: remove **`triage required`**. When **Open questions** is `None (ready for placement).`, add **`placement review`** (proposed label). Do **not** add `spec required`, retired scoring labels, or Project placement in this session.
 5. Reply with the issue URL and stop.
 
 ## Do not
 
 - Edit the reporter’s or anyone else’s issue comments.
 - Change the type label (`bug`, `enhancement`, or `documentation`).
-- Apply **`Criticality: n`**, **`Complexity: n`**, or **`Impact: n`** labels (humans apply scores after placement; agents may only propose scores in the body in later steps — see pipeline).
-- Add **`spec required`** or write **## Roadmap placement** here.
+- Apply **`Criticality: n`**, **`Complexity: n`**, or **`Impact: n`** labels, or set **Priority**, **Complexity**, **Impact**, or **Wave / horizon** on Gardener Project.
+- Add **`spec required`** or write **## Project placement** here.
 - Open a pull request or write product code.
-- Run intake (that prompt creates issues; it does not clarify them).
+- Run intake (that prompt creates issues or directs draft Project items; it does not clarify them).
 - Follow **placement**, **approve**, **spec**, or **implement** unless the user explicitly starts a new session for that step.

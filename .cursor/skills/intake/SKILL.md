@@ -2,9 +2,10 @@
 name: intake
 description: >-
   Turns a reported bug or a proposed feature into a GitHub issue with an
-  overview and no design decisions. Use when the user reports a bug, proposes
-  a feature, or asks to file an issue. Do not use when they ask to fix,
-  implement, or spec the change in the current chat.
+  overview and no design decisions, or directs enhancements to a draft item
+  on Gardener Project when no issue was requested. Use when the user reports
+  a bug, proposes a feature, or asks to file an issue. Do not use when they
+  ask to fix, implement, or spec the change in the current chat.
 ---
 
 # Intake

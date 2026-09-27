@@ -18,5 +18,5 @@ If that URL is missing, stop and say the issue has no draft pull request. Do not
 ## Do not
 
 - Merge, approve, or enable auto-merge.
-- Edit `docs/ROADMAP.md`.
+- Set **Priority**, **Complexity**, **Impact**, or **Wave / horizon** on Gardener Project or move Project cards.
 - Add a test, fixture, or source change whose only purpose is to satisfy a checklist row. The reviewer runs the checklist as the branch stands.

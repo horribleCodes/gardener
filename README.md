@@ -42,6 +42,6 @@ To use Gardener from another Cursor project, add this to `~/.cursor/mcp.json` or
 
 Use the same `mcpServers` block in `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows: `%APPDATA%\Claude\claude_desktop_config.json`).
 
-## Roadmap
+## Work tracking
 
-See [docs/ROADMAP.md](./docs/ROADMAP.md).
+Live placement, waves, and scores (**Priority**, **Complexity**, **Impact**, **Wave / horizon**) are on [Gardener Project](https://github.com/users/horribleCodes/projects/2). Repo issues carry type and pipeline labels; they are not the board.
