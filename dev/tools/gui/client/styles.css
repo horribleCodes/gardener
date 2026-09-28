@@ -202,6 +202,36 @@ textarea.code {
   font-size: 0.85rem;
 }
 
+.schema-field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.schema-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+
+.schema-name {
+  font-family: var(--mono);
+}
+
+.schema-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.schema-nest {
+  display: grid;
+  gap: 0.35rem;
+  margin-left: 0.35rem;
+  padding-left: 0.65rem;
+  border-left: 1px solid var(--border);
+}
+
 .error {
   color: var(--danger);
 }

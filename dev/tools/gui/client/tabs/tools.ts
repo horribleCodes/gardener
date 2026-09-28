@@ -1,9 +1,17 @@
 import { api } from "../api";
 
 type JsonSchema = {
-  type?: string;
-  properties?: Record<string, JsonSchema & { description?: string; enum?: unknown[] }>;
+  type?: string | string[];
+  description?: string;
+  enum?: unknown[];
+  properties?: Record<string, JsonSchema>;
   required?: string[];
+  items?: JsonSchema | JsonSchema[];
+  additionalProperties?: boolean | JsonSchema;
+  minimum?: number;
+  maximum?: number;
+  anyOf?: JsonSchema[];
+  oneOf?: JsonSchema[];
 };
 
 type Tool = {
@@ -40,41 +48,131 @@ function collectArgs(schema: JsonSchema | undefined, jsonText: string, form: HTM
   return args;
 }
 
+function schemaItem(schema: JsonSchema): JsonSchema | undefined {
+  if (!schema.items || Array.isArray(schema.items)) return undefined;
+  return schema.items;
+}
+
+function recordValue(schema: JsonSchema): JsonSchema | undefined {
+  if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
+    return schema.additionalProperties;
+  }
+  return undefined;
+}
+
+function typeLabel(schema: JsonSchema): string {
+  if (schema.enum?.length) return schema.enum.map((value) => String(value)).join(" | ");
+  const union = schema.anyOf ?? schema.oneOf;
+  if (union?.length) return union.map(typeLabel).join(" | ");
+  if (Array.isArray(schema.type)) return schema.type.join(" | ");
+  if (schema.type === "array") {
+    const item = schemaItem(schema);
+    return item ? `array of ${typeLabel(item)}` : "array";
+  }
+  if (schema.type === "integer" || schema.type === "number") {
+    if (typeof schema.minimum === "number" && typeof schema.maximum === "number") {
+      return `${schema.type} ${schema.minimum}–${schema.maximum}`;
+    }
+    if (typeof schema.minimum === "number") return `${schema.type} ≥ ${schema.minimum}`;
+    if (typeof schema.maximum === "number") return `${schema.type} ≤ ${schema.maximum}`;
+    return schema.type;
+  }
+  const value = recordValue(schema);
+  if (schema.type === "object" && !schema.properties && value) return `record of ${typeLabel(value)}`;
+  return schema.type ?? "value";
+}
+
+function hasNested(schema: JsonSchema): boolean {
+  if (schema.properties && Object.keys(schema.properties).length > 0) return true;
+  const value = recordValue(schema);
+  if (value && hasNested(value)) return true;
+  const item = schemaItem(schema);
+  return Boolean(item && hasNested(item));
+}
+
+function isFillable(schema: JsonSchema): boolean {
+  if (hasNested(schema)) return false;
+  if (schema.enum) return true;
+  return schema.type === "boolean" || schema.type === "number" || schema.type === "integer" || schema.type === "string";
+}
+
+function renderInput(name: string, schema: JsonSchema): HTMLElement {
+  if (schema.enum) {
+    const select = document.createElement("select");
+    select.dataset.arg = name;
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "";
+    select.append(blank);
+    for (const option of schema.enum) {
+      const opt = document.createElement("option");
+      opt.value = String(option);
+      opt.textContent = String(option);
+      select.append(opt);
+    }
+    return select;
+  }
+  const input = document.createElement("input");
+  input.dataset.arg = name;
+  if (schema.type === "boolean") input.type = "checkbox";
+  else if (schema.type === "number" || schema.type === "integer") input.type = "number";
+  else input.type = "text";
+  return input;
+}
+
+function renderField(name: string, schema: JsonSchema, required: boolean, editable: boolean): HTMLElement {
+  const field = document.createElement("div");
+  field.className = "schema-field";
+
+  const head = document.createElement("div");
+  head.className = "schema-head";
+  const nameEl = document.createElement("span");
+  nameEl.className = "schema-name";
+  nameEl.textContent = required ? `${name}*` : name;
+  const meta = document.createElement("span");
+  meta.className = "schema-meta";
+  meta.textContent = schema.description ? `${typeLabel(schema)} — ${schema.description}` : typeLabel(schema);
+  head.append(nameEl, meta);
+  if (editable && !isFillable(schema)) {
+    const note = document.createElement("span");
+    note.className = "schema-meta";
+    note.textContent = "Set this in the JSON arguments.";
+    head.append(note);
+  }
+  field.append(head);
+
+  if (editable && isFillable(schema)) field.append(renderInput(name, schema));
+
+  const nest = document.createElement("div");
+  nest.className = "schema-nest";
+  if (schema.properties && hasNested(schema)) {
+    appendSchemaFields(schema, nest);
+  } else {
+    const item = schemaItem(schema);
+    const value = recordValue(schema);
+    if (item && hasNested(item)) appendSchemaFields(item, nest);
+    else if (value && hasNested(value)) nest.append(renderField("(each value)", value, false, false));
+  }
+  if (nest.childElementCount > 0) field.append(nest);
+  return field;
+}
+
+function appendSchemaFields(schema: JsonSchema, host: HTMLElement): void {
+  const required = new Set(schema.required ?? []);
+  for (const [key, child] of Object.entries(schema.properties ?? {})) {
+    host.append(renderField(key, child, required.has(key), false));
+  }
+  const value = recordValue(schema);
+  if (value && hasNested(value)) host.append(renderField("(each value)", value, false, false));
+}
+
 function renderForm(schema: JsonSchema | undefined, host: HTMLElement) {
   host.replaceChildren();
   const props = schema?.properties;
   if (!props) return;
+  const required = new Set(schema.required ?? []);
   for (const [key, spec] of Object.entries(props)) {
-    const label = document.createElement("label");
-    label.textContent = `${key}${spec.description ? ` — ${spec.description}` : ""}`;
-    let field: HTMLElement;
-    if (spec.enum) {
-      const select = document.createElement("select");
-      select.dataset.arg = key;
-      const blank = document.createElement("option");
-      blank.value = "";
-      blank.textContent = "";
-      select.append(blank);
-      for (const option of spec.enum) {
-        const opt = document.createElement("option");
-        opt.value = String(option);
-        opt.textContent = String(option);
-        select.append(opt);
-      }
-      field = select;
-    } else if (spec.type === "boolean") {
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.dataset.arg = key;
-      field = input;
-    } else {
-      const input = document.createElement("input");
-      input.type = spec.type === "number" || spec.type === "integer" ? "number" : "text";
-      input.dataset.arg = key;
-      field = input;
-    }
-    label.append(field);
-    host.append(label);
+    host.append(renderField(key, spec, required.has(key), true));
   }
 }
 
