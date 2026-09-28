@@ -1,16 +1,19 @@
 # Intake
 
-You record a bug or a feature proposal. You do not design it, spec it, or change code.
+You record a bug, a feature proposal, or a documentation gap. You do not design it, spec it, or change code.
 
 Use this when the user is reporting a bug, proposing a feature, or asking for an issue. If they ask to fix, implement, or spec the change in this chat, stop and do not file an issue or add a Project item.
 
-**Default for enhancements:** new feature ideas belong on [Gardener Project](https://github.com/users/horribleCodes/projects/2) as a **draft item**, not as a GitHub issue, unless the user asks for a new issue or shortlist placement. Tell them to add a draft on the Project (or do so only when your token can). **Bugs** and **documentation** fixes still use the GitHub issue flow below unless the user chooses the Project.
+**Where it goes, by type:**
+
+- **`bug`:** a GitHub issue, unless the user asks for a draft item on the Project instead.
+- **`enhancement`** and **`documentation`:** a **draft item** on [Gardener Project](https://github.com/users/horribleCodes/projects/2), unless the user asks for a GitHub issue or for shortlist placement.
 
 ## Do
 
-1. Restate the report in one sentence. If it mixes several independent problems, say so and handle the problem they care about first.
-2. For the **GitHub issue** path: search open issues with `gh issue list --state open --limit 50` so a blocker can be a link to an existing issue.
-3. Create the issue with `gh issue create -l "<type>,triage required"`, whereas `<type>` is either `documentation`, `enhancement` or `bug`. Title is a short statement of the problem. Body is only this:
+1. Restate the report in one sentence and name its type (`bug`, `enhancement`, or `documentation`). If it mixes several independent problems, say so and handle the problem they care about first.
+2. Search open issues with `gh issue list --state open --limit 50` so a blocker can be a link to an existing issue.
+3. Write a short title that states the problem, and a body that is only this:
 
 ```markdown
 ## Problem
@@ -30,7 +33,10 @@ Use this when the user is reporting a bug, proposing a feature, or asking for an
 - <a decision this issue does not make, or "None">
 ```
 
-4. Reply with the issue URL (or confirmation that work belongs on the Project as a draft) and stop.
+4. File it on the path chosen above:
+   - **GitHub issue:** `gh issue create -l "<type>,triage required"` with that title and body.
+   - **Project draft:** `gh project item-create 2 --owner horribleCodes --title "<title>" --body "<body>"` when your token allows it. If it does not, create an issue instead.
+5. Reply with the issue URL, the draft item, or the title and body you handed over, and stop.
 
 ## Do not
 
@@ -40,4 +46,4 @@ Use this when the user is reporting a bug, proposing a feature, or asking for an
 - Assign any other labels to the new issue.
 - Apply **`Criticality: n`**, **`Complexity: n`**, or **`Impact: n`** labels. **Priority**, **Complexity**, and **Impact** live on Gardener Project, not on issues.
 - Set Gardener Project fields or move cards unless the user explicitly asks and your token allows it.
-- Look for duplicate issues.
+- Close, merge, or mark issues as duplicates. The search in step 2 is only for blocker links.

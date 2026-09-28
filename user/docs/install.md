@@ -16,7 +16,7 @@ mkdir -p data
    - This repo as the Cursor workspace: `.cursor/mcp.json` is already committed. Reload MCP servers.
    - Another Cursor project: add a `gardener` entry to `~/.cursor/mcp.json` or that project's `.cursor/mcp.json`, with `args` set to this clone's `dist/server.js`.
    - Claude Desktop: the same `mcpServers` block in `claude_desktop_config.json`.
-5. One database file is one campaign (`./data/campaign.sqlite` by default).
+5. The server opens `./data/campaign.sqlite` by default, relative to the directory the MCP client launches it from. From another project, set `GARDENER_WORLD_DB` in the client entry's `env` to an absolute path, and make sure its folder exists. One file can hold several campaigns; keep each `campaignId`, because no tool lists them.
 
 ## Play a campaign
 
