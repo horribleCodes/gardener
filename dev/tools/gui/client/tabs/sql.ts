@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { submitOnEnter } from "../submit-key";
 
 export function mountSqlTab(container: HTMLElement): void {
   container.innerHTML = `
@@ -54,7 +55,9 @@ export function mountSqlTab(container: HTMLElement): void {
     tableHost.classList.toggle("hidden", showJson);
   });
 
-  container.querySelector("#sql-run")!.addEventListener("click", async () => {
+  const run = container.querySelector("#sql-run") as HTMLButtonElement;
+  submitOnEnter(container.querySelector(".detail")!, () => run.click());
+  run.addEventListener("click", async () => {
     try {
       const body = await api<{ columns?: string[]; rows?: unknown[][]; text?: string }>("/api/sql", {
         method: "POST",

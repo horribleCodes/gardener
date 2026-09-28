@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { submitOnEnter } from "../submit-key";
 
 type JsonSchema = {
   type?: string | string[];
@@ -229,7 +230,9 @@ export async function mountToolsTab(container: HTMLElement): Promise<void> {
 
   search.addEventListener("input", renderList);
 
-  container.querySelector("#tool-call")!.addEventListener("click", async () => {
+  const call = container.querySelector("#tool-call") as HTMLButtonElement;
+  submitOnEnter(container.querySelector(".detail")!, () => call.click());
+  call.addEventListener("click", async () => {
     if (!selected) return;
     try {
       const args = collectArgs(selected.inputSchema, jsonArea.value, fields);

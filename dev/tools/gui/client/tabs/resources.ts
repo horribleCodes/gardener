@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { submitOnEnter } from "../submit-key";
 
 type Template = { uriTemplate: string; name?: string; description?: string };
 
@@ -61,7 +62,9 @@ export async function mountResourcesTab(container: HTMLElement): Promise<void> {
     desc.classList.add("error");
   }
 
-  container.querySelector("#res-read")!.addEventListener("click", async () => {
+  const read = container.querySelector("#res-read") as HTMLButtonElement;
+  submitOnEnter(container.querySelector(".detail")!, () => read.click());
+  read.addEventListener("click", async () => {
     if (!selected) return;
     const params: Record<string, string> = {};
     for (const input of fields.querySelectorAll<HTMLInputElement>("[data-param]")) {

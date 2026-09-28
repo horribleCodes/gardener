@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { submitOnEnter } from "../submit-key";
 
 type Prompt = {
   name: string;
@@ -51,7 +52,9 @@ export async function mountPromptsTab(container: HTMLElement): Promise<void> {
     desc.classList.add("error");
   }
 
-  container.querySelector("#prompt-run")!.addEventListener("click", async () => {
+  const run = container.querySelector("#prompt-run") as HTMLButtonElement;
+  submitOnEnter(container.querySelector(".detail")!, () => run.click());
+  run.addEventListener("click", async () => {
     if (!selected) return;
     const args: Record<string, string> = {};
     for (const input of fields.querySelectorAll<HTMLInputElement>("[data-arg]")) {
