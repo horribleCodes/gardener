@@ -6,9 +6,9 @@ Gardener is a local stateful MCP implementing a virtual world.
 
 - domain rules are authoritative
 - services coordinate domain operations and persistence
-- store opens, migrates, and locks the SQLite file; services and queries run SQL through that connection
+- store owns SQLite access
 - MCP layer adapts services to MCP
-- user-facing play instructions live under `user/`; files there must not link or cite anything outside `user/`, because skills ship without the rest of the repo (repeat the information instead)
+- user-facing play instructions live under `user/`
 - development skills and prompts live under `.cursor/skills` and `.cursor/prompts`
 - finished MCP reviews live under `test/reviews`; playtest scripts under `test/play-scripts`
 - living design framing and naming live under `docs/design/` (for example `overview.md`, `glossary.md`)
@@ -32,4 +32,4 @@ Any runtime asset imported using `new URL(..., import.meta.url)` must be explici
 
 ## Tests and the server
 
-`npm test` does not need a running server or a `./data` folder. Tests open in-memory or temp-directory databases; the one `npm start` smoke test sets `GARDENER_WORLD_DB` to a temp path, never the default `./data/campaign.sqlite`. The MCP client owns the stdio process; do not start `npm start` or `node dist/server.js` yourself when wiring a client.
+`npm test` does not need a running server. The MCP client owns the stdio process; do not start `npm start` or `node dist/server.js` yourself when wiring a client.

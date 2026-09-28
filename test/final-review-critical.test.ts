@@ -11,10 +11,8 @@ import { parseUnitPlan } from "../src/services/unitPlan.js";
 import { RuleError } from "../src/domain/types.js";
 
 test("npm start build typecheck path", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "gb-start-"));
   const proc = spawn("npm", ["start"], {
     cwd: join(dirname(fileURLToPath(import.meta.url)), ".."),
-    env: { ...process.env, GARDENER_WORLD_DB: join(dir, "campaign.sqlite") },
     stdio: ["pipe", "pipe", "pipe"],
   });
   await new Promise<void>((resolve, reject) => {

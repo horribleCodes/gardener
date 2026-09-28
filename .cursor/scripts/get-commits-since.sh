@@ -1,10 +1,11 @@
 #!/bin/bash
 
-git fetch origin main > /dev/null 2>&1
+git fetch origin > /dev/null 2>&1
+git checkout origin/main > /dev/null 2>&1
 
 SHA=$1
 
-git -c color.ui=never log --no-merges --reverse --format='%x1e%h%x1f%s%x1f%B' "$SHA..origin/main" | python3 -c '
+git -c color.ui=never log --no-merges --reverse --format='%x1e%h%x1f%s%x1f%B' "$SHA..main" | python3 -c '
 import sys
 begin = "<!-- CURSOR_AGENT_PR_BODY_BEGIN -->"
 end = "<!-- CURSOR_AGENT_PR_BODY_END -->"
