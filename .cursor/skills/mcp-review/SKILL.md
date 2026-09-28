@@ -34,7 +34,7 @@ Fill **Commit** with `git rev-parse --short HEAD` (a * at the end notes a dirty)
 ## Play scripts
 
 The user may provide a play script file located in `./test/play-scripts` at the start of the review. Play script files contain a **Notes** section for additional instructions. The **Steps** section lists user messages to be simulated for this review.
-Treat every list item as a user message. If you can't perform a step because a tool isn't available, an error occurs or a required previous step was skipped, skip it and make a note. When finishing all steps, the review is complete.
+Treat every top-level list item as a user message. Nested bullets under a step belong to that step and are sent with it, not as separate messages. If you can't perform a step because a tool isn't available, an error occurs or a required previous step was skipped, skip it and make a note. When finishing all steps, the review is complete.
 
 ## During the review
 
@@ -68,7 +68,7 @@ When the user asks to end the review, stop the task and write the finished file.
 
 - **Commit:** <short hash>
 - **Agent:** <model name>
-- **Script:** (<script name>)[<rel. path to script>]
+- **Script:** [<script name>](<rel. path to script>)
 
 ## User requests
 

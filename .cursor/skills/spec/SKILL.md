@@ -9,4 +9,4 @@ disable-model-invocation: true
 
 # Spec
 
-Read and follow `.cursor/prompts/spec.md`. That file is the procedure.
+Read and follow `.cursor/prompts/spec.md`. That file is the procedure. The draft PR body must link the source issue (`Closes` / `Fixes`, or `Related to` / `Implements`).

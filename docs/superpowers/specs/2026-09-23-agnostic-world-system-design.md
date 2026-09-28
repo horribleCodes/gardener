@@ -1,6 +1,7 @@
 # Agnostic world system
 
 > Status: design, not yet the running server. The current engine implements the Godbound strain profile in [2026-09-21-godbound-faction-mcp-design.md](2026-09-21-godbound-faction-mcp-design.md). This document is the setting-neutral model those rules fold into. It does not transcribe the source books. Numbers below are the rules this system uses.
+> This document references source books used for this design that aren't present in the repository due to copyrighted material.
 
 ## Purpose
 
@@ -10,12 +11,12 @@ The system has to hold every source that was read, without becoming every source
 
 | File | What it contributed |
 | --- | --- |
-| `.docs/GB_Trim.pdf` | *Godbound*, book pp. 103–111 and 126–141. Courts, world-changes, cults, the monthly faction turn. Pages 112–125 are absent. This is the v1 engine. |
-| `.docs/GB2_Trim.pdf` | *Sixteen Sorrows*, pp. 4–37. Sixteen community calamities as tags, not a second turn. |
-| `.docs/SWN_Trim.pdf` | *Stars Without Number* world tags plus the faction, asset, and goal chapter. |
-| `.docs/WWN_Trim.pdf` | *Worlds Without Number* pp. 124–172 (nations through courts) and pp. 323–343 (factions, background actors, major projects). |
-| `.docs/CWN_Trim.pdf` | *Cities Without Number* pp. 106–131 and 218–219. Sandbox zoom and org sketches. No faction turn in this excerpt. |
-| `.docs/AWN_Trim.pdf` | *Ashes Without Number* pp. 104–135. The same monthly turn as Godbound, aimed at communities, with cheaper large-scale projects and a single opponent. |
+| *Godbound* | Courts, world-changes, cults, the monthly faction turn. Pages 112–125 are absent. This is the v1 engine. |
+| *Sixteen Sorrows* | Community calamities as tags, not a second turn. |
+| *Stars Without Number* | world tags plus the faction, asset, and goal chapter. |
+| *Worlds Without Number* | Nations through courts, factions, background actors and major projects |
+| *Cities Without Number* | Sandbox zoom and org sketches. No faction turn in this excerpt. |
+| *Ashes Without Number* | The same monthly turn as Godbound, aimed at communities, with cheaper large-scale projects and a single opponent. |
 
 ## Shape
 

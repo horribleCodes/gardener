@@ -1,7 +1,7 @@
 # Gardener
 
 A local MCP for tracking and running a world for an RPG setting.
-It stores one campaign world, fills omitted court and faction fields from `src/tables/catalog.json`, runs faction turns, and quotes Influence and Dominion.
+It stores campaign worlds in SQLite, fills omitted court and faction fields from `src/tables/catalog.json`, runs faction turns, and quotes Influence and Dominion.
 
 Stdio server named `gardener`. There is no HTTP port. Requires Node.js 22 or newer.
 
@@ -15,7 +15,7 @@ npm run build
 mkdir -p data
 ```
 
-One SQLite file is one campaign. The default path is `./data/campaign.sqlite` (created on first use). Set `GARDENER_WORLD_DB` only to use a different file.
+The server opens one SQLite file, `./data/campaign.sqlite` by default (created on first use; the folder must exist). A relative path resolves against the directory the MCP client launches the server from, so from another project set `GARDENER_WORLD_DB` to an absolute path. One file can hold several campaigns.
 
 ### Play
 
@@ -42,6 +42,6 @@ To use Gardener from another Cursor project, add this to `~/.cursor/mcp.json` or
 
 Use the same `mcpServers` block in `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows: `%APPDATA%\Claude\claude_desktop_config.json`).
 
-## Roadmap
+## Work tracking
 
-See [docs/ROADMAP.md](./docs/ROADMAP.md).
+Live placement and scores are on [Gardener Project](https://github.com/users/horribleCodes/projects/2): **Status** (Inbox, Ready, In progress, In review, Done, Parked), **Priority** (P0–P2), **Size** (1–5), **Impact** (1–5), and **Wave** (free-text string, not a Project option list). Repo issues carry type and pipeline labels; they are not the board.
