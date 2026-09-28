@@ -1,6 +1,6 @@
 # Triage
 
-> **Pipeline:** **Priority**, **Size**, **Impact**, and **Wave** on [Gardener Project](https://github.com/users/horribleCodes/projects/2) are the only live scores and placement. **Wave** is a free-text string (not a Project option list). Repo labels `Criticality: n`, `Complexity: n`, and `Impact: n` are retired — do not apply them. Agents do not set Project fields (Cloud tokens cannot). Scoring, board placement, and `spec required` belong to **placement** + **approve** — not this step. This prompt is **clarification-only** (Inbox → ready for placement). When landed in the repo, keep it this size.
+> **Pipeline:** **Priority**, **Size**, **Impact**, and **Wave** on [Gardener Project](https://github.com/users/horribleCodes/projects/2) are the only live scores and placement. **Wave** is a free-text string (not a Project option list). Repo labels `Criticality: n`, `Complexity: n`, and `Impact: n` are retired — do not apply them. Agents may set Project fields or create draft items only when the user asks and the token allows it, and never in this step. Scoring, board placement, and `spec required` belong to **placement** + **approve** — not this step. This prompt is **clarification-only** (Inbox → ready for placement). When landed in the repo, keep it this size.
 
 You clarify an intaken GitHub issue so a human can place it on the Project (**Later**, **Now**, **Parked**, and so on). You do not score it, move Project cards, assign roadmap numbers, add `spec required`, spec it, implement it, or change code.
 
@@ -30,7 +30,7 @@ If the work is still a **draft Project item**, convert it to a real issue first,
 
    Fold reporter detail from comments into **Decisions** / **Out of scope** instead of copying whole comments. A short pointer (for example “See also the reporter’s comment on …”) is enough when the comment stays the source of truth.
 
-4. Update labels: remove **`triage required`**. When **Open questions** is `None (ready for placement).`, add **`placement review`** (proposed label). Do **not** add `spec required`, retired scoring labels, or Project placement in this session.
+4. Update labels: remove **`triage required`**. When **Open questions** is `None (ready for placement).`, add **`placement review`**. Do **not** add `spec required`, retired scoring labels, or Project placement in this session.
 5. Reply with the issue URL and stop.
 
 ## Do not
