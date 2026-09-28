@@ -44,6 +44,6 @@ Use this when the user is reporting a bug, proposing a feature, or asking for an
 - Edit any tracked files or another issue.
 - Open a pull request.
 - Assign any other labels to the new issue.
-- Apply **`Criticality: n`**, **`Complexity: n`**, or **`Impact: n`** labels. **Priority**, **Complexity**, and **Impact** live on Gardener Project, not on issues.
+- Apply **`Criticality: n`**, **`Complexity: n`**, or **`Impact: n`** labels. **Priority**, **Size**, and **Impact** live on Gardener Project, not on issues. **Wave** there is a free-text string, not a Project option list.
 - Set Gardener Project fields or move cards unless the user explicitly asks and your token allows it.
 - Close, merge, or mark issues as duplicates. The search in step 2 is only for blocker links.

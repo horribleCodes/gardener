@@ -17,5 +17,5 @@ The user names the issue. Read it with `gh issue view`. If they did not name one
 - Write product code or tests.
 - Mark the pull request ready.
 - Merge.
-- Set **Priority**, **Complexity**, **Impact**, or **Wave / horizon** on Gardener Project or move Project cards.
+- Set **Priority**, **Size**, **Impact**, or **Wave** on Gardener Project or move Project cards.
 - Follow a skill step that commits the spec onto the default branch. The draft pull request is the only landing place.

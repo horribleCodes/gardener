@@ -17,6 +17,18 @@ Gardener is a local stateful MCP implementing a virtual world.
 
 `docs/superpowers/` is **historical**: dated plans and specs for past changes, not maintained after merge. Do not treat it as the current design source of truth. Prefer `docs/design/` and the codebase; link to superpowers only for deep historical context.
 
+## Work tracking
+
+Live placement and scores are on [Gardener Project](https://github.com/users/horribleCodes/projects/2) (user project #2), not in markdown. Current fields:
+
+- **Status** — single-select: Inbox, Ready, In progress, In review, Done, Parked
+- **Priority** — single-select: P0–P2
+- **Size** — single-select 1–5; field id `PVTSSF_lAHOAHY62c4Bkk6czhjiILw`
+- **Impact** — single-select 1–5
+- **Wave** — text (free string); field id `PVTF_lAHOAHY62c4Bkk6czhjkDnI`. Not a Project option list. Cards may still show milestone-style strings as values.
+
+Repo labels `Criticality: n`, `Complexity: n`, and `Impact: n` are retired. Do not apply them. Do not set Project fields unless the user asks and the token allows it.
+
 ## Never
 
 - put game rules in MCP handlers

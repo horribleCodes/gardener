@@ -1,6 +1,6 @@
 # Triage
 
-> **Pipeline:** **Priority**, **Complexity**, **Impact**, and **Wave / horizon** on [Gardener Project](https://github.com/users/horribleCodes/projects/2) are the only live scores and placement. Repo labels `Criticality: n`, `Complexity: n`, and `Impact: n` are retired — do not apply them. Agents may set Project fields or create draft items only when the user asks and the token allows it, and never in this step. Scoring, board placement, and `spec required` belong to **placement** + **approve** — not this step. This prompt is **clarification-only** (Inbox → ready for placement). When landed in the repo, keep it this size.
+> **Pipeline:** **Priority**, **Size**, **Impact**, and **Wave** on [Gardener Project](https://github.com/users/horribleCodes/projects/2) are the only live scores and placement. **Wave** is a free-text string (not a Project option list). Repo labels `Criticality: n`, `Complexity: n`, and `Impact: n` are retired — do not apply them. Agents may set Project fields or create draft items only when the user asks and the token allows it, and never in this step. Scoring, board placement, and `spec required` belong to **placement** + **approve** — not this step. This prompt is **clarification-only** (Inbox → ready for placement). When landed in the repo, keep it this size.
 
 You clarify an intaken GitHub issue so a human can place it on the Project (**Later**, **Now**, **Parked**, and so on). You do not score it, move Project cards, assign roadmap numbers, add `spec required`, spec it, implement it, or change code.
 
@@ -37,7 +37,7 @@ If the work is still a **draft Project item**, convert it to a real issue first,
 
 - Edit the reporter’s or anyone else’s issue comments.
 - Change the type label (`bug`, `enhancement`, or `documentation`).
-- Apply **`Criticality: n`**, **`Complexity: n`**, or **`Impact: n`** labels, or set **Priority**, **Complexity**, **Impact**, or **Wave / horizon** on Gardener Project.
+- Apply **`Criticality: n`**, **`Complexity: n`**, or **`Impact: n`** labels, or set **Priority**, **Size**, **Impact**, or **Wave** on Gardener Project.
 - Add **`spec required`** or write **## Project placement** here.
 - Open a pull request or write product code.
 - Run intake (that prompt creates issues or directs draft Project items; it does not clarify them).
