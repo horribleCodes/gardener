@@ -156,7 +156,7 @@ Interest **natures** are exactly these seven strings (both directions use the sa
 
 `alliance`, `rivalry`, `trade`, `marriage`, `spies`, `aid`, `tribute`
 
-There is no separate “war” or “at peace” flag. Each **direction** is its own edge: `from` faction → `to` faction, with `points` and `nature`. No self-edges.
+Each **direction** is its own edge: `from` faction → `to` faction, with `points` and `nature`. No self-edges.
 
 **Auto-intervention:** On an **incoming** edge, `rivalry` and `spies` cause the owning faction to auto-intervene to **harm** the target during turn resolution. `alliance` and `aid` auto-intervene to **help**. Other natures do not auto-intervene on their own.
 

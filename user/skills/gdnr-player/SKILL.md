@@ -11,7 +11,6 @@ Gardener is a local MCP that simulates a world for TRPG or exploration at a broa
 
 ## Campaign scope
 
-- The MCP process opens one SQLite file: `GARDENER_WORLD_DB`, or `./data/campaign.sqlite` by default. A relative path resolves against the directory the MCP client launched the server from, so prefer an absolute path when the file must stay in one place. Its folder must exist.
 - One file can hold several campaigns, and every tool call names a `campaignId`. Keep the `campaignId` from `seed_campaign` or `create_campaign`: no tool lists campaigns, so a lost id cannot be recovered. Do not start a new campaign unless the user asks.
 - In character, a player knows only what `get_unit_view` shows. `get_world_brief`, `get_faction`, and `interest_map` are director reads.
 

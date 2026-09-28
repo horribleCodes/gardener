@@ -7,7 +7,7 @@ You compare recent work with [Gardener Project](https://github.com/users/horribl
 1. Prepare a scratch note doc called `.docs/project-check.md`.
 2. Find the newest open or closed issue whose title starts with `Project check` or `Roadmap check`. Note the reference SHA in `**To:** <SHA>`. If none exists, retrieve one with `git log --no-merges --reverse --format='%h' --since='<today-7 days>' -n 1`.
 3. Read Project items (`gh project item-list 2 --owner horribleCodes --limit 100`) and the open issues (`gh issue list --state open --limit 50`).
-4. Read commits since the last commit with `./.cursor/scripts/get-commits-since.sh <SHA>`. It fetches `origin/main` and logs from it without changing your checkout.
+4. Read commits since the last commit with `./.cursor/scripts/get-commits-since.sh <SHA>`.
 5. In `.docs/project-check.md`, list items that need a human decision:
 
 ```markdown

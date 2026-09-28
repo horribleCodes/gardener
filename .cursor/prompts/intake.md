@@ -35,7 +35,7 @@ Use this when the user is reporting a bug, proposing a feature, or asking for an
 
 4. File it on the path chosen above:
    - **GitHub issue:** `gh issue create -l "<type>,triage required"` with that title and body.
-   - **Project draft:** `gh project item-create 2 --owner horribleCodes --title "<title>" --body "<body>"` when your token allows it. If it does not, give the user the title and body to add as a draft on the Project.
+   - **Project draft:** `gh project item-create 2 --owner horribleCodes --title "<title>" --body "<body>"` when your token allows it. If it does not, create an issue instead.
 5. Reply with the issue URL, the draft item, or the title and body you handed over, and stop.
 
 ## Do not

@@ -12,6 +12,25 @@ Each place: `key`, `name`, `scope` (`village`, `city`, `region`, `nation`, `real
 
 Always pass `scope`. Choose it from the fiction; never leave it to a default or to a roll.
 
+## Facts
+
+A **fact** is a basic truth about a subject in the world. Facts are never used in calculations by the rules layer, but defines the subject beyond its mechanical properties. They can be immutable characteristics, but also elements that could change over time.
+
+### Examples
+
+- **Place:**
+  - "Strong sandstorms"
+  - "Long nights"
+- **Faction:**
+  - "Sickly population"
+  - "Cursed by a witch"
+- **Character:**
+  - "Captain of royal guard"
+  - "Trusts no-one"
+- **Court:**
+  - "Value magical ability"
+  - "Uniformly dressed in yellow"
+
 ### Factions
 
 Each faction: `key`, `name`, `behavior`, optional `homePlaceKey`, optional `power` (1–5), optional `courtType`, optional `neighborKeys`.

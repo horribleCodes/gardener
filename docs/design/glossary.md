@@ -40,6 +40,10 @@ A **chart catalog** is a folder of charts. Folder and file names tell the server
 
 Not implemented yet. Today there is one catalog file, `src/tables/catalog.json`.
 
+## Fact
+
+A **fact** is a basic truth about a subject in the world. Facts are never used in calculations by the rules layer, but defines the subject beyond its mechanical properties. They can be immutable characteristics, but also elements that could change over time.
+
 ## Hero
 
 A **hero** is a player character: a row in `heroes` with level, Words, Influence, Dominion, wealth, and divinity.
