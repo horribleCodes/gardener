@@ -10,7 +10,10 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "test": "vitest run",
     "start": "node dist/server.js",
-    "prestart": "npm run build"
+    "prestart": "npm run build",
+    "gui:dev": "npm run build && npm install --prefix dev/tools/gui && npm run dev --prefix dev/tools/gui",
+    "gui:build": "npm run build && npm install --prefix dev/tools/gui && npm run build:client --prefix dev/tools/gui && npm run build:server --prefix dev/tools/gui",
+    "gui": "npm run gui:build && npm run start --prefix dev/tools/gui"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.1",
