@@ -191,6 +191,19 @@ textarea.code {
   width: 100%;
 }
 
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.check {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
 .fields {
   display: grid;
   gap: 0.5rem;

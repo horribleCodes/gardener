@@ -15,6 +15,26 @@ function fill(template: string, params: Record<string, string>): string {
   });
 }
 
+function resourceText(body: unknown): unknown {
+  if (!body || typeof body !== "object") return body;
+  const contents = (body as { contents?: unknown }).contents;
+  if (!Array.isArray(contents)) return body;
+  const texts = contents.flatMap((item) => {
+    if (!item || typeof item !== "object" || !("text" in item)) return [];
+    const text = (item as { text: unknown }).text;
+    return typeof text === "string" ? [text] : [];
+  });
+  if (texts.length === 0) return body;
+  const parsed = texts.map((text) => {
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return text;
+    }
+  });
+  return parsed.length === 1 ? parsed[0] : parsed;
+}
+
 export async function mountResourcesTab(container: HTMLElement): Promise<void> {
   container.innerHTML = `
     <div class="split">
@@ -22,7 +42,10 @@ export async function mountResourcesTab(container: HTMLElement): Promise<void> {
       <div class="detail">
         <p id="res-desc" class="hint">Select a resource template.</p>
         <div id="res-fields" class="fields"></div>
-        <button id="res-read" type="button">Read</button>
+        <div class="actions">
+          <button id="res-read" type="button">Read</button>
+          <label class="check"><input id="res-raw" type="checkbox" /> Raw</label>
+        </div>
         <pre id="res-result" class="json"></pre>
       </div>
     </div>`;
@@ -31,7 +54,27 @@ export async function mountResourcesTab(container: HTMLElement): Promise<void> {
   const desc = container.querySelector("#res-desc")!;
   const fields = container.querySelector("#res-fields") as HTMLElement;
   const result = container.querySelector("#res-result")!;
+  const raw = container.querySelector("#res-raw") as HTMLInputElement;
   let selected: Template | undefined;
+  let view: { ok: true; body: unknown } | { ok: false; message: string } | undefined;
+
+  const render = () => {
+    if (!view) {
+      result.className = "json";
+      result.textContent = "";
+      return;
+    }
+    if (!view.ok) {
+      result.className = "json error";
+      result.textContent = view.message;
+      return;
+    }
+    const value = raw.checked ? view.body : resourceText(view.body);
+    result.className = "json";
+    result.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  };
+
+  raw.addEventListener("change", render);
 
   try {
     const payload = await api<{ resourceTemplates?: Template[]; resources?: unknown[] }>("/api/mcp/resources");
@@ -76,11 +119,11 @@ export async function mountResourcesTab(container: HTMLElement): Promise<void> {
         method: "POST",
         body: JSON.stringify({ uri }),
       });
-      result.className = "json";
-      result.textContent = JSON.stringify(body, null, 2);
+      view = { ok: true, body };
+      render();
     } catch (error) {
-      result.className = "json error";
-      result.textContent = error instanceof Error ? error.message : String(error);
+      view = { ok: false, message: error instanceof Error ? error.message : String(error) };
+      render();
     }
   });
 }
