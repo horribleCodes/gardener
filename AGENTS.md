@@ -33,3 +33,7 @@ Any runtime asset imported using `new URL(..., import.meta.url)` must be explici
 ## Tests and the server
 
 `npm test` does not need a running server or a `./data` folder. Tests open in-memory or temp-directory databases; the one `npm start` smoke test sets `GARDENER_WORLD_DB` to a temp path, never the default `./data/campaign.sqlite`. The MCP client owns the stdio process; do not start `npm start` or `node dist/server.js` yourself when wiring a client.
+
+## Pull requests
+
+When a PR comes from a known GitHub issue, link that issue in the body (`Closes` / `Fixes` when it completes the issue; `Related to` / `Implements` otherwise). See `.cursor/prompts/implement.md` and `.cursor/prompts/spec.md`.
