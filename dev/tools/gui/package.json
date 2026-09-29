@@ -1,0 +1,19 @@
+{
+  "name": "gardener-dev-gui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:client": "vite",
+    "build:client": "vite build",
+    "build:server": "tsc -p tsconfig.json",
+    "start": "node dist-server/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.3",
+    "typescript": "5.8.2",
+    "vite": "^6.2.0"
+  }
+}

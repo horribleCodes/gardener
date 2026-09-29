@@ -1,4 +1,6 @@
 node_modules/
+dev/tools/gui/dist-client/
+dev/tools/gui/dist-server/
 .worktrees/
 dist/
 data/*.sqlite
