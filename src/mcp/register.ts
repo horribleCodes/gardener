@@ -68,6 +68,16 @@ type ToolHandler = (
 
 export function buildServer(dbPath: string): McpServer {
   const db = openDb(dbPath);
+  const campaignFlagFieldsZ = z.object({
+    profile: z.enum(["strain", "assets"]).optional(),
+    projectBase: z.enum(["scope", "scale"]).optional(),
+    opposition: z.enum(["stack", "largest"]).optional(),
+    wards: z.boolean().optional(),
+    heldChanges: z.boolean().optional(),
+    capabilityGate: z.boolean().optional(),
+    reachUnit: z.enum(["place", "miles", "hex"]).optional(),
+  }).optional();
+
   const dbTool = (fn: (args: any) => ServiceResult<unknown>): ToolHandler => {
     return (args) => runDbTool(db, () => fn(args), args);
   };
@@ -137,7 +147,13 @@ export function buildServer(dbPath: string): McpServer {
     "create_campaign",
     {
       description: "Create an empty campaign",
-      inputSchema: { name: z.string(), rngSeed: z.number().int().optional(), nameLists: z.record(z.array(z.string())).optional() },
+      inputSchema: {
+        name: z.string(),
+        rngSeed: z.number().int().optional(),
+        nameLists: z.record(z.array(z.string())).optional(),
+        preset: z.string().optional(),
+        flags: campaignFlagFieldsZ,
+      },
     },
     dbTool((a) => createCampaign(db, a)),
   );
@@ -152,6 +168,8 @@ export function buildServer(dbPath: string): McpServer {
         seed: z.number().int().optional(),
         linkInterests: z.boolean().optional(),
         rulingCourts: z.boolean().optional(),
+        preset: z.string().optional(),
+        flags: campaignFlagFieldsZ,
         outline: z
           .object({
             places: z
