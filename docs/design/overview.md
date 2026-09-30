@@ -32,7 +32,7 @@ The target is a setting-neutral **agnostic world system**: one actor model, camp
 
 At a high level:
 
-- **Profile 1: Strain** — cohesion, trouble, projects, and the turn v1 already runs. v1 runs it with Godbound flag values only. Ashes-style communities need presets and flags that do not exist yet.
+- **Profile 1: Strain** — cohesion, trouble, projects, and the turn v1 already runs. v1 runs it with Godbound flag values only. Ashes-style communities still need a named preset that is not shipped.
 - **Profile 2: Assets** — Force, Cunning, Wealth, located assets, and goals; a second rules module, not hit points pasted onto strain features.
 
 What v1 already is, in agnostic flags:
@@ -45,7 +45,7 @@ What v1 already is, in agnostic flags:
 | `wards` | on, as mundus wards | off |
 | `heldChanges` | on, as Influence | off |
 
-Cults, Words, champions, and free divinity are present in v1 and belong to the `godbound` preset. Today these values are hard-coded; no flag or preset exists.
+Cults, Words, champions, and free divinity are present in v1 and belong to the `godbound` preset. Campaigns store these seven flags plus `preset`. `create_campaign` and `seed_campaign` default to `godbound`; other named presets are not shipped. Cost and turn code still uses the godbound formulas until follow-on cards read the stored flags.
 
 ## How to change the codebase
 
