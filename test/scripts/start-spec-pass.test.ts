@@ -28,7 +28,10 @@ test("prompt names the issue and living spec procedure", () => {
   expect(text).toContain("issue #41");
   expect(text).toContain("https://github.com/horribleCodes/gardener/issues/41");
   expect(text).toContain(".cursor/prompts/spec.md");
+  expect(text).toContain("horribleCodes/gardener");
+  expect(text).toContain("origin/main");
   expect(text).toContain("draft");
+  expect(text).toContain("Related to #41");
   expect(text).not.toMatch(/Grok/i);
 });
 
@@ -97,9 +100,9 @@ test("starts a cloud agent when CURSOR_API_KEY is set", async () => {
   });
 });
 
-test("posts to the automation webhook when only webhook secrets are set", async () => {
+test("posts context to the automation webhook when only webhook secrets are set", async () => {
   process.env.CURSOR_AUTOMATION_WEBHOOK_URL = "https://api2.cursor.sh/automations/webhook/abc";
-  process.env.CURSOR_AUTOMATION_WEBHOOK_TOKEN = "wh-token";
+  process.env.CURSOR_AUTOMATION_WEBHOOK_TOKEN = "wh-token\n";
   const calls: Array<{ url: string; init: RequestInit }> = [];
   const result = await startSpecPass({
     label: "spec-required",
@@ -111,7 +114,14 @@ test("posts to the automation webhook when only webhook secrets are set", async 
     repositoryUrl: "https://github.com/horribleCodes/gardener",
     fetchImpl: async (url, init) => {
       calls.push({ url: String(url), init: init ?? {} });
-      return new Response("{}", { status: 200 });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          backgroundComposerId: "bc-spec-54",
+          runUuid: "run-spec-54",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
     },
   });
   expect(calls).toHaveLength(1);
@@ -119,9 +129,58 @@ test("posts to the automation webhook when only webhook secrets are set", async 
   const headers = new Headers(calls[0].init.headers);
   expect(headers.get("authorization")).toBe("Bearer wh-token");
   const body = JSON.parse(String(calls[0].init.body));
-  expect(body.prompt).toContain("issue #54");
+  expect(body.context).toContain("issue #54");
+  expect(body.context).toContain(".cursor/prompts/spec.md");
+  expect(body.context).toContain("Related to #54");
   expect(body.issue.number).toBe(54);
-  expect(result).toEqual({ ok: true, mode: "webhook" });
+  expect(body.prompt).toBeUndefined();
+  expect(result).toEqual({
+    ok: true,
+    mode: "webhook",
+    agentUrl: "https://cursor.com/agents/bc-spec-54",
+  });
+});
+
+test("uses the webhook when webhook secrets are set even if CURSOR_API_KEY is also set", async () => {
+  process.env.CURSOR_API_KEY = "test-key";
+  process.env.CURSOR_AUTOMATION_WEBHOOK_URL = "https://api2.cursor.sh/automations/webhook/abc";
+  process.env.CURSOR_AUTOMATION_WEBHOOK_TOKEN = "wh-token";
+  const calls: string[] = [];
+  const result = await startSpecPass({
+    label: "spec required",
+    issue: {
+      number: 67,
+      html_url: "https://github.com/horribleCodes/gardener/issues/67",
+      title: "Remove campaign",
+    },
+    repositoryUrl: "https://github.com/horribleCodes/gardener",
+    fetchImpl: async (url, init) => {
+      calls.push(String(url));
+      return new Response(
+        JSON.stringify({ success: true, backgroundComposerId: "bc-spec-67" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+  expect(calls).toEqual(["https://api2.cursor.sh/automations/webhook/abc"]);
+  expect(result.mode).toBe("webhook");
+});
+
+test("fails when the webhook returns 200 without a started agent", async () => {
+  process.env.CURSOR_AUTOMATION_WEBHOOK_URL = "https://api2.cursor.sh/automations/webhook/abc";
+  process.env.CURSOR_AUTOMATION_WEBHOOK_TOKEN = "wh-token";
+  await expect(
+    startSpecPass({
+      label: "spec required",
+      issue: {
+        number: 67,
+        html_url: "https://github.com/horribleCodes/gardener/issues/67",
+        title: "Remove campaign",
+      },
+      repositoryUrl: "https://github.com/horribleCodes/gardener",
+      fetchImpl: async () => new Response("{}", { status: 200 }),
+    }),
+  ).rejects.toThrow(/did not start a Cloud Agent/i);
 });
 
 test("skips closed issues", async () => {
