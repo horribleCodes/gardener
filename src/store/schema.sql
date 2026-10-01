@@ -4,7 +4,15 @@ CREATE TABLE IF NOT EXISTS campaigns (
   month INTEGER NOT NULL,
   rng_seed INTEGER NOT NULL,
   roll_counter INTEGER NOT NULL,
-  name_lists TEXT NOT NULL DEFAULT '{}'
+  name_lists TEXT NOT NULL DEFAULT '{}',
+  preset TEXT NOT NULL DEFAULT 'godbound',
+  profile TEXT NOT NULL DEFAULT 'strain',
+  project_base TEXT NOT NULL DEFAULT 'scope',
+  opposition TEXT NOT NULL DEFAULT 'stack',
+  wards INTEGER NOT NULL DEFAULT 1,
+  held_changes INTEGER NOT NULL DEFAULT 1,
+  capability_gate INTEGER NOT NULL DEFAULT 0,
+  reach_unit TEXT NOT NULL DEFAULT 'place'
 );
 
 CREATE TABLE IF NOT EXISTS places (
