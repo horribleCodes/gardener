@@ -32,6 +32,7 @@ Every reply is `{ ok, data, rolls, advisories, derived }`, or `{ ok: false, erro
 | `TURN_ALREADY_OPEN` | Finish or apply the open turn first. |
 | `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET` | The faction has used its actions for this turn, or already acted on that target. |
 | `INTEREST_CAP` | The edge is already at twice the owner's die maximum. |
+| `INTEREST_NATURE_MISMATCH` | The directed pair already has a different nature. Pass `replaceNature: true` or pick the existing nature. |
 | `NO_USABLE_FEATURE` | The acting faction has no feature it can use for this. |
 | `COLLAPSED_FACTION` | The faction has collapsed and cannot act. |
 | `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH` | Not enough to pay. |
@@ -163,8 +164,8 @@ Each **direction** is its own edge: `from` faction → `to` faction, with `point
 
 | User intent | What to call |
 | --- | --- |
-| Standing war, raids, political sabotage | Need a `rivalry` edge (setup / neighbors before seed). One battle this month: plan or `faction_action` type `attack`, then `resolve_attack` if the defender must choose. `resolve_attack` is not a war declaration. |
-| Secret agents, blackmail, exposure | Directed `spies` edge (`from` → `to` matters). |
+| Standing war, raids, political sabotage | `set_interest` with `nature: rivalry` (`from` → `to` matters). One battle this month: plan or `faction_action` type `attack`, then `resolve_attack` if the defender must choose. `resolve_attack` is not a war declaration. |
+| Secret agents, blackmail, exposure | `set_interest` with `nature: spies` (`from` → `to` matters). |
 | Selling to both sides, merchant dependence | `trade` edges. |
 | Mutual defense or shared councils | `alliance`. |
 | Relief, subsidies, advisors | `aid` as a nature, or the `aid` **action** to send help this month. |
@@ -178,5 +179,5 @@ Each **direction** is its own edge: `from` faction → `to` faction, with `point
 
 `attack` and `extend_interest` need `attackerFeatureId`, a feature the acting faction owns. The defender's feature is picked automatically if omitted.
 
-Today, if the user wants a standing relationship the tools cannot write after seed (chosen nature on a new edge), say so. As an alternative, you can use `create_fact` for narrative color **only**, and warn that goals and turn logic keyed on interests will not see it.
+After seed, use `set_interest` for a standing relationship with a chosen catalog nature. `extend_interest` still rolls nature on a brand-new edge during a month. As an alternative, you can use `create_fact` for narrative color **only**, and warn that goals and turn logic keyed on interests will not see it.
 Do **not** silently store mechanical claims only in facts when the user expected mechanics.

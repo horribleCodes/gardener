@@ -108,6 +108,7 @@ Not a free-text adjective like “mercantile.”
 | `create_character` | An NPC. `courtId` makes it a member of that court; `factionId` ties it to a faction. |
 | `create_hero` | A player hero with level, Words, Influence, Dominion, wealth, and `divinity` (`none`, `free`, or `cult`). |
 | `create_fact` | Prose fact. **Does not** create interest edges. `visibility` is `public`, `local`, `privileged`, or `hidden`. |
+| `set_interest` | Directed edge `fromFactionId` → `toFactionId` with required catalog `nature`. Default `points` is 1. Does not roll. Existing different nature fails unless `replaceNature: true`. |
 
 `behavior` on a faction does not create interest rows.
 
@@ -131,12 +132,9 @@ Use these only as a declared director act, never silently for a player's faction
 
 ## When the user wants a chosen interest nature
 
-Today, there is **no** post-seed tool that creates an interest edge with a chosen nature. Say so plainly.
+Call `set_interest` with `fromFactionId`, `toFactionId`, and a catalog `nature`. Default `points` is 1. It does not roll and does not need an open turn. A second call with a different nature fails unless `replaceNature: true`.
 
-Honest alternatives:
-
-1. Adjust the `seed_campaign` outline **before** seeding (use `neighborKeys` so pairs link). Nature is still **rolled**, not chosen.
-2. Use `create_fact` for narrative color **only**, and warn that goals and turn logic keyed on interests will not see it.
+`create_fact` is not an edge. Use it for narrative color **only**, and warn that goals and turn logic keyed on interests will not see it.
 
 Do **not** silently store mechanical claims only in facts when the user expected mechanics.
 
