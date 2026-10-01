@@ -10,13 +10,16 @@ If that URL is missing, stop and say the issue has no draft pull request. Do not
 
 1. Check out that pull request's branch.
 2. Read the spec and the plan on the branch. Follow the test-driven-development skill to implement the plan.
-3. If the plan cannot be implemented as written, stop and tell the user. Do not rewrite the spec in order to keep going.
-4. When the planned work is done and the tests that cover it pass, put a **Test plan** checklist in the pull request body. Keep the existing summary and the source-issue link. If the body has no `Closes #N`, `Fixes #N`, `Related to #N`, or `Implements #N`, add one: prefer `Closes` / `Fixes` when this PR completes the issue; use `Related to` when it is partial or docs-only. Do not leave an orphan PR that has a known source issue with no mention. Each checklist row is a check the unit tests do not already cover. Name a file under `test/play-scripts/` only when this change requires that playtest to test. Delete empty placeholder rows.
-5. Mark the pull request ready for review.
-6. Reply with the pull request URL and stop.
+3. Use the same branch for implementation.
+4. If the plan cannot be implemented as written, stop and tell the user. Do not rewrite the spec in order to keep going.
+5. When the planned work is done and the tests that cover it pass, put a **Test plan** checklist in the pull request body. Keep the existing summary and the source-issue link. Each checklist row is a check the unit or e2e tests cannot cover. Name a file under `test/play-scripts/` only when this change requires that playtest to test. Delete empty placeholder rows.
+6. If the PR title begins with "Spec: ", remove that prefix.
+6. Mark the pull request ready for review.
+7. Reply with the pull request URL and stop.
 
 ## Do not
 
 - Merge, approve, or enable auto-merge.
 - Set **Priority**, **Size**, **Impact**, or **Wave** on Gardener Project or move Project cards.
 - Add a test, fixture, or source change whose only purpose is to satisfy a checklist row. The reviewer runs the checklist as the branch stands.
+- Create a new branch or PR.
