@@ -1,141 +1,161 @@
-# Remove a campaign
+# Remove campaign MCP tool
 
-> Status: design for https://github.com/horribleCodes/gardener/issues/67. Deletes one campaign and the rows associated with it. Does not add a campaign list, a confirmation step, or skill-file changes.
+> Status: design for issue #67. Not implemented on this branch. Living engine docs to update at implementation time: [`docs/design/current-engine.md`](../../../docs/design/current-engine.md).
 
 ## Purpose
 
-A campaign file can hold many campaigns, and `create_campaign` / `seed_campaign` only add rows. There is no way to drop one campaign without discarding the file. This card adds one MCP tool that removes a campaign and every row associated with it, and updates the living engine doc so the tool count and the campaign paragraph match.
+A director who has a `campaignId` can destroy that campaign and every row that belongs to it, without touching other campaigns in the same SQLite file and without changing play-facing skill files.
 
-## Decisions (locked)
+Issue #67 already decided the product shape:
 
-- Registered tool name: `remove_campaign`. Input field: `campaignId` (string), the same field every other campaign tool uses.
-- The issue wrote the feature name `remove-campaign`. The registered identifier is snake_case, matching `create_campaign` and `seed_campaign`.
-- One call deletes. There is no confirm flag, dry run, or second step.
-- A missing id fails with `CAMPAIGN_NOT_FOUND` and the message `campaign ${campaignId} not found` (`requireCampaign`). A second call for an id that was just removed fails the same way.
-- The SQLite file stays. Other campaigns in that file stay. Schema version stays 3. Foreign keys stay on.
-- Skill files under `user/` are unchanged.
-
-## Out of scope
-
-- A tool that lists campaigns, and any change to the sentence that a lost id cannot be recovered.
-- Edits under `user/`.
-- Deleting or recreating the database file, including when the removed campaign was the last one.
-- `ON DELETE CASCADE`, a schema migration, or turning `foreign_keys` off.
-- A new error code for a cross-campaign foreign key. That case aborts and rolls back; the existing unexpected-error envelope applies at the MCP boundary.
-- Resource or prompt changes. Those reads already hit the database on each call.
+- Tool name: `remove-campaign`.
+- Input: a campaign id.
+- Behavior: remove all data associated with that campaign.
+- MCP exposure is sufficient; skill files do not change.
+- Living design docs are updated to match.
 
 ## Approaches
 
-1. **Ordered deletes in a service transaction (chosen).** `removeCampaign` in `src/services/removeCampaign.ts` checks the campaign, then deletes child rows before parent rows inside `withTransaction`, with `foreign_keys` left on. The MCP handler only registers the tool and calls the service.
-2. **`ON DELETE CASCADE` on every campaign foreign key.** Rejected. SQLite cannot add that action with `ALTER TABLE`, so it would rebuild tables and bump `SCHEMA_VERSION` for a single tool.
-3. **`PRAGMA foreign_keys = OFF` and one delete per table.** Rejected. A missed table would leave orphans, and the foreign-key checks that catch a missed table would be off.
+Three ways to delete a campaign’s graph.
 
-Tool name:
+**A. Ordered deletes in one service transaction. Recommended.**
 
-1. **`remove_campaign` (chosen).** Same identifier style as the rest of the server.
-2. **`remove-campaign`.** Rejected. It would be the only hyphenated tool name.
+`removeCampaign` in `src/services/populate.ts` (next to `createCampaign`) runs a fixed sequence of `DELETE` statements, then deletes the `campaigns` row. Foreign keys stay `ON`. No `SCHEMA_VERSION` change. New tables later need an extra `DELETE` in this function; a service test that walks `sqlite_master` catches a forgotten table.
 
-## Behavior
+**B. `ON DELETE CASCADE` on every foreign key.**
 
-`removeCampaign(db, campaignId)` returns `ServiceResult<{ campaignId: string }>`.
+Would need a schema migration (`SCHEMA_VERSION` 3) and would change delete behavior for any future `DELETE FROM campaigns`. Rejected: the issue is one tool, not a storage-model change, and existing files would not pick up cascade without a migration.
 
-Success data is `{ campaignId }`. The MCP envelope is the usual one: `rolls` `[]`, `advisories` `[]`, `derived` `{}`.
+**C. `PRAGMA foreign_keys = OFF`, delete the campaign row, turn keys back on.**
 
-The delete is one transaction. A failure leaves every campaign, including the one named in the call, as it was.
+Leaves orphan rows. Rejected.
 
-Rows with a `campaign_id` (or the `campaigns` row itself) are deleted only when that id is the named campaign.
+## Shape
 
-These join tables have no `campaign_id`. A row is deleted when either endpoint belongs to the named campaign. The other endpoint stays when it belongs to a different campaign:
+### Tool
 
-- `interests` (`from_faction_id`, `to_faction_id`)
-- `court_memberships` (`court_id`, `character_id`)
-- `change_commitments` (`change_id`, `hero_id`)
+| Field | Value |
+| --- | --- |
+| MCP name | `remove-campaign` (hyphens, as issue #67 decided; the rest of the surface uses underscores) |
+| Description | `Remove a campaign and all data associated with it` |
+| Input | `{ campaignId: string }` — same `campaignId` field name as `create_place` and the other mutating tools |
+| Handler | `dbTool((a) => removeCampaign(db, a))` in `src/mcp/register.ts`, registered immediately after `create_campaign` |
+| Success `data` | `{ campaignId: string }` — the id that was removed |
+| Success `rolls` / `advisories` / `derived` | empty (`[]` / `[]` / `{}`) |
+| Missing campaign | `ok: false`, `CAMPAIGN_NOT_FOUND`, message from `requireCampaign` (`campaign ${campaignId} not found`) |
 
-`actions` are deleted only when their `turn_id` is a turn of the named campaign. `feature_parts` follow that campaign's factions' features. `wards` follow that campaign's places. `unit_views` follow that campaign's turns. `conflicts`, `court_consequences`, `court_dispositions`, and `court_defenses` follow that campaign's courts. `resisters` follow that campaign's changes.
+There is no confirmation flag, dry-run, or “are you sure” second call. The caller already has the id.
 
-If a surviving campaign's row holds a real foreign key onto a row being removed (an action in another campaign whose `roll_id` points at this campaign's roll is the case the tests cover), the delete statement fails, the transaction rolls back, and `removeCampaign` throws. The service does not catch that error and does not delete the surviving row to make the delete succeed. `runDbTool` already maps a thrown non-`RuleError` to `ENTITY_NOT_FOUND` with `details.unexpected: true`.
+A second call with the same id fails the same way as an unknown id. Removal is not idempotent.
 
-An empty campaign (a `campaigns` row and nothing else) deletes successfully.
+The SQLite file stays. Only rows for that campaign go away.
 
-## Delete order
+### Service
 
-Foreign keys are immediate. Delete in this order, each statement bound only to the named campaign id:
+```ts
+export function removeCampaign(
+  db: Database.Database,
+  input: { campaignId: string },
+): ServiceResult<{ campaignId: string }>
+```
 
-1. `feature_parts` for features of this campaign's factions
-2. `actions` for this campaign's turns
-3. `unit_views` for this campaign's turns
-4. `write_queue` for this campaign
-5. `court_memberships` for this campaign's courts or characters
-6. `conflicts` for this campaign's courts
-7. `court_consequences` for this campaign's courts
-8. `court_dispositions` for this campaign's courts
-9. `court_defenses` for this campaign's courts
-10. `setpieces` for this campaign
-11. `change_commitments` for this campaign's changes or heroes
-12. `resisters` for this campaign's changes
-13. `challenges` for this campaign
-14. `features` for this campaign's factions
-15. `problems` for this campaign's factions
-16. `interests` for this campaign's factions
-17. `wards` for this campaign's places
-18. `events` for this campaign
-19. `rolls` for this campaign
-20. `turns` for this campaign
-21. `changes` for this campaign
-22. `heroes` for this campaign
-23. `facts` for this campaign
-24. `characters` for this campaign
-25. `courts` for this campaign
-26. `factions` for this campaign
-27. `places` for this campaign
-28. `campaigns` row for this id
+Implementation:
 
-That is every table in `src/store/schema.sql`. A new table is out of scope here; the service test lists these table names so a later table fails that test until this delete list is updated.
+1. `wrapRule` + `withTransaction` (same envelope path as `createCampaign`).
+2. `requireCampaign(db, input.campaignId)`.
+3. Run the delete list below, binding the campaign id on every statement.
+4. Return `{ campaignId: input.campaignId }`.
 
-Columns that point at other rows without a `REFERENCES` clause (`parent_place_id`, `patron_hero_id`, `home_place_id`, and the rest of that kind) do not change this order.
+Do not take the write lock. `create_campaign` does not; the living gap that only queue tools lock is out of scope.
 
-## MCP
+Do not call `PRAGMA foreign_keys = OFF`. Do not bump `SCHEMA_VERSION`.
 
-Register next to `seed_campaign`:
+### What “all data associated with that campaign” means
 
-- Name: `remove_campaign`
-- Description: `Remove a campaign and all data associated with it`
-- Input: `{ campaignId: z.string() }`
-- Handler: `dbTool((a) => removeCampaign(db, a.campaignId))`
+Every row in the current `src/store/schema.sql` that is reachable from `campaigns.id`:
 
-No SQL in the handler.
+- Rows with `campaign_id` equal to the id.
+- Child rows of those rows even when they have no `campaign_id` (`feature_parts`, `wards`, `interests`, `problems`, `features`, court satellite tables, `change_commitments`, `resisters`, `unit_views`, `actions`).
 
-## Living docs
+Interests are associated if **either** endpoint faction belongs to the campaign.
 
-`docs/design/current-engine.md` only.
+Delete **child tables first**, then parents, so enabled foreign keys succeed. Required order:
 
-In **Campaigns and the database file**, after the sentence that every tool call names its `campaignId`, add: `remove_campaign` deletes that campaign and every row associated with it. Other campaigns in the same file stay. The file stays, including when no campaigns remain.
+1. `feature_parts` (via features of this campaign’s factions)
+2. `problems`
+3. `interests` (from or to this campaign’s factions)
+4. `features`
+5. `wards` (via this campaign’s places)
+6. `court_memberships` (via this campaign’s courts or characters)
+7. `conflicts`, `court_consequences`, `court_dispositions`, `court_defenses`
+8. `change_commitments` (via this campaign’s changes or heroes)
+9. `resisters`
+10. `unit_views` (via this campaign’s turns)
+11. `write_queue` (`campaign_id`)
+12. `actions` (via this campaign’s turns; before `rolls` because `actions.roll_id` references `rolls`)
+13. `setpieces` (before courts, challenges, characters, facts)
+14. `challenges` (before `changes`, because `challenges.change_id` references `changes`)
+15. `facts`, `characters`, `courts`, `factions`, `places`, `heroes`, `changes`, `rolls`, `events`, `turns`
+16. `campaigns`
 
-In **MCP surface**, the tool count becomes 49. Resource templates stay 6. Prompts stay 2.
+A later schema table with `campaign_id` or a new child of a campaign-owned parent is in scope for this function when that table lands; the implementer of that table extends this list. This issue does not invent tables.
 
-Leave the paragraph that there is no list tool, and that a lost id cannot be recovered, as it is.
+### Isolation
 
-`docs/design/glossary.md` and `docs/design/overview.md` do not list tools. They stay as they are. Historical specs under `docs/superpowers/` stay as they are.
+Two campaigns in one file: removing A leaves B’s campaign row and B’s keyed rows intact. `PRAGMA foreign_key_check` is empty after a successful remove.
 
-## Tests
+### Errors
 
-Service tests in `test/services/remove-campaign.test.ts`, using `openDb(":memory:")`:
+| Situation | Result |
+| --- | --- |
+| Unknown `campaignId` | `CAMPAIGN_NOT_FOUND` before any delete |
+| Empty string `campaignId` | same (`requireCampaign` finds no row) |
+| FK or unexpected SQLite failure mid-delete | transaction rolls back; `wrapRule` / `runDbTool` surface as today (`RuleError` or unexpected envelope) |
 
-- The fixture inserts one row in every schema table for campaign `a`, plus campaign `b` with a place and a faction, plus an interest from a faction of `a` to the faction of `b`.
-- Before the delete, each associated count for `a` is greater than 0, and `sqlite_master` table names are exactly the 28 tables in the schema.
-- `removeCampaign(db, "missing")` is `{ ok: false, error.code: "CAMPAIGN_NOT_FOUND", error.message: "campaign missing not found" }` and both campaigns remain.
-- `removeCampaign(db, "a")` is `{ ok: true, data: { campaignId: "a" } }`. Every associated count for `a` is 0. Campaign `b`, its place, and its faction remain. The cross-campaign interest is gone. `worldBrief` is null for `a` and non-null for `b`. `PRAGMA foreign_key_check` is empty.
-- A second `removeCampaign(db, "a")` is `CAMPAIGN_NOT_FOUND`.
-- A campaign created with `createCampaign` and no child rows deletes, and a second created campaign remains.
-- An action in campaign `b` whose `roll_id` references a roll in campaign `a` makes `removeCampaign(db, "a")` throw. Both campaigns, the roll, and the action remain.
+No new error codes.
 
-MCP test in `test/mcp.test.ts`, through `buildServer(":memory:")` and an in-memory client:
+## Out of scope
 
-- `listTools` includes `remove_campaign` with that description.
-- Two `create_campaign` calls, then `remove_campaign` on the first, returns the success envelope above.
-- `get_world_brief` on the removed id is `CAMPAIGN_NOT_FOUND`. The other campaign's brief succeeds.
-- `remove_campaign` on the removed id is `CAMPAIGN_NOT_FOUND` with message `campaign ${campaignId} not found`.
+- `user/` skill files and play manuals.
+- Listing campaigns, recovering a lost id, or deleting the SQLite file.
+- Confirmation UX, undo, or trash.
+- `ON DELETE CASCADE` and schema version 3.
+- Taking the write lock on this mutation.
+- Historical specs under `docs/superpowers/` other than this document and its plan.
+- Broader world/campaign authoring UX.
 
-## Self-review
+## Docs at implementation time
 
-The tool removes one campaign's rows and leaves the file and any other campaign. The name is `remove_campaign`. Missing ids use the existing not-found error. Join rows that touch the removed campaign go away; a real foreign key from a survivor aborts the transaction. Skill files, the list-tool gap, and the schema version are unchanged.
+Update living design only:
+
+- [`docs/design/current-engine.md`](../../../docs/design/current-engine.md): tool count 48 → 49; in **Campaigns and the database file**, say `remove-campaign` deletes a campaign and every row keyed to it, and that the file still holds any remaining campaigns. Keep the sentence that no tool lists campaigns.
+- Do not add a “known engine gap” for this tool once it exists.
+- Do not edit `user/skills/**`.
+- Do not rewrite historical superpowers specs.
+
+## Testing
+
+Service tests in `test/services/remove-campaign.test.ts`:
+
+- Unknown id → `CAMPAIGN_NOT_FOUND`, no writes.
+- Empty campaign (`createCampaign` only) → campaign row gone.
+- Seeded campaign plus extra graph (hero, change + resister + commitment, setpiece, open turn / unit view / write queue if cheap to create) → no leftover rows for that id; `foreign_key_check` empty.
+- Second campaign in the same file survives with unchanged counts.
+
+MCP test in `test/mcp.test.ts`: `listTools` includes `remove-campaign`; calling it with a created id returns `ok: true` and `data.campaignId`; a later `get_world_brief` for that id is `CAMPAIGN_NOT_FOUND`.
+
+No GUI tests. No skill-file tests.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  mcp["MCP remove-campaign"]
+  svc["removeCampaign"]
+  db["SQLite transaction"]
+  mcp --> svc --> db
+  db --> children["child rows"]
+  db --> camp["campaigns row"]
+```
+
+Domain rules do not gain a “remove campaign” procedure. Persistence coordination stays in the service. The MCP layer only registers the tool.

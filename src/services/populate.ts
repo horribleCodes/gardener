@@ -159,6 +159,79 @@ export function createCampaign(
   );
 }
 
+export function removeCampaign(
+  db: Database.Database,
+  input: { campaignId: string },
+): ServiceResult<{ campaignId: string }> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      requireCampaign(db, input.campaignId);
+      const id = input.campaignId;
+      db.prepare(
+        `DELETE FROM feature_parts WHERE feature_id IN (
+           SELECT f.id FROM features f JOIN factions fa ON fa.id = f.faction_id WHERE fa.campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM problems WHERE faction_id IN (SELECT id FROM factions WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM interests WHERE from_faction_id IN (SELECT id FROM factions WHERE campaign_id = ?)
+           OR to_faction_id IN (SELECT id FROM factions WHERE campaign_id = ?)`,
+      ).run(id, id);
+      db.prepare(
+        `DELETE FROM features WHERE faction_id IN (SELECT id FROM factions WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM wards WHERE place_id IN (SELECT id FROM places WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM court_memberships WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)
+           OR character_id IN (SELECT id FROM characters WHERE campaign_id = ?)`,
+      ).run(id, id);
+      db.prepare(
+        `DELETE FROM conflicts WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM court_consequences WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM court_dispositions WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM court_defenses WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM change_commitments WHERE change_id IN (SELECT id FROM changes WHERE campaign_id = ?)
+           OR hero_id IN (SELECT id FROM heroes WHERE campaign_id = ?)`,
+      ).run(id, id);
+      db.prepare(
+        `DELETE FROM resisters WHERE change_id IN (SELECT id FROM changes WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM unit_views WHERE turn_id IN (SELECT id FROM turns WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare("DELETE FROM write_queue WHERE campaign_id = ?").run(id);
+      db.prepare(
+        `DELETE FROM actions WHERE turn_id IN (SELECT id FROM turns WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare("DELETE FROM setpieces WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM challenges WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM facts WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM characters WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM courts WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM factions WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM places WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM heroes WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM changes WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM rolls WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM events WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM turns WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM campaigns WHERE id = ?").run(id);
+      return { campaignId: id };
+    }),
+  );
+}
+
 export function createPlace(
   db: Database.Database,
   input: {

@@ -17,6 +17,7 @@ import { beginChange, commitResources, applyOutcome, withdrawInfluence, assessWi
 import {
   createCampaign,
   createPlace,
+  removeCampaign,
   createHero,
   seedCampaign,
   createFaction,
@@ -156,6 +157,15 @@ export function buildServer(dbPath: string): McpServer {
       },
     },
     dbTool((a) => createCampaign(db, a)),
+  );
+
+  reg(
+    "remove-campaign",
+    {
+      description: "Remove a campaign and all data associated with it",
+      inputSchema: { campaignId: z.string() },
+    },
+    dbTool((a) => removeCampaign(db, a)),
   );
 
   reg(

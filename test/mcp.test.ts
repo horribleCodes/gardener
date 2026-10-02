@@ -19,6 +19,7 @@ test("MCP server is named gardener and registers create_hero", async () => {
   const tools = await client.listTools();
   const names = tools.tools.map((t) => t.name);
   expect(names).toContain("create_hero");
+  expect(names).toContain("remove-campaign");
   expect(names).not.toContain("create_godbound");
   await client.close();
 });
@@ -114,4 +115,42 @@ test("runTool returns envelope instead of rejecting on unexpected errors", () =>
   expect(envelope.error?.code).toBe("ENTITY_NOT_FOUND");
   expect(envelope.error?.message).toBe("simulated bug");
   expect(envelope.error?.details.unexpected).toBe(true);
+});
+
+test("remove-campaign deletes the campaign through MCP", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb-mcp-rm-"));
+  const dbPath = join(dir, "campaign.sqlite");
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(dbPath);
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const created = await client.callTool({
+    name: "create_campaign",
+    arguments: { name: "Drop" },
+  });
+  const createdBody = JSON.parse((created.content as { text: string }[])[0].text);
+  expect(createdBody.ok).toBe(true);
+  const campaignId = createdBody.data.campaignId as string;
+
+  const removed = await client.callTool({
+    name: "remove-campaign",
+    arguments: { campaignId },
+  });
+  const removedBody = JSON.parse((removed.content as { text: string }[])[0].text);
+  expect(removedBody.ok).toBe(true);
+  expect(removedBody.data.campaignId).toBe(campaignId);
+  expect(removedBody.rolls).toEqual([]);
+  expect(removedBody.derived).toEqual({});
+
+  const brief = await client.callTool({
+    name: "get_world_brief",
+    arguments: { campaignId },
+  });
+  const briefBody = JSON.parse((brief.content as { text: string }[])[0].text);
+  expect(briefBody.ok).toBe(false);
+  expect(briefBody.error.code).toBe("CAMPAIGN_NOT_FOUND");
+
+  await client.close();
 });
