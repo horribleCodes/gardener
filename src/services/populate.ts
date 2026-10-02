@@ -1,5 +1,9 @@
 import type Database from "better-sqlite3";
 import {
+  resolveCampaignFlags,
+  type CampaignFlags,
+} from "../domain/campaignFlags.js";
+import {
   DIE_BY_POWER,
   RuleError,
   SCOPE_BY_POWER,
@@ -118,17 +122,39 @@ function persistCourt(
 
 export function createCampaign(
   db: Database.Database,
-  input: { name: string; rngSeed?: number; nameLists?: Record<string, string[]> },
-): ServiceResult<{ campaignId: string; rngSeed: number }> {
+  input: {
+    name: string;
+    rngSeed?: number;
+    nameLists?: Record<string, string[]>;
+    preset?: string;
+    flags?: Partial<Omit<CampaignFlags, "preset">>;
+  },
+): ServiceResult<{ campaignId: string; rngSeed: number; flags: CampaignFlags }> {
   return wrapRule(() =>
     withTransaction(db, () => {
       const campaignId = crypto.randomUUID();
       const rngSeed = input.rngSeed ?? Math.floor(Math.random() * 0xffffffff);
+      const flags = resolveCampaignFlags({ preset: input.preset, flags: input.flags });
       db.prepare(
-        `INSERT INTO campaigns (id, name, month, rng_seed, roll_counter, name_lists)
-         VALUES (?, ?, 1, ?, 0, ?)`,
-      ).run(campaignId, input.name, rngSeed, JSON.stringify(input.nameLists ?? {}));
-      return { campaignId, rngSeed };
+        `INSERT INTO campaigns (
+           id, name, month, rng_seed, roll_counter, name_lists,
+           preset, profile, project_base, opposition, wards, held_changes, capability_gate, reach_unit
+         ) VALUES (?, ?, 1, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        campaignId,
+        input.name,
+        rngSeed,
+        JSON.stringify(input.nameLists ?? {}),
+        flags.preset,
+        flags.profile,
+        flags.projectBase,
+        flags.opposition,
+        flags.wards ? 1 : 0,
+        flags.heldChanges ? 1 : 0,
+        flags.capabilityGate ? 1 : 0,
+        flags.reachUnit,
+      );
+      return { campaignId, rngSeed, flags };
     }),
   );
 }
@@ -356,12 +382,19 @@ export function seedCampaign(
         neighborKeys?: string[];
       }[];
     };
+    preset?: string;
+    flags?: Partial<Omit<CampaignFlags, "preset">>;
   },
 ): ServiceResult<{ campaignId: string; seed: number }> {
   return wrapRule(() =>
     withTransaction(db, () => {
       const seed = input.seed ?? Math.floor(Math.random() * 0xffffffff);
-      const created = createCampaign(db, { name: input.name, rngSeed: seed });
+      const created = createCampaign(db, {
+        name: input.name,
+        rngSeed: seed,
+        preset: input.preset,
+        flags: input.flags,
+      });
       if (!created.ok) throw new RuleError(created.error.code, created.error.message);
       const campaignId = created.data.campaignId;
       const fill = defaultFill(input.fill);
