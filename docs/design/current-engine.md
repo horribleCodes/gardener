@@ -23,7 +23,7 @@ The file's SQLite `user_version` is its schema version. This server writes `SCHE
 
 ## MCP surface
 
-The server exposes 49 tools, 6 resource templates, and 2 prompts.
+The server exposes 50 tools, 6 resource templates, and 2 prompts.
 
 - **Resources:** `world://campaigns/{campaignId}/brief`, `…/factions/{factionId}`, `…/courts/{courtId}`, `…/turns/latest`, `…/hooks`, and `world://tables/{path}` (a subtree of the chart catalog).
 - **Prompts:** `gm-briefing` and `faction-turn-narration`. Both are read-only and ask the model to narrate only what the embedded JSON says.
