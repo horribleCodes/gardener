@@ -26,6 +26,11 @@ test("a new database is stamped with this server's schema version", () => {
     .prepare("SELECT sql FROM sqlite_master WHERE name = 'challenges'")
     .get() as { sql: string };
   expect(challenges.sql.toLowerCase()).not.toContain("change_id text not null");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES ('c1', 'New', 1, 1, 0)",
+  ).run();
+  const campaign = db.prepare("SELECT preset FROM campaigns WHERE id = 'c1'").get() as { preset: string };
+  expect(campaign.preset).toBe("godbound");
   db.close();
 });
 

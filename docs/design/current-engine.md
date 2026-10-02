@@ -4,7 +4,7 @@ How the running server is shaped: storage, the MCP surface, determinism, and the
 
 ## Campaigns and the database file
 
-A campaign is a row in `campaigns` plus every row keyed to it. One SQLite file can hold any number of campaigns; `create_campaign` and `seed_campaign` each add a row to the file that is open. Every tool call names its `campaignId`.
+A campaign is a row in `campaigns` plus every row keyed to it. The campaign row stores `preset` and the seven flags `profile`, `projectBase`, `opposition`, `wards`, `heldChanges`, `capabilityGate`, and `reachUnit`. `create_campaign` and `seed_campaign` default to the `godbound` preset. `get_world_brief` returns those flags in camelCase. One SQLite file can hold any number of campaigns; `create_campaign` and `seed_campaign` each add a row to the file that is open. Every tool call names its `campaignId`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ There is no tool that lists campaigns. The `campaignId` exists only in the reply
 
 ## Schema versioning
 
-The file's SQLite `user_version` is its schema version. This server writes `SCHEMA_VERSION` 2 and migrates files from `MIN_SCHEMA_VERSION` 0 (an unversioned v1 file) upward. A file newer than the server, older than the minimum, or a legacy file whose migration would drop orphaned challenges is refused with `INCOMPATIBLE_SCHEMA` before any write.
+The file's SQLite `user_version` is its schema version. This server writes `SCHEMA_VERSION` 3 and migrates files from `MIN_SCHEMA_VERSION` 0 (an unversioned v1 file) upward. A file newer than the server, older than the minimum, or a legacy file whose migration would drop orphaned challenges is refused with `INCOMPATIBLE_SCHEMA` before any write.
 
 ## MCP surface
 
