@@ -1,30 +1,3 @@
-# When `spec required` (or `spec-required`) is applied to an issue, start a
-# spec pass that follows `.cursor/prompts/spec.md`.
-#
-# Uses repo secrets `CURSOR_AUTOMATION_WEBHOOK_URL` and
-# `CURSOR_AUTOMATION_WEBHOOK_TOKEN`. Do not commit tokens. `CURSOR_API_KEY`
-# is not required.
-#
-# One-time Automations UI (cursor.com/automations):
-# 1. Open the automation whose webhook URL is stored in
-#    `CURSOR_AUTOMATION_WEBHOOK_URL` (or create one: trigger = Webhook).
-# 2. Repository: horribleCodes/gardener, starting branch main. The agent
-#    must clone this repo (not "no repository") so it can open a draft PR.
-# 3. Set the automation prompt to exactly:
-#
-#        Treat the webhook JSON `context` field as your full instruction.
-#        Follow `.cursor/prompts/spec.md` for GitHub issue `issue.number`
-#        on horribleCodes/gardener. Fresh branch from current origin/main.
-#        Open a draft pull request. Link it with Related to #N (or Closes /
-#        Fixes when this spec is meant to complete the issue). Do not
-#        implement the plan. Do not spec other issues. Do not put personal
-#        names or assistant product names on GitHub.
-#
-# 4. Save. Copy webhook URL + API key into the two GitHub secrets above
-#    if they are not already set.
-# Native Automations “Issue label changed” can also point at the same prompt
-# if the UI exposes it; this workflow remains the in-repo trigger.
-
 name: Spec on label
 
 on:
