@@ -101,7 +101,7 @@ Not a free-text adjective like “mercantile.”
 
 | Tool | What it writes |
 | --- | --- |
-| `create_campaign` | An empty campaign, with optional `rngSeed` and culture `nameLists`. Fill it with the tools below. |
+| `create_campaign` | An empty campaign, with optional `rngSeed` and culture `nameLists`. Optional `preset` (only `godbound`) and optional `flags` overlays. Fill it with the tools below. |
 | `create_place` | A place under an optional parent. `wards` (ratings) is the only way to put mundus wards on a place. |
 | `create_faction` | Faction sheet only. Features and problems are **rolled**; you cannot request “military” or “spy” features by name. **`interestsOut` / `interestsIn` stay empty.** `control: player` marks a faction the user steers. |
 | `create_court` | Court on a place; `type` must be a catalog key. |
