@@ -15,17 +15,24 @@ export function isSpecRequiredLabel(name) {
 }
 
 /**
- * @param {{ issueNumber: number, issueUrl: string, title: string }} input
+ * GitHub sends `repository.default_branch` as a name (`main`). The prompt needs a remote ref.
+ * @param {string | undefined | null} name
+ */
+export function specTargetBranch(name) {
+  const branch = String(name ?? "").trim();
+  if (!branch) return "origin/main";
+  if (branch.startsWith("origin/")) return branch;
+  return `origin/${branch}`;
+}
+
+/**
+ * @param {{ issueNumber: number, issueUrl: string, title: string, targetBranch: string }} input
  */
 export function specPassPrompt(input) {
   return [
-    `Follow \`.cursor/prompts/spec.md\` (the living spec procedure) for GitHub issue #${input.issueNumber}.`,
+    `Pull ${input.targetBranch} and follow \`.cursor/prompts/spec.md\` for GitHub issue #${input.issueNumber} on horribleCodes/gardener.`,
     `Issue URL: ${input.issueUrl}`,
     `Title: ${input.title}`,
-    "Name that issue; do not spec other backlog items.",
-    "Fresh branch from current origin/main. Do not stack on other open spec pull requests.",
-    "Open a draft pull request with the design and implementation plan. Do not implement the plan.",
-    "Do not put personal names or assistant product names on GitHub.",
   ].join("\n");
 }
 
@@ -34,6 +41,7 @@ export function specPassPrompt(input) {
  * @param {string} opts.label
  * @param {{ number: number, html_url: string, title: string, pull_request?: unknown, state?: string }} opts.issue
  * @param {string} opts.repositoryUrl
+ * @param {string} [opts.targetBranch] Repository default branch (`main`) or an `origin/` ref.
  * @param {typeof fetch} [opts.fetchImpl]
  * @param {NodeJS.ProcessEnv} [opts.env]
  */
@@ -56,37 +64,8 @@ export async function startSpecPass(opts) {
     issueNumber: issue.number,
     issueUrl: issue.html_url,
     title: issue.title,
+    targetBranch: specTargetBranch(opts.targetBranch),
   });
-
-  const apiKey = env.CURSOR_API_KEY?.trim();
-  if (apiKey) {
-    const response = await fetchImpl("https://api.cursor.com/v1/agents", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        prompt: { text: prompt },
-        repos: [{ url: opts.repositoryUrl, startingRef: "main" }],
-        autoCreatePR: false,
-        name: `Spec #${issue.number}`,
-      }),
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`Cloud Agents API ${response.status}: ${text.slice(0, 500)}`);
-    }
-    /** @type {Record<string, any>} */
-    let parsed = {};
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = {};
-    }
-    const agentUrl = parsed.agent?.url ?? parsed.url ?? parsed.target?.url ?? null;
-    return { ok: true, mode: "api", agentUrl };
-  }
 
   const webhookUrl = env.CURSOR_AUTOMATION_WEBHOOK_URL?.trim();
   const webhookToken = env.CURSOR_AUTOMATION_WEBHOOK_TOKEN?.trim();
@@ -98,7 +77,8 @@ export async function startSpecPass(opts) {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        prompt,
+        // Automations inject `context` into the Cloud Agent prompt.
+        context: prompt,
         issue: { number: issue.number, html_url: issue.html_url, title: issue.title },
         repository: opts.repositoryUrl,
         label: opts.label,
@@ -108,11 +88,30 @@ export async function startSpecPass(opts) {
     if (!response.ok) {
       throw new Error(`Automation webhook ${response.status}: ${text.slice(0, 500)}`);
     }
-    return { ok: true, mode: "webhook" };
+    /** @type {Record<string, any>} */
+    let parsed = {};
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = {};
+    }
+    const agentId =
+      parsed.backgroundComposerId ?? parsed.agent?.id ?? parsed.id ?? null;
+    if (!agentId || parsed.success === false) {
+      throw new Error(
+        `Automation webhook did not start a Cloud Agent: ${text.slice(0, 500)}`,
+      );
+    }
+    const agentUrl =
+      parsed.agent?.url ??
+      parsed.url ??
+      parsed.target?.url ??
+      `https://cursor.com/agents/${agentId}`;
+    return { ok: true, mode: "webhook", agentUrl };
   }
 
   throw new Error(
-    "No Cursor credentials. Set GitHub Actions secret CURSOR_API_KEY, or both CURSOR_AUTOMATION_WEBHOOK_URL and CURSOR_AUTOMATION_WEBHOOK_TOKEN.",
+    "No Cursor credentials. Set GitHub Actions secrets CURSOR_AUTOMATION_WEBHOOK_URL and CURSOR_AUTOMATION_WEBHOOK_TOKEN.",
   );
 }
 
@@ -136,6 +135,7 @@ async function main() {
     label: event.label?.name ?? "",
     issue: event.issue,
     repositoryUrl: event.repository?.html_url ?? "",
+    targetBranch: event.repository?.default_branch,
   });
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
