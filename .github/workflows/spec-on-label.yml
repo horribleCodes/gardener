@@ -1,17 +1,3 @@
-# When `spec required` (or `spec-required`) is applied to an issue, start a
-# spec pass that follows `.cursor/prompts/spec.md`.
-#
-# One-time setup (repo secrets; do not commit tokens):
-# 1. Preferred: Cursor Dashboard → API Keys → create a key → GitHub secret
-#    `CURSOR_API_KEY`. The workflow POSTs to the Cloud Agents API.
-# 2. Or: cursor.com/automations → new automation, webhook trigger, repository
-#    horribleCodes/gardener, instructions = follow `.cursor/prompts/spec.md`
-#    for the issue in the webhook JSON (`issue.number` / `prompt`). Save,
-#    copy webhook URL + API key → secrets `CURSOR_AUTOMATION_WEBHOOK_URL`
-#    and `CURSOR_AUTOMATION_WEBHOOK_TOKEN`.
-# Native Automations “Issue label changed” can also point at the same prompt
-# if the UI exposes it; this workflow remains the in-repo trigger.
-
 name: Spec on label
 
 on:
@@ -44,7 +30,6 @@ jobs:
       - name: Start spec pass
         id: start
         env:
-          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           CURSOR_AUTOMATION_WEBHOOK_URL: ${{ secrets.CURSOR_AUTOMATION_WEBHOOK_URL }}
           CURSOR_AUTOMATION_WEBHOOK_TOKEN: ${{ secrets.CURSOR_AUTOMATION_WEBHOOK_TOKEN }}
         run: |
