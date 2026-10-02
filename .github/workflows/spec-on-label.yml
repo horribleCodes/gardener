@@ -30,7 +30,6 @@ jobs:
       - name: Start spec pass
         id: start
         env:
-          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           CURSOR_AUTOMATION_WEBHOOK_URL: ${{ secrets.CURSOR_AUTOMATION_WEBHOOK_URL }}
           CURSOR_AUTOMATION_WEBHOOK_TOKEN: ${{ secrets.CURSOR_AUTOMATION_WEBHOOK_TOKEN }}
         run: |

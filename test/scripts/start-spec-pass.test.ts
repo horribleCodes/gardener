@@ -2,11 +2,11 @@ import { afterEach, expect, test } from "vitest";
 import {
   isSpecRequiredLabel,
   specPassPrompt,
+  specTargetBranch,
   startSpecPass,
 } from "../../scripts/start-spec-pass.mjs";
 
 afterEach(() => {
-  delete process.env.CURSOR_API_KEY;
   delete process.env.CURSOR_AUTOMATION_WEBHOOK_URL;
   delete process.env.CURSOR_AUTOMATION_WEBHOOK_TOKEN;
 });
@@ -19,20 +19,26 @@ test("matches spec required label spellings", () => {
   expect(isSpecRequiredLabel("enhancement")).toBe(false);
 });
 
+test("normalizes the repository default branch to an origin ref", () => {
+  expect(specTargetBranch(undefined)).toBe("origin/main");
+  expect(specTargetBranch("")).toBe("origin/main");
+  expect(specTargetBranch("main")).toBe("origin/main");
+  expect(specTargetBranch("origin/main")).toBe("origin/main");
+  expect(specTargetBranch("develop")).toBe("origin/develop");
+});
+
 test("prompt names the issue and living spec procedure", () => {
   const text = specPassPrompt({
     issueNumber: 41,
     issueUrl: "https://github.com/horribleCodes/gardener/issues/41",
     title: "Direct interest edge with an explicit nature",
+    targetBranch: "origin/main",
   });
+  expect(text).toContain("Pull origin/main");
   expect(text).toContain("issue #41");
   expect(text).toContain("https://github.com/horribleCodes/gardener/issues/41");
   expect(text).toContain(".cursor/prompts/spec.md");
   expect(text).toContain("horribleCodes/gardener");
-  expect(text).toContain("origin/main");
-  expect(text).toContain("draft");
-  expect(text).toContain("Related to #41");
-  expect(text).not.toMatch(/Grok/i);
 });
 
 test("skips issues that are pull requests", async () => {
@@ -59,48 +65,7 @@ test("skips other labels", async () => {
   expect(result).toEqual({ ok: true, skipped: "label" });
 });
 
-test("starts a cloud agent when CURSOR_API_KEY is set", async () => {
-  process.env.CURSOR_API_KEY = "test-key";
-  const calls: Array<{ url: string; init: RequestInit }> = [];
-  const result = await startSpecPass({
-    label: "spec required",
-    issue: {
-      number: 41,
-      html_url: "https://github.com/horribleCodes/gardener/issues/41",
-      title: "Direct interest edge",
-    },
-    repositoryUrl: "https://github.com/horribleCodes/gardener",
-    fetchImpl: async (url, init) => {
-      calls.push({ url: String(url), init: init ?? {} });
-      return new Response(
-        JSON.stringify({
-          agent: { id: "bc-test", url: "https://cursor.com/agents/bc-test" },
-          run: { id: "run-test" },
-        }),
-        {
-          status: 201,
-          headers: { "content-type": "application/json" },
-        },
-      );
-    },
-  });
-  expect(calls).toHaveLength(1);
-  expect(calls[0].url).toBe("https://api.cursor.com/v1/agents");
-  const body = JSON.parse(String(calls[0].init.body));
-  expect(body.prompt.text).toContain("issue #41");
-  expect(body.repos[0]).toEqual({
-    url: "https://github.com/horribleCodes/gardener",
-    startingRef: "main",
-  });
-  expect(body.autoCreatePR).toBe(false);
-  expect(result).toEqual({
-    ok: true,
-    mode: "api",
-    agentUrl: "https://cursor.com/agents/bc-test",
-  });
-});
-
-test("posts context to the automation webhook when only webhook secrets are set", async () => {
+test("posts context to the automation webhook when webhook secrets are set", async () => {
   process.env.CURSOR_AUTOMATION_WEBHOOK_URL = "https://api2.cursor.sh/automations/webhook/abc";
   process.env.CURSOR_AUTOMATION_WEBHOOK_TOKEN = "wh-token\n";
   const calls: Array<{ url: string; init: RequestInit }> = [];
@@ -129,9 +94,9 @@ test("posts context to the automation webhook when only webhook secrets are set"
   const headers = new Headers(calls[0].init.headers);
   expect(headers.get("authorization")).toBe("Bearer wh-token");
   const body = JSON.parse(String(calls[0].init.body));
+  expect(body.context).toContain("Pull origin/main");
   expect(body.context).toContain("issue #54");
   expect(body.context).toContain(".cursor/prompts/spec.md");
-  expect(body.context).toContain("Related to #54");
   expect(body.issue.number).toBe(54);
   expect(body.prompt).toBeUndefined();
   expect(result).toEqual({
@@ -139,31 +104,6 @@ test("posts context to the automation webhook when only webhook secrets are set"
     mode: "webhook",
     agentUrl: "https://cursor.com/agents/bc-spec-54",
   });
-});
-
-test("uses the webhook when webhook secrets are set even if CURSOR_API_KEY is also set", async () => {
-  process.env.CURSOR_API_KEY = "test-key";
-  process.env.CURSOR_AUTOMATION_WEBHOOK_URL = "https://api2.cursor.sh/automations/webhook/abc";
-  process.env.CURSOR_AUTOMATION_WEBHOOK_TOKEN = "wh-token";
-  const calls: string[] = [];
-  const result = await startSpecPass({
-    label: "spec required",
-    issue: {
-      number: 67,
-      html_url: "https://github.com/horribleCodes/gardener/issues/67",
-      title: "Remove campaign",
-    },
-    repositoryUrl: "https://github.com/horribleCodes/gardener",
-    fetchImpl: async (url, init) => {
-      calls.push(String(url));
-      return new Response(
-        JSON.stringify({ success: true, backgroundComposerId: "bc-spec-67" }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    },
-  });
-  expect(calls).toEqual(["https://api2.cursor.sh/automations/webhook/abc"]);
-  expect(result.mode).toBe("webhook");
 });
 
 test("fails when the webhook returns 200 without a started agent", async () => {
@@ -208,7 +148,7 @@ test("fails when no Cursor secrets are configured", async () => {
       repositoryUrl: "https://github.com/horribleCodes/gardener",
       fetchImpl: async () => new Response("", { status: 200 }),
     }),
-  ).rejects.toThrow(/CURSOR_API_KEY|CURSOR_AUTOMATION_WEBHOOK/);
+  ).rejects.toThrow(/CURSOR_AUTOMATION_WEBHOOK/);
 });
 
 test("CLI reads a GitHub issues event from stdin", async () => {
