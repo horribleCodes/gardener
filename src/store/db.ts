@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { RuleError } from "../domain/types.js";
 
 /** Schema this server writes. A higher user_version is a newer file. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 /** Lowest user_version this server can migrate. 0 is an unversioned v1 file. */
 export const MIN_SCHEMA_VERSION = 0;
 
@@ -84,6 +84,29 @@ function migrateLegacyStrain(db: Database.Database): void {
   }
 }
 
+function migrateCampaignFlags(db: Database.Database): void {
+  const hasCampaigns = db
+    .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'campaigns'")
+    .get() as { ok: number } | undefined;
+  if (!hasCampaigns) return;
+  const present = columnNames(db, "campaigns");
+  const additions: Array<[string, string]> = [
+    ["preset", "TEXT NOT NULL DEFAULT 'godbound'"],
+    ["profile", "TEXT NOT NULL DEFAULT 'strain'"],
+    ["project_base", "TEXT NOT NULL DEFAULT 'scope'"],
+    ["opposition", "TEXT NOT NULL DEFAULT 'stack'"],
+    ["wards", "INTEGER NOT NULL DEFAULT 1"],
+    ["held_changes", "INTEGER NOT NULL DEFAULT 1"],
+    ["capability_gate", "INTEGER NOT NULL DEFAULT 0"],
+    ["reach_unit", "TEXT NOT NULL DEFAULT 'place'"],
+  ];
+  for (const [name, spec] of additions) {
+    if (!present.has(name)) {
+      db.exec(`ALTER TABLE campaigns ADD COLUMN ${name} ${spec}`);
+    }
+  }
+}
+
 export function migrate(db: Database.Database, fileVersion = Number(db.pragma("user_version", { simple: true }))): void {
   if (fileVersion === SCHEMA_VERSION) return;
   const legacy = db
@@ -99,6 +122,7 @@ export function migrate(db: Database.Database, fileVersion = Number(db.pragma("u
         db.exec(schemaSql());
         migrateLegacyStrain(db);
       }
+      migrateCampaignFlags(db);
       db.pragma(`user_version = ${SCHEMA_VERSION}`);
     });
     apply();

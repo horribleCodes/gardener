@@ -1,12 +1,46 @@
 import type Database from "better-sqlite3";
+import type { CampaignFlags } from "../domain/campaignFlags.js";
 import { DIE_BY_POWER, type Power } from "../domain/types.js";
 import { sumTrouble, loadProblemsOrdered } from "../services/util.js";
+
+type CampaignFlagRow = {
+  preset: CampaignFlags["preset"];
+  profile: CampaignFlags["profile"];
+  project_base: CampaignFlags["projectBase"];
+  opposition: CampaignFlags["opposition"];
+  wards: number;
+  held_changes: number;
+  capability_gate: number;
+  reach_unit: CampaignFlags["reachUnit"];
+};
+
+export function loadCampaignFlags(db: Database.Database, campaignId: string): CampaignFlags | null {
+  const row = db
+    .prepare(
+      `SELECT preset, profile, project_base, opposition, wards, held_changes, capability_gate, reach_unit
+       FROM campaigns WHERE id = ?`,
+    )
+    .get(campaignId) as CampaignFlagRow | undefined;
+  if (!row) return null;
+  return {
+    preset: row.preset,
+    profile: row.profile,
+    projectBase: row.project_base,
+    opposition: row.opposition,
+    wards: row.wards !== 0,
+    heldChanges: row.held_changes !== 0,
+    capabilityGate: row.capability_gate !== 0,
+    reachUnit: row.reach_unit,
+  };
+}
 
 export function worldBrief(db: Database.Database, campaignId: string) {
   const campaign = db
     .prepare("SELECT month FROM campaigns WHERE id = ?")
     .get(campaignId) as { month: number } | undefined;
   if (!campaign) return null;
+  const flags = loadCampaignFlags(db, campaignId);
+  if (!flags) return null;
 
   const factions = db
     .prepare(
@@ -50,6 +84,7 @@ export function worldBrief(db: Database.Database, campaignId: string) {
 
   return {
     month: campaign.month,
+    flags,
     factions: factionBriefs,
     courts: courts.map((c) => ({
       id: c.id,
