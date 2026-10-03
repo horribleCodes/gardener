@@ -902,7 +902,7 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "relevant_features",
     {
-      description: "Features relevant to a domain. unevenBonus is the automatic origin bonus only.",
+      description: "Features relevant to a domain.",
       inputSchema: {
         factionId: z.string(),
         domain: z.string(),

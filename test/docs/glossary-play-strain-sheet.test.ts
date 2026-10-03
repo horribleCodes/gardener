@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 
 const glossary = readFileSync("docs/design/glossary.md", "utf8");
 const play = readFileSync("user/skills/gdnr-player/references/gdnr-play.md", "utf8");
+const direct = readFileSync("user/skills/gdnr-director/references/gdnr-direct.md", "utf8");
 
 test("glossary names Feature, Problem, Trouble, and Cohesion", () => {
   for (const heading of ["## Feature", "## Problem", "## Trouble", "## Cohesion"]) {
@@ -19,4 +20,16 @@ test("play does not teach domain mismatch as automatic marginality", () => {
   expect(play.toLowerCase()).not.toMatch(
     /different domains the roll is marginal/,
   );
+});
+
+test("play and director copy teach a GM bonus and omit automatic origin", () => {
+  for (const text of [play, direct]) {
+    expect(text).toMatch(/attackerBonus/);
+    expect(text).toMatch(/defenderBonus/);
+    expect(text).toMatch(/0 to 3/);
+    expect(text).not.toMatch(/automatic bonus/i);
+    expect(text).not.toMatch(/attackerEdge/);
+    expect(text).not.toMatch(/`origin`/);
+  }
+  expect(glossary).not.toMatch(/`magical`/);
 });

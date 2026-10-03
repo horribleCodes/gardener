@@ -52,7 +52,7 @@ A **fact** is a basic truth about a subject in the world. Facts are never used i
 
 A **Feature** is a sentence-long tool on a faction sheet: what the group uses to act, resist, or be targeted. A Feature may have parts; it works until every part is gone.
 
-Optional marks, used only for contest modifiers when they apply: size (`normal` or `vast`), quality (`normal` or `superior`), edged (code: `magical`), and origin (`native`, `improbable`, `impossible`). Those marks are product of the Feature, not a second sheet.
+A Feature stores an origin (`native`, `improbable`, or `impossible`). Scale, quality, and supernatural relevance are not stored on it. At a contest the caller passes `attackerBonus` and `defenderBonus`, each an integer 0 or greater.
 
 Heroes removing the person or thing a Feature names can delete that Feature with no contest (`apply_outcome`). That is an adventure override, not a turn action.
 
@@ -95,7 +95,6 @@ The agnostic target names some v1 terms differently. They mean the same thing:
 | capital | Dominion |
 | attention | Influence |
 | scale | Power |
-| edged | magical |
 
 ## Further reading
 

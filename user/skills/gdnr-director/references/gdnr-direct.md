@@ -130,7 +130,7 @@ Not a free-text adjective like “mercantile.”
 
 Use these only as a declared director act, never silently for a player's faction. Unit plans cannot carry them.
 
-On `attack` and `extend_interest`, `marginal`, `attackerEdge`, and `defenderEdge` state the contest. A unit plan may carry them. Omit them and the contest is one die per side with no scale, quality, or supernatural bonus. Different domains do not set `marginal`. Stored size, quality, and magical marks are unread. A feature's stored `origin` still adds +1 (`improbable`) or +2 (`impossible`) when both sides have a feature. No setup tool writes a non-native feature origin.
+On `attack` and `extend_interest`, `marginal`, `attackerBonus`, and `defenderBonus` state the contest. A unit plan may carry them. Omit a bonus and that side adds 0. Different domains do not set `marginal`. Before the roll, judge each feature against the one opposing it. Each bonus is an integer from 0 to 3: add 1 if that feature is vastly larger, add 1 if it is vastly qualitatively superior, and add 1 if it has magical qualities or supernatural powers relevant to the contest.
 
 ## When the user wants a chosen interest nature
 
