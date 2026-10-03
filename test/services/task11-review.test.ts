@@ -50,7 +50,7 @@ test("swayCourt favor upserts disposition and writes a fact", () => {
   expect(facts[0].statement).toBe(loadCatalog().minorRelationship[0].text);
 });
 
-test("swayCourt control on ruling court sets contested_control and disposition", () => {
+test("swayCourt control writes disposition and a fact without a Problem", () => {
   const db = courtDb();
   const result = swayCourt(db, {
     campaignId: "c1",
@@ -63,15 +63,45 @@ test("swayCourt control on ruling court sets contested_control and disposition",
   const faction = db.prepare("SELECT contested_control FROM factions WHERE id = 'f1'").get() as {
     contested_control: number;
   };
-  expect(faction.contested_control).toBe(1);
+  expect(faction.contested_control).toBe(0);
   const disposition = db
     .prepare("SELECT disposition FROM court_dispositions WHERE court_id = 'court1'")
     .get() as { disposition: string };
   expect(disposition.disposition).toBe("control");
   const facts = db
-    .prepare("SELECT id FROM facts WHERE subject = 'court' AND subject_id = 'court1'")
-    .all();
-  expect(facts).toHaveLength(0);
+    .prepare("SELECT statement FROM facts WHERE subject = 'court' AND subject_id = 'court1'")
+    .all() as { statement: string }[];
+  expect(facts).toHaveLength(1);
+  expect(facts[0].statement).toBe("The named target now holds control of this court.");
+  const problems = db.prepare("SELECT id FROM problems WHERE faction_id = 'f1'").all();
+  expect(problems).toHaveLength(0);
+});
+
+test("swayCourt control with createProblem inserts the usurper Problem", () => {
+  const db = courtDb();
+  const result = swayCourt(db, {
+    campaignId: "c1",
+    courtId: "court1",
+    targetType: "faction",
+    targetId: "f1",
+    mode: "control",
+    createProblem: true,
+  });
+  expect(result.ok).toBe(true);
+  const faction = db.prepare("SELECT contested_control FROM factions WHERE id = 'f1'").get() as {
+    contested_control: number;
+  };
+  expect(faction.contested_control).toBe(1);
+  const problems = db
+    .prepare("SELECT text, points, domain FROM problems WHERE faction_id = 'f1'")
+    .all() as { text: string; points: number; domain: string }[];
+  expect(problems).toEqual([
+    {
+      text: "Usurpers and restorationists are moving against the new hand on the court.",
+      points: 2,
+      domain: "cultural",
+    },
+  ]);
 });
 
 test("getCourt includes favor disposition after swayCourt", () => {
