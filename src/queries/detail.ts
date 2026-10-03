@@ -2,7 +2,7 @@ import type Database from "better-sqlite3";
 import { DIE_BY_POWER, RuleError, type Power } from "../domain/types.js";
 import { interestCap } from "../rules/actions.js";
 import { monthlyDominion } from "../rules/cults.js";
-import { unevenBonus } from "../rules/contest.js";
+import { resolveContestEdge, unevenBonus } from "../rules/contest.js";
 import type { Harshness } from "../domain/types.js";
 import { decisionMakers, type PowerStructure } from "./brief.js";
 import { loadProblemsOrdered, sumTrouble } from "../services/util.js";
@@ -268,21 +268,9 @@ export function relevantFeatures(
   return features
     .filter((f) => f.domain === input.domain || input.domain === "any")
     .map((f) => {
-      const tags = {
-        domain: f.domain as "cultural" | "military" | "economic" | "other",
-        size: f.size as "normal" | "vast",
-        quality: f.quality as "normal" | "superior",
-        magical: f.magical !== 0,
-        origin: f.origin as "native" | "improbable" | "impossible",
-      };
+      const quiet = resolveContestEdge(undefined, "edge");
       const bonus = opposing
-        ? unevenBonus(tags, {
-            domain: opposing.domain as "cultural" | "military" | "economic" | "other",
-            size: opposing.size as "normal" | "vast",
-            quality: opposing.quality as "normal" | "superior",
-            magical: opposing.magical !== 0,
-            origin: opposing.origin as "native" | "improbable" | "impossible",
-          })
+        ? unevenBonus({ origin: f.origin, edge: quiet, opposingEdge: quiet })
         : 0;
       return { ...f, unevenBonus: bonus };
     });
