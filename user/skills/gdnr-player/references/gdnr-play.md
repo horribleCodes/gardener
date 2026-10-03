@@ -10,12 +10,18 @@ After the dice, describe the result as rumor, news, or something the heroes coul
 
 Narrate only what the tools recorded.
 
+## Faction sheet
+
+The tools show Features, Problems, Cohesion, Power, and Dominion. **Trouble** is not a stored field; it is the sum of Problem points. **Cohesion** starts equal to Power and cannot exceed Power. Contests are **one Feature versus one Feature**: name which Feature each side used.
+
 ## Reading the dice
 
 - A faction's action die follows its Power: d6, d8, d10, d12, d20 for Power 1–5.
-- **Trouble** is the sum of its problems' points. A check succeeds only when the roll is **greater than** Trouble.
-- On a failure the roll lands in one problem's band (`get_faction` shows the bands). That problem is the culprit; narrate the failure as its fault.
-- In a contest the higher total wins; a tie goes to the higher Power, then to the defender. When the two features are in different domains the roll is marginal: roll twice and keep the lower.
+- **Trouble** is the sum of its Problems' points. A check succeeds only when the roll is **greater than** Trouble.
+- On a failure, narrate the failure as the fault of the Problem `get_faction` names for that roll. Do not invent a second mechanic called bands.
+- In a contest, one Feature versus one Feature. The higher total wins; a tie goes to the higher Power, then to the defender.
+- **Marginality is a GM call** (roll twice, keep the lower). Do not treat catalog domain mismatch as automatically marginal.
+- Uneven contest bonus, for the Feature that is rolling, when those marks are set: +1 vast against a Feature that is not, +1 superior against one that is not, +1 edged when the edge matters, +1 if origin is improbable, +2 if impossible. A natural 1 suppresses the uneven bonus.
 - When an attack succeeds, the defender picks one loss: 1 cohesion, sacrificing the feature it defended with, or `1 + max(0, attacker Power − defender Power)` problem points. NPC defenders pick whatever keeps them alive (`preserve_existence`). A player-controlled defender pauses the turn until the user chooses.
 - A faction **collapses** when Trouble reaches its die maximum or cohesion reaches 0. A collapsed faction refuses actions with `COLLAPSED_FACTION`; queries about it still work.
 
@@ -32,6 +38,7 @@ Every reply is `{ ok, data, rolls, advisories, derived }`, or `{ ok: false, erro
 | `TURN_ALREADY_OPEN` | Finish or apply the open turn first. |
 | `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET` | The faction has used its actions for this turn, or already acted on that target. |
 | `INTEREST_CAP` | The edge is already at twice the owner's die maximum. |
+| `INTEREST_NATURE_MISMATCH` | The directed pair already has a different nature. Pass `replaceNature: true` or pick the existing nature. |
 | `NO_USABLE_FEATURE` | The acting faction has no feature it can use for this. |
 | `COLLAPSED_FACTION` | The faction has collapsed and cannot act. |
 | `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH` | Not enough to pay. |
@@ -163,8 +170,8 @@ Each **direction** is its own edge: `from` faction → `to` faction, with `point
 
 | User intent | What to call |
 | --- | --- |
-| Standing war, raids, political sabotage | Need a `rivalry` edge (setup / neighbors before seed). One battle this month: plan or `faction_action` type `attack`, then `resolve_attack` if the defender must choose. `resolve_attack` is not a war declaration. |
-| Secret agents, blackmail, exposure | Directed `spies` edge (`from` → `to` matters). |
+| Standing war, raids, political sabotage | `set_interest` with `nature: rivalry` (`from` → `to` matters). One battle this month: plan or `faction_action` type `attack`, then `resolve_attack` if the defender must choose. `resolve_attack` is not a war declaration. |
+| Secret agents, blackmail, exposure | `set_interest` with `nature: spies` (`from` → `to` matters). |
 | Selling to both sides, merchant dependence | `trade` edges. |
 | Mutual defense or shared councils | `alliance`. |
 | Relief, subsidies, advisors | `aid` as a nature, or the `aid` **action** to send help this month. |
@@ -178,5 +185,5 @@ Each **direction** is its own edge: `from` faction → `to` faction, with `point
 
 `attack` and `extend_interest` need `attackerFeatureId`, a feature the acting faction owns. The defender's feature is picked automatically if omitted.
 
-Today, if the user wants a standing relationship the tools cannot write after seed (chosen nature on a new edge), say so. As an alternative, you can use `create_fact` for narrative color **only**, and warn that goals and turn logic keyed on interests will not see it.
+After seed, use `set_interest` for a standing relationship with a chosen catalog nature. `extend_interest` still rolls nature on a brand-new edge during a month. As an alternative, you can use `create_fact` for narrative color **only**, and warn that goals and turn logic keyed on interests will not see it.
 Do **not** silently store mechanical claims only in facts when the user expected mechanics.
