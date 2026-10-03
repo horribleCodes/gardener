@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { DIE_BY_POWER, RuleError, type FeatureTags, type Power } from "../domain/types.js";
+import { DIE_BY_POWER, RuleError, type Power } from "../domain/types.js";
 import {
   attackProblemDamage,
   chooseDefense,
@@ -8,13 +8,15 @@ import {
 } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
 import {
-  defaultRelevance,
-  unevenBonus,
   featureRoll,
+  readMarginal,
   resolveContest,
+  resolveContestEdge,
+  unevenBonus,
+  type ContestEdge,
 } from "../rules/contest.js";
 import { restoreCohesionCost } from "../rules/cost.js";
-import { rollDie } from "../rules/dice.js";
+import { rollDie, type Rng } from "../rules/dice.js";
 import { applyCollapseIfNeeded } from "./collapse.js";
 import { listUsableFeatures, resolveDefenderFeature, type FeatureRow } from "./features.js";
 import type { StandingOrder } from "./unitPlan.js";
@@ -74,6 +76,8 @@ export type RunActionInput = {
       defenderChoice?: DefenseChoice;
       problemId?: string;
       marginal?: boolean;
+      attackerEdge?: ContestEdge;
+      defenderEdge?: ContestEdge;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     }
@@ -84,6 +88,8 @@ export type RunActionInput = {
       defenderFeatureId?: string;
       willing?: boolean;
       marginal?: boolean;
+      attackerEdge?: ContestEdge;
+      defenderEdge?: ContestEdge;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     }
@@ -471,6 +477,47 @@ export function applyAttackDefense(
   });
 }
 
+function settledContest(input: {
+  rng: Rng;
+  attackerFaces: number;
+  defenderFaces: number;
+  attackerOrigin: string;
+  defenderOrigin: string;
+  marginal: unknown;
+  attackerEdge: unknown;
+  defenderEdge: unknown;
+  forcedAttackerRoll?: number;
+  forcedDefenderRoll?: number;
+}): { attackerRoll: ReturnType<typeof featureRoll>; defenderRoll: ReturnType<typeof featureRoll> } {
+  const marginal = readMarginal(input.marginal);
+  const attackerEdge = resolveContestEdge(input.attackerEdge, "attackerEdge");
+  const defenderEdge = resolveContestEdge(input.defenderEdge, "defenderEdge");
+  return {
+    attackerRoll: featureRoll({
+      rng: input.rng,
+      faces: input.attackerFaces,
+      marginal,
+      bonus: unevenBonus({
+        origin: input.attackerOrigin,
+        edge: attackerEdge,
+        opposingEdge: defenderEdge,
+      }),
+      forced: input.forcedAttackerRoll,
+    }),
+    defenderRoll: featureRoll({
+      rng: input.rng,
+      faces: input.defenderFaces,
+      marginal,
+      bonus: unevenBonus({
+        origin: input.defenderOrigin,
+        edge: defenderEdge,
+        opposingEdge: attackerEdge,
+      }),
+      forced: input.forcedDefenderRoll,
+    }),
+  };
+}
+
 function runAttack(
   db: Database.Database,
   attacker: { id: string; campaign_id: string; power: Power; control: string },
@@ -500,13 +547,9 @@ function runAttack(
     throw new RuleError("ENTITY_NOT_FOUND", "attacker feature not found");
   }
 
-  const attackerTags: FeatureTags = {
-    domain: attackerFeature.domain as FeatureTags["domain"],
-    size: attackerFeature.size as FeatureTags["size"],
-    quality: attackerFeature.quality as FeatureTags["quality"],
-    magical: attackerFeature.magical !== 0,
-    origin: attackerFeature.origin as FeatureTags["origin"],
-  };
+  const marginal = readMarginal(input.marginal);
+  resolveContestEdge(input.attackerEdge, "attackerEdge");
+  resolveContestEdge(input.defenderEdge, "defenderEdge");
 
   const rng = nextRng(db, attacker.campaign_id);
   const attackerFaces = DIE_BY_POWER[attacker.power];
@@ -515,7 +558,6 @@ function runAttack(
     defender.id,
     input.defenderFeatureId,
   );
-  let defenderTags: FeatureTags | null = null;
   let defenderTotal = 0;
 
   let attackerRoll;
@@ -524,43 +566,26 @@ function runAttack(
     attackerRoll = featureRoll({
       rng,
       faces: attackerFaces,
-      marginal: input.marginal ?? false,
+      marginal,
       bonus: 0,
       forced: input.forcedAttackerRoll,
     });
     winner = "attacker";
   } else {
-    defenderTags = {
-      domain: defenderFeature.domain as FeatureTags["domain"],
-      size: defenderFeature.size as FeatureTags["size"],
-      quality: defenderFeature.quality as FeatureTags["quality"],
-      magical: defenderFeature.magical !== 0,
-      origin: defenderFeature.origin as FeatureTags["origin"],
-    };
-    const defenderFaces = DIE_BY_POWER[defender.power];
-    const attackerBonus = unevenBonus(attackerTags, defenderTags);
-    const defenderBonus = unevenBonus(defenderTags, attackerTags);
-    const attackerMarginal =
-      input.marginal ??
-      defaultRelevance(attackerTags.domain, defenderTags.domain);
-    const defenderMarginal =
-      input.marginal ??
-      defaultRelevance(defenderTags.domain, attackerTags.domain);
-    attackerRoll = featureRoll({
+    const settled = settledContest({
       rng,
-      faces: attackerFaces,
-      marginal: attackerMarginal,
-      bonus: attackerBonus,
-      forced: input.forcedAttackerRoll,
+      attackerFaces,
+      defenderFaces: DIE_BY_POWER[defender.power],
+      attackerOrigin: attackerFeature.origin,
+      defenderOrigin: defenderFeature.origin,
+      marginal: input.marginal,
+      attackerEdge: input.attackerEdge,
+      defenderEdge: input.defenderEdge,
+      forcedAttackerRoll: input.forcedAttackerRoll,
+      forcedDefenderRoll: input.forcedDefenderRoll,
     });
-    const defenderRoll = featureRoll({
-      rng,
-      faces: defenderFaces,
-      marginal: defenderMarginal,
-      bonus: defenderBonus,
-      forced: input.forcedDefenderRoll,
-    });
-    defenderTotal = defenderRoll.total;
+    attackerRoll = settled.attackerRoll;
+    defenderTotal = settled.defenderRoll.total;
     let aTotal = attackerRoll.total;
     let dTotal = defenderTotal;
     if (input.standingOrders?.length) {
@@ -723,17 +748,12 @@ function runExtendInterest(
     throw new RuleError("INTEREST_CAP", "interest already at cap");
   }
 
-  const attackerTags: FeatureTags = {
-    domain: attackerFeature.domain as FeatureTags["domain"],
-    size: attackerFeature.size as FeatureTags["size"],
-    quality: attackerFeature.quality as FeatureTags["quality"],
-    magical: attackerFeature.magical !== 0,
-    origin: attackerFeature.origin as FeatureTags["origin"],
-  };
+  const marginal = readMarginal(input.marginal);
+  resolveContestEdge(input.attackerEdge, "attackerEdge");
+  resolveContestEdge(input.defenderEdge, "defenderEdge");
 
   const attackerFaces = dieMax;
   let defenderFeature: typeof attackerFeature | undefined;
-  let defenderTags: FeatureTags | null = null;
   let defenderTotal = 0;
 
   defenderFeature = resolveDefenderFeature(db, defender.id, input.defenderFeatureId);
@@ -749,7 +769,7 @@ function runExtendInterest(
     attackerRoll = featureRoll({
       rng,
       faces: attackerFaces,
-      marginal: input.marginal ?? false,
+      marginal,
       bonus: 0,
       forced: input.forcedAttackerRoll,
     });
@@ -761,37 +781,20 @@ function runExtendInterest(
     });
   } else {
     const rng = nextRng(db, attacker.campaign_id);
-    defenderTags = {
-      domain: defenderFeature.domain as FeatureTags["domain"],
-      size: defenderFeature.size as FeatureTags["size"],
-      quality: defenderFeature.quality as FeatureTags["quality"],
-      magical: defenderFeature.magical !== 0,
-      origin: defenderFeature.origin as FeatureTags["origin"],
-    };
-    const defenderFaces = DIE_BY_POWER[defender.power];
-    const attackerBonus = unevenBonus(attackerTags, defenderTags);
-    const defenderBonus = unevenBonus(defenderTags, attackerTags);
-    const attackerMarginal =
-      input.marginal ??
-      defaultRelevance(attackerTags.domain, defenderTags.domain);
-    const defenderMarginal =
-      input.marginal ??
-      defaultRelevance(defenderTags.domain, attackerTags.domain);
-    attackerRoll = featureRoll({
+    const settled = settledContest({
       rng,
-      faces: attackerFaces,
-      marginal: attackerMarginal,
-      bonus: attackerBonus,
-      forced: input.forcedAttackerRoll,
+      attackerFaces,
+      defenderFaces: DIE_BY_POWER[defender.power],
+      attackerOrigin: attackerFeature.origin,
+      defenderOrigin: defenderFeature.origin,
+      marginal: input.marginal,
+      attackerEdge: input.attackerEdge,
+      defenderEdge: input.defenderEdge,
+      forcedAttackerRoll: input.forcedAttackerRoll,
+      forcedDefenderRoll: input.forcedDefenderRoll,
     });
-    const defenderRoll = featureRoll({
-      rng,
-      faces: defenderFaces,
-      marginal: defenderMarginal,
-      bonus: defenderBonus,
-      forced: input.forcedDefenderRoll,
-    });
-    defenderTotal = defenderRoll.total;
+    attackerRoll = settled.attackerRoll;
+    defenderTotal = settled.defenderRoll.total;
     let aTotal = attackerRoll.total;
     let dTotal = defenderTotal;
     if (input.standingOrders?.length) {

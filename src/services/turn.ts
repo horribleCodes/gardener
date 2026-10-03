@@ -9,7 +9,7 @@ import { monthlyDominion } from "../rules/cults.js";
 import type { Harshness } from "../domain/types.js";
 import { rollDie } from "../rules/dice.js";
 import { planGoal } from "../rules/goals.js";
-import { resolveContest } from "../rules/contest.js";
+import { resolveContest, type ContestEdge } from "../rules/contest.js";
 import { interestCap, interestModifier } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
 import { loadCatalog } from "../tables/catalog.js";
@@ -53,6 +53,8 @@ export type FactionAction =
       defenderFeatureId?: string;
       defenderChoice?: "cohesion" | "sacrifice" | "problem";
       marginal?: boolean;
+      attackerEdge?: ContestEdge;
+      defenderEdge?: ContestEdge;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     }
@@ -60,6 +62,10 @@ export type FactionAction =
       type: "extend_interest";
       targetFactionId: string;
       attackerFeatureId: string;
+      defenderFeatureId?: string;
+      marginal?: boolean;
+      attackerEdge?: ContestEdge;
+      defenderEdge?: ContestEdge;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     };
