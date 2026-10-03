@@ -130,6 +130,8 @@ Not a free-text adjective like “mercantile.”
 
 Use these only as a declared director act, never silently for a player's faction. Unit plans cannot carry them.
 
+On `attack` and `extend_interest`, `marginal`, `attackerEdge`, and `defenderEdge` state the contest. A unit plan may carry them. Omit them and the contest is one die per side with no scale, quality, or supernatural bonus. Different domains do not set `marginal`. Stored size, quality, and magical marks are unread. A feature's stored `origin` still adds +1 (`improbable`) or +2 (`impossible`) when both sides have a feature. No setup tool writes a non-native feature origin.
+
 ## When the user wants a chosen interest nature
 
 Call `set_interest` with `fromFactionId`, `toFactionId`, and a catalog `nature`. Default `points` is 1. It does not roll and does not need an open turn. A second call with a different nature fails unless `replaceNature: true`.
