@@ -10,12 +10,18 @@ After the dice, describe the result as rumor, news, or something the heroes coul
 
 Narrate only what the tools recorded.
 
+## Faction sheet
+
+The tools show Features, Problems, Cohesion, Power, and Dominion. **Trouble** is not a stored field; it is the sum of Problem points. **Cohesion** starts equal to Power and cannot exceed Power. Contests are **one Feature versus one Feature**: name which Feature each side used.
+
 ## Reading the dice
 
 - A faction's action die follows its Power: d6, d8, d10, d12, d20 for Power 1–5.
-- **Trouble** is the sum of its problems' points. A check succeeds only when the roll is **greater than** Trouble.
-- On a failure the roll lands in one problem's band (`get_faction` shows the bands). That problem is the culprit; narrate the failure as its fault.
-- In a contest the higher total wins; a tie goes to the higher Power, then to the defender. When the two features are in different domains the roll is marginal: roll twice and keep the lower.
+- **Trouble** is the sum of its Problems' points. A check succeeds only when the roll is **greater than** Trouble.
+- On a failure, narrate the failure as the fault of the Problem `get_faction` names for that roll. Do not invent a second mechanic called bands.
+- In a contest, one Feature versus one Feature. The higher total wins; a tie goes to the higher Power, then to the defender.
+- **Marginality is a GM call** (roll twice, keep the lower). Do not treat catalog domain mismatch as automatically marginal.
+- Uneven contest bonus, for the Feature that is rolling, when those marks are set: +1 vast against a Feature that is not, +1 superior against one that is not, +1 edged when the edge matters, +1 if origin is improbable, +2 if impossible. A natural 1 suppresses the uneven bonus.
 - When an attack succeeds, the defender picks one loss: 1 cohesion, sacrificing the feature it defended with, or `1 + max(0, attacker Power − defender Power)` problem points. NPC defenders pick whatever keeps them alive (`preserve_existence`). A player-controlled defender pauses the turn until the user chooses.
 - A faction **collapses** when Trouble reaches its die maximum or cohesion reaches 0. A collapsed faction refuses actions with `COLLAPSED_FACTION`; queries about it still work.
 

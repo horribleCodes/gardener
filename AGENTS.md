@@ -13,6 +13,12 @@ Gardener is a local stateful MCP implementing a virtual world.
 - finished MCP reviews live under `test/reviews`; playtest scripts under `test/play-scripts`
 - living design framing and naming live under `docs/design/` (for example `overview.md`, `glossary.md`)
 
+## MCP decisions
+
+- Address a read by a resource when the caller already has the full key, or wants the whole collection with nothing left out. The URI is the query.
+  Address a read by a tool when the caller has only part of the key, or wants the collection narrowed by a condition. The arguments are the query.
+  If you can write the URI before you know the answer, it is a resource. If you have to describe what you are looking for, it is a tool.
+
 ## Documentation
 
 `docs/superpowers/` is **historical**: dated plans and specs for past changes, not maintained after merge. Do not treat it as the current design source of truth. Prefer `docs/design/` and the codebase; link to superpowers only for deep historical context.
@@ -49,3 +55,5 @@ Any runtime asset imported using `new URL(..., import.meta.url)` must be explici
 ## Pull requests
 
 When a PR comes from a known GitHub issue, link that issue in the body (`Closes` / `Fixes` when it completes the issue; `Related to` / `Implements` otherwise). See `.cursor/prompts/implement.md` and `.cursor/prompts/spec.md`.
+
+Implementing a spec continues on the spec draft: check out that PR's branch, push implementation there, and mark it ready. Do not open a second implementation PR from `main`.
