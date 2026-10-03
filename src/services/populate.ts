@@ -8,9 +8,11 @@ import {
   RuleError,
   SCOPE_BY_POWER,
   type FillMode,
+  type InterestNature,
   type Power,
   type Scope,
 } from "../domain/types.js";
+import { interestCap } from "../rules/actions.js";
 import { championStats } from "../rules/cost.js";
 import { cultBudget } from "../rules/cults.js";
 import { generateCourt, type CourtDraft } from "../generate/court.js";
@@ -155,6 +157,79 @@ export function createCampaign(
         flags.reachUnit,
       );
       return { campaignId, rngSeed, flags };
+    }),
+  );
+}
+
+export function removeCampaign(
+  db: Database.Database,
+  input: { campaignId: string },
+): ServiceResult<{ campaignId: string }> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      requireCampaign(db, input.campaignId);
+      const id = input.campaignId;
+      db.prepare(
+        `DELETE FROM feature_parts WHERE feature_id IN (
+           SELECT f.id FROM features f JOIN factions fa ON fa.id = f.faction_id WHERE fa.campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM problems WHERE faction_id IN (SELECT id FROM factions WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM interests WHERE from_faction_id IN (SELECT id FROM factions WHERE campaign_id = ?)
+           OR to_faction_id IN (SELECT id FROM factions WHERE campaign_id = ?)`,
+      ).run(id, id);
+      db.prepare(
+        `DELETE FROM features WHERE faction_id IN (SELECT id FROM factions WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM wards WHERE place_id IN (SELECT id FROM places WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM court_memberships WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)
+           OR character_id IN (SELECT id FROM characters WHERE campaign_id = ?)`,
+      ).run(id, id);
+      db.prepare(
+        `DELETE FROM conflicts WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM court_consequences WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM court_dispositions WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM court_defenses WHERE court_id IN (SELECT id FROM courts WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM change_commitments WHERE change_id IN (SELECT id FROM changes WHERE campaign_id = ?)
+           OR hero_id IN (SELECT id FROM heroes WHERE campaign_id = ?)`,
+      ).run(id, id);
+      db.prepare(
+        `DELETE FROM resisters WHERE change_id IN (SELECT id FROM changes WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare(
+        `DELETE FROM unit_views WHERE turn_id IN (SELECT id FROM turns WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare("DELETE FROM write_queue WHERE campaign_id = ?").run(id);
+      db.prepare(
+        `DELETE FROM actions WHERE turn_id IN (SELECT id FROM turns WHERE campaign_id = ?)`,
+      ).run(id);
+      db.prepare("DELETE FROM setpieces WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM challenges WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM facts WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM characters WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM courts WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM factions WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM places WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM heroes WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM changes WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM rolls WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM events WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM turns WHERE campaign_id = ?").run(id);
+      db.prepare("DELETE FROM campaigns WHERE id = ?").run(id);
+      return { campaignId: id };
     }),
   );
 }
@@ -311,6 +386,107 @@ export function createFaction(
       }
 
       return { factionId, advisories };
+    }),
+  );
+}
+
+const INTEREST_NATURES = new Set<string>([
+  "alliance",
+  "rivalry",
+  "trade",
+  "marriage",
+  "spies",
+  "aid",
+  "tribute",
+]);
+
+export function setInterest(
+  db: Database.Database,
+  input: {
+    campaignId: string;
+    fromFactionId: string;
+    toFactionId: string;
+    nature: InterestNature | string;
+    points?: number;
+    replaceNature?: boolean;
+  },
+): ServiceResult<{
+  interestId: string;
+  fromFactionId: string;
+  toFactionId: string;
+  nature: string;
+  points: number;
+}> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      requireCampaign(db, input.campaignId);
+      const loadFaction = (factionId: string) => {
+        const row = db
+          .prepare("SELECT id, campaign_id, power FROM factions WHERE id = ?")
+          .get(factionId) as { id: string; campaign_id: string; power: Power } | undefined;
+        if (!row || row.campaign_id !== input.campaignId) {
+          throw new RuleError("ENTITY_NOT_FOUND", "faction not found");
+        }
+        return row;
+      };
+      const from = loadFaction(input.fromFactionId);
+      const to = loadFaction(input.toFactionId);
+      if (from.id === to.id) {
+        throw new RuleError("FILL_INCOMPLETE", "cannot set interest to self");
+      }
+      if (!INTEREST_NATURES.has(input.nature)) {
+        throw new RuleError("PICK_UNKNOWN", "unknown interest nature");
+      }
+      const cap = interestCap(DIE_BY_POWER[from.power]);
+      if (input.points !== undefined) {
+        if (input.points < 1) {
+          throw new RuleError("FILL_INCOMPLETE", "interest points must be at least 1");
+        }
+        if (input.points > cap) {
+          throw new RuleError("INTEREST_CAP", "interest already at cap");
+        }
+      }
+
+      const existing = db
+        .prepare(
+          "SELECT id, points, nature FROM interests WHERE from_faction_id = ? AND to_faction_id = ?",
+        )
+        .get(from.id, to.id) as { id: string; points: number; nature: string } | undefined;
+
+      if (!existing) {
+        const points = input.points ?? 1;
+        const interestId = crypto.randomUUID();
+        db.prepare(
+          `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+           VALUES (?, ?, ?, ?, ?)`,
+        ).run(interestId, from.id, to.id, points, input.nature);
+        return {
+          interestId,
+          fromFactionId: from.id,
+          toFactionId: to.id,
+          nature: input.nature,
+          points,
+        };
+      }
+
+      if (existing.nature !== input.nature && input.replaceNature !== true) {
+        throw new RuleError(
+          "INTEREST_NATURE_MISMATCH",
+          "existing interest has a different nature",
+        );
+      }
+
+      const points = input.points ?? existing.points;
+      db.prepare(
+        "UPDATE interests SET nature = ?, points = ? WHERE id = ?",
+      ).run(input.nature, points, existing.id);
+      return {
+        interestId: existing.id,
+        fromFactionId: from.id,
+        toFactionId: to.id,
+        nature: input.nature,
+        points,
+      };
     }),
   );
 }
