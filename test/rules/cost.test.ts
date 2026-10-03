@@ -54,3 +54,35 @@ test("a loyal champion uses half the creator level, rounded up, and always costs
   expect(championStats(5, true).hitDice).toBe(11);
   expect(championStats(1, false).attacks).toBe(1);
 });
+
+test("omitted deed and challenge quotas default to 0, including impossible and vast", () => {
+  const impossibleRealm = quoteChange({
+    scope: "realm", magnitude: "impossible", wardRatings: [], resisterRatings: [],
+  });
+  expect(impossibleRealm.deedsRequired).toBe(0);
+  expect(impossibleRealm.challengesRequired).toBe(0);
+  expect(impossibleRealm.total).toBe(64);
+
+  const vastCity = quoteChange({
+    scope: "city", magnitude: "vast", wardRatings: [], resisterRatings: [],
+    kind: "creature_population",
+  });
+  expect(vastCity.deedsRequired).toBe(0);
+  expect(vastCity.challengesRequired).toBe(0);
+});
+
+test("caller-set deed and challenge quotas including explicit zero", () => {
+  const needsDeed = quoteChange({
+    scope: "village", magnitude: "impossible", wardRatings: [], resisterRatings: [],
+    deedsRequired: 1, challengesRequired: 2,
+  });
+  expect(needsDeed.deedsRequired).toBe(1);
+  expect(needsDeed.challengesRequired).toBe(2);
+
+  const explicitZero = quoteChange({
+    scope: "nation", magnitude: "vast", wardRatings: [], resisterRatings: [],
+    deedsRequired: 0, challengesRequired: 0,
+  });
+  expect(explicitZero.deedsRequired).toBe(0);
+  expect(explicitZero.challengesRequired).toBe(0);
+});
