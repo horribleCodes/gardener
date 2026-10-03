@@ -23,7 +23,7 @@ The file's SQLite `user_version` is its schema version. This server writes `SCHE
 
 ## MCP surface
 
-The server exposes 49 tools, 6 resource templates, and 2 prompts.
+The server exposes 50 tools, 6 resource templates, and 2 prompts.
 
 - **Resources:** `world://campaigns/{campaignId}/brief`, `…/factions/{factionId}`, `…/courts/{courtId}`, `…/turns/latest`, `…/hooks`, and `world://tables/{path}` (a subtree of the chart catalog).
 - **Prompts:** `gm-briefing` and `faction-turn-narration`. Both are read-only and ask the model to narrate only what the embedded JSON says.
@@ -39,7 +39,7 @@ Every tool returns one envelope:
 - `advisories` are warnings that did not fail the call, such as a court size clamped into range.
 - `derived` is the slice most relevant to the mutation. For a faction it is `trouble`, `collapseMargin` (die maximum minus Trouble; at 0 or below the faction collapses), and `status`. For a change it is its status, scope, and magnitude.
 
-Common error codes: `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_UNKNOWN`, `TURN_ALREADY_OPEN`, `WRITE_LOCKED`, `QUEUE_CLOSED`, `NOT_PENDING`, `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET`, `INTEREST_CAP`, `INTEREST_ALREADY_SPENT`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `COLLAPSED_FACTION`, `COHESION_AT_CAP`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `CHANGE_NOT_READY`, `NOTHING_TO_SOLVE`, `INTRINSIC_PROBLEM`, `MAGNITUDE_REJECTED`, and `NAME_TAKEN`.
+Common error codes: `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_UNKNOWN`, `TURN_ALREADY_OPEN`, `WRITE_LOCKED`, `QUEUE_CLOSED`, `NOT_PENDING`, `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET`, `INTEREST_CAP`, `INTEREST_NATURE_MISMATCH`, `INTEREST_ALREADY_SPENT`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `COLLAPSED_FACTION`, `COHESION_AT_CAP`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `CHANGE_NOT_READY`, `NOTHING_TO_SOLVE`, `INTRINSIC_PROBLEM`, `MAGNITUDE_REJECTED`, and `NAME_TAKEN`.
 
 ## Determinism
 

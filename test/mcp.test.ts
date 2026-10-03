@@ -20,7 +20,9 @@ test("MCP server is named gardener and registers create_hero", async () => {
   const names = tools.tools.map((t) => t.name);
   expect(names).toContain("create_hero");
   expect(names).toContain("remove-campaign");
+  expect(names).toContain("set_interest");
   expect(names).not.toContain("create_godbound");
+  expect(names).toHaveLength(50);
   await client.close();
 });
 
@@ -100,6 +102,49 @@ test("get_unit_view for rivalry omits dominion and behavior; quote_change still 
   });
   const quoteBody = JSON.parse((quoteResult.content as { text: string }[])[0].text);
   expect(quoteBody.data.total).toBe(12);
+  await client.close();
+});
+
+test("set_interest writes a directed spies edge", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const campaignText = (
+    await client.callTool({
+      name: "create_campaign",
+      arguments: { name: "Interest", rngSeed: 1 },
+    })
+  ).content as { text: string }[];
+  const campaign = JSON.parse(campaignText[0].text);
+  const campaignId = campaign.data.campaignId as string;
+
+  const makeFaction = async (name: string) => {
+    const text = (
+      await client.callTool({
+        name: "create_faction",
+        arguments: { campaignId, name, power: 1, behavior: "directed" },
+      })
+    ).content as { text: string }[];
+    return JSON.parse(text[0].text).data.factionId as string;
+  };
+  const fromFactionId = await makeFaction("A");
+  const toFactionId = await makeFaction("B");
+
+  const result = await client.callTool({
+    name: "set_interest",
+    arguments: { campaignId, fromFactionId, toFactionId, nature: "spies" },
+  });
+  const body = JSON.parse((result.content as { text: string }[])[0].text);
+  expect(body.ok).toBe(true);
+  expect(body.data).toMatchObject({
+    fromFactionId,
+    toFactionId,
+    nature: "spies",
+    points: 1,
+  });
   await client.close();
 });
 

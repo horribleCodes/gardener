@@ -21,6 +21,7 @@ import {
   createHero,
   seedCampaign,
   createFaction,
+  setInterest,
   createCourt,
   fitBlank,
   createCharacter,
@@ -275,6 +276,22 @@ export function buildServer(dbPath: string): McpServer {
       },
     },
     dbTool((a) => createFaction(db, a)),
+  );
+
+  reg(
+    "set_interest",
+    {
+      description: "Create or update a directed interest edge with an explicit catalog nature",
+      inputSchema: {
+        campaignId: z.string(),
+        fromFactionId: z.string(),
+        toFactionId: z.string(),
+        nature: z.enum(["alliance", "rivalry", "trade", "marriage", "spies", "aid", "tribute"]),
+        points: z.number().int().min(1).optional(),
+        replaceNature: z.boolean().optional(),
+      },
+    },
+    dbTool((a) => setInterest(db, a)),
   );
 
   reg(

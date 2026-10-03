@@ -8,9 +8,11 @@ import {
   RuleError,
   SCOPE_BY_POWER,
   type FillMode,
+  type InterestNature,
   type Power,
   type Scope,
 } from "../domain/types.js";
+import { interestCap } from "../rules/actions.js";
 import { championStats } from "../rules/cost.js";
 import { cultBudget } from "../rules/cults.js";
 import { generateCourt, type CourtDraft } from "../generate/court.js";
@@ -384,6 +386,107 @@ export function createFaction(
       }
 
       return { factionId, advisories };
+    }),
+  );
+}
+
+const INTEREST_NATURES = new Set<string>([
+  "alliance",
+  "rivalry",
+  "trade",
+  "marriage",
+  "spies",
+  "aid",
+  "tribute",
+]);
+
+export function setInterest(
+  db: Database.Database,
+  input: {
+    campaignId: string;
+    fromFactionId: string;
+    toFactionId: string;
+    nature: InterestNature | string;
+    points?: number;
+    replaceNature?: boolean;
+  },
+): ServiceResult<{
+  interestId: string;
+  fromFactionId: string;
+  toFactionId: string;
+  nature: string;
+  points: number;
+}> {
+  return wrapRule(() =>
+    withTransaction(db, () => {
+      requireCampaign(db, input.campaignId);
+      const loadFaction = (factionId: string) => {
+        const row = db
+          .prepare("SELECT id, campaign_id, power FROM factions WHERE id = ?")
+          .get(factionId) as { id: string; campaign_id: string; power: Power } | undefined;
+        if (!row || row.campaign_id !== input.campaignId) {
+          throw new RuleError("ENTITY_NOT_FOUND", "faction not found");
+        }
+        return row;
+      };
+      const from = loadFaction(input.fromFactionId);
+      const to = loadFaction(input.toFactionId);
+      if (from.id === to.id) {
+        throw new RuleError("FILL_INCOMPLETE", "cannot set interest to self");
+      }
+      if (!INTEREST_NATURES.has(input.nature)) {
+        throw new RuleError("PICK_UNKNOWN", "unknown interest nature");
+      }
+      const cap = interestCap(DIE_BY_POWER[from.power]);
+      if (input.points !== undefined) {
+        if (input.points < 1) {
+          throw new RuleError("FILL_INCOMPLETE", "interest points must be at least 1");
+        }
+        if (input.points > cap) {
+          throw new RuleError("INTEREST_CAP", "interest already at cap");
+        }
+      }
+
+      const existing = db
+        .prepare(
+          "SELECT id, points, nature FROM interests WHERE from_faction_id = ? AND to_faction_id = ?",
+        )
+        .get(from.id, to.id) as { id: string; points: number; nature: string } | undefined;
+
+      if (!existing) {
+        const points = input.points ?? 1;
+        const interestId = crypto.randomUUID();
+        db.prepare(
+          `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+           VALUES (?, ?, ?, ?, ?)`,
+        ).run(interestId, from.id, to.id, points, input.nature);
+        return {
+          interestId,
+          fromFactionId: from.id,
+          toFactionId: to.id,
+          nature: input.nature,
+          points,
+        };
+      }
+
+      if (existing.nature !== input.nature && input.replaceNature !== true) {
+        throw new RuleError(
+          "INTEREST_NATURE_MISMATCH",
+          "existing interest has a different nature",
+        );
+      }
+
+      const points = input.points ?? existing.points;
+      db.prepare(
+        "UPDATE interests SET nature = ?, points = ? WHERE id = ?",
+      ).run(input.nature, points, existing.id);
+      return {
+        interestId: existing.id,
+        fromFactionId: from.id,
+        toFactionId: to.id,
+        nature: input.nature,
+        points,
+      };
     }),
   );
 }
