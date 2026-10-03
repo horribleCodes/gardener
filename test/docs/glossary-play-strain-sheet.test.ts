@@ -14,7 +14,7 @@ test("glossary names Feature, Problem, Trouble, and Cohesion", () => {
 });
 
 test("play does not teach domain mismatch as automatic marginality", () => {
-  expect(play).toMatch(/Marginality is a GM call/i);
+  expect(play).toMatch(/Marginality is the caller's `marginal`/i);
   expect(play).toMatch(/one Feature versus one Feature/i);
   expect(play.toLowerCase()).not.toMatch(
     /different domains the roll is marginal/,
