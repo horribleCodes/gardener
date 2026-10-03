@@ -46,7 +46,7 @@ export function getFaction(db: Database.Database, factionId: string) {
   });
 
   const features = db
-    .prepare("SELECT id, text, domain, size, quality, magical, origin, covert FROM features WHERE faction_id = ?")
+    .prepare("SELECT id, text, domain, origin, covert FROM features WHERE faction_id = ?")
     .all(faction.id);
 
   const interestsOutRaw = db
@@ -239,50 +239,30 @@ export function relevantFeatures(
   if (!faction) throw new RuleError("ENTITY_NOT_FOUND", `faction ${input.factionId} not found`);
 
   const features = db
-    .prepare("SELECT id, text, domain, size, quality, magical, origin FROM features WHERE faction_id = ?")
+    .prepare("SELECT id, text, domain, origin FROM features WHERE faction_id = ?")
     .all(input.factionId) as {
     id: string;
     text: string;
     domain: string;
-    size: string;
-    quality: string;
-    magical: number;
     origin: string;
   }[];
 
   type OppRow = {
-    domain: string;
-    size: string;
-    quality: string;
-    magical: number;
     origin: string;
   };
   let opposing: OppRow | null = null;
   if (input.opposingFeatureId) {
     opposing =
       (db
-        .prepare("SELECT domain, size, quality, magical, origin FROM features WHERE id = ?")
+        .prepare("SELECT origin FROM features WHERE id = ?")
         .get(input.opposingFeatureId) as OppRow | undefined) ?? null;
   }
 
   return features
     .filter((f) => f.domain === input.domain || input.domain === "any")
     .map((f) => {
-      const tags = {
-        domain: f.domain as "cultural" | "military" | "economic" | "other",
-        size: f.size as "normal" | "vast",
-        quality: f.quality as "normal" | "superior",
-        magical: f.magical !== 0,
-        origin: f.origin as "native" | "improbable" | "impossible",
-      };
       const bonus = opposing
-        ? unevenBonus(tags, {
-            domain: opposing.domain as "cultural" | "military" | "economic" | "other",
-            size: opposing.size as "normal" | "vast",
-            quality: opposing.quality as "normal" | "superior",
-            magical: opposing.magical !== 0,
-            origin: opposing.origin as "native" | "improbable" | "impossible",
-          })
+        ? unevenBonus({ origin: f.origin, gmBonus: 0, hasOpponent: true })
         : 0;
       return { ...f, unevenBonus: bonus };
     });

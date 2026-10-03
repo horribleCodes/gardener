@@ -19,7 +19,7 @@ There is no tool that lists campaigns. The `campaignId` exists only in the reply
 
 ## Schema versioning
 
-The file's SQLite `user_version` is its schema version. This server writes `SCHEMA_VERSION` 3 and migrates files from `MIN_SCHEMA_VERSION` 0 (an unversioned v1 file) upward. A file newer than the server, older than the minimum, or a legacy file whose migration would drop orphaned challenges is refused with `INCOMPATIBLE_SCHEMA` before any write.
+The file's SQLite `user_version` is its schema version. This server writes `SCHEMA_VERSION` 4 and migrates files from `MIN_SCHEMA_VERSION` 0 (an unversioned v1 file) upward. A version 3 file drops stored feature `size`, `quality`, and `magical` on open. A file newer than the server, older than the minimum, or a legacy file whose migration would drop orphaned challenges is refused with `INCOMPATIBLE_SCHEMA` before any write.
 
 ## MCP surface
 

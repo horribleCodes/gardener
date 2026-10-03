@@ -36,8 +36,8 @@ function insertChange(
 test("assessWithdrawal beyond_local_maintenance when plausible change links improbable feature", () => {
   const db = withdrawalDb();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('feat', 'owner', 'Wonder', 'cultural', 'normal', 'normal', 0, 'improbable')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('feat', 'owner', 'Wonder', 'cultural', 'improbable')`,
   ).run();
   insertChange(db, { id: "ch1", factionId: "owner", magnitude: "plausible", featureId: "feat" });
 

@@ -64,9 +64,9 @@ test("get_unit_view for rivalry omits dominion and behavior; quote_change still 
     `INSERT INTO places (id, campaign_id, name, scope, parent_place_id) VALUES ('p', ?, 'Home', 'village', NULL), ('far', ?, 'Far', 'city', NULL)`,
   ).run(campaignId, campaignId);
   seed.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin, covert)
-     VALUES ('f1', 'them', 'Open market', 'economic', 'normal', 'normal', 0, 'native', 0),
-            ('f2', 'them', 'Secret rifles', 'military', 'normal', 'normal', 0, 'native', 1)`,
+    `INSERT INTO features (id, faction_id, text, domain, origin, covert)
+     VALUES ('f1', 'them', 'Open market', 'economic', 'native', 0),
+            ('f2', 'them', 'Secret rifles', 'military', 'native', 1)`,
   ).run();
   seed.prepare(
     `INSERT INTO problems (id, faction_id, text, domain, points, intrinsic, external, resistance, position)

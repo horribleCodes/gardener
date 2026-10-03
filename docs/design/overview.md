@@ -62,7 +62,7 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 - Interest natures never auto-intervene: no faction spends interest unless a plan's standing order or `spend_interest` does.
 - Standing orders fire only inside the planning faction's own attack or extend, only before the roll, and never cost Dominion. Intent: during any contest the target is in, with after-roll orders costing Dominion.
 - `spend_interest` after a roll only relabels the outcome. Intent: the modifier applies to the stored roll before comparison, and the result follows.
-- Uneven contest bonuses are always 0, because no tool sets feature size, quality, magical, or origin.
+- When both sides have a feature, a contest adds the rolling feature's stored origin (+1 `improbable`, +2 `impossible`) and the caller's `attackerBonus` or `defenderBonus` (an integer 0 or higher). Domain mismatch does not set marginality. No play tool yet writes a non-native feature origin.
 
 **Turns and plans**
 

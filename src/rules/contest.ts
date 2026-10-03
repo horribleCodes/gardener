@@ -1,14 +1,32 @@
-import type { FeatureTags, Power, RollRecord } from "../domain/types.js";
+import type { Power, RollRecord } from "../domain/types.js";
+import { RuleError } from "../domain/types.js";
 import { rollDie, type Rng } from "./dice.js";
 
-export function unevenBonus(mine: FeatureTags, theirs: FeatureTags | null, magicRelevant = true): number {
-  if (!theirs) return 0;
-  let bonus = 0;
-  if (mine.size === "vast" && theirs.size !== "vast") bonus += 1;
-  if (mine.quality === "superior" && theirs.quality !== "superior") bonus += 1;
-  if (mine.magical && magicRelevant) bonus += 1;
-  if (mine.origin === "improbable") bonus += 1;
-  if (mine.origin === "impossible") bonus += 2;
+export function readMarginal(raw: unknown): boolean {
+  if (raw == null) return false;
+  if (typeof raw !== "boolean") {
+    throw new RuleError("FILL_INCOMPLETE", "marginal must be a boolean");
+  }
+  return raw;
+}
+
+export function readGmBonus(raw: unknown, label: string): number {
+  if (raw == null) return 0;
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0 || raw > 3) {
+    throw new RuleError("FILL_INCOMPLETE", `${label} must be an integer from 0 to 3`);
+  }
+  return raw;
+}
+
+export function unevenBonus(input: {
+  origin: string;
+  gmBonus: number;
+  hasOpponent: boolean;
+}): number {
+  if (!input.hasOpponent) return 0;
+  let bonus = input.gmBonus;
+  if (input.origin === "improbable") bonus += 1;
+  if (input.origin === "impossible") bonus += 2;
   return bonus;
 }
 
@@ -26,15 +44,6 @@ export function featureRoll(input: {
     faces: input.faces, natural: kept, kept, bonus, total: kept + bonus,
     forced: input.forced != null || input.forcedPair != null,
   };
-}
-
-export function defaultRelevance(
-  attackerDomain: string | undefined | null,
-  defenderDomain: string | undefined | null,
-): boolean {
-  if (!attackerDomain || !defenderDomain) return false;
-  if (attackerDomain === "other" || defenderDomain === "other") return false;
-  return attackerDomain !== defenderDomain;
 }
 
 export function resolveContest(input: {

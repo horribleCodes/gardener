@@ -130,6 +130,8 @@ Not a free-text adjective like “mercantile.”
 
 Use these only as a declared director act, never silently for a player's faction. Unit plans cannot carry them.
 
+On `attack` and `extend_interest`, `marginal`, `attackerBonus`, and `defenderBonus` state the contest. A unit plan may carry them. Omit a bonus and that side adds 0. Different domains do not set `marginal`. Before the roll, judge each feature against the one opposing it. Each bonus is an integer from 0 to 3: add 1 if that feature is vastly larger, add 1 if it is vastly qualitatively superior, and add 1 if it has magical qualities or supernatural powers relevant to the contest.
+
 ## When the user wants a chosen interest nature
 
 Call `set_interest` with `fromFactionId`, `toFactionId`, and a catalog `nature`. Default `points` is 1. It does not roll and does not need an open turn. A second call with a different nature fails unless `replaceNature: true`.

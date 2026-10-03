@@ -19,6 +19,85 @@ test("checkSchemaVersion refuses a file newer or older than this server can open
   expect(() => checkSchemaVersion(MIN_SCHEMA_VERSION)).not.toThrow();
 });
 
+test("a new database stores feature origin and not size, quality, or magical", () => {
+  const db = openDb(":memory:");
+  const columns = db.prepare("PRAGMA table_info(features)").all() as { name: string }[];
+  const names = columns.map((column) => column.name);
+  expect(names).toContain("origin");
+  expect(names).not.toContain("size");
+  expect(names).not.toContain("quality");
+  expect(names).not.toContain("magical");
+  db.close();
+});
+
+test("opening a version 3 file drops stored feature size, quality, and magical", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb-schema-features-"));
+  const path = join(dir, "campaign.sqlite");
+  try {
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE campaigns (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        month INTEGER NOT NULL,
+        rng_seed INTEGER NOT NULL,
+        roll_counter INTEGER NOT NULL
+      );
+      CREATE TABLE changes (
+        id TEXT PRIMARY KEY,
+        campaign_id TEXT NOT NULL
+      );
+      CREATE TABLE challenges (
+        id TEXT PRIMARY KEY,
+        campaign_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        text TEXT NOT NULL,
+        change_id TEXT,
+        status TEXT NOT NULL
+      );
+      CREATE TABLE setpieces (
+        id TEXT PRIMARY KEY,
+        campaign_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        need TEXT NOT NULL,
+        status TEXT NOT NULL,
+        court_id TEXT,
+        challenge_id TEXT,
+        character_id TEXT,
+        fact_id TEXT
+      );
+      CREATE TABLE features (
+        id TEXT PRIMARY KEY,
+        faction_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        size TEXT NOT NULL,
+        quality TEXT NOT NULL,
+        magical INTEGER NOT NULL,
+        origin TEXT NOT NULL
+      );
+      INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES ('c1', 'Old', 2, 1, 0);
+      INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+        VALUES ('wide', 'f1', 'Wide', 'military', 'vast', 'superior', 1, 'impossible');
+    `);
+    legacy.pragma("user_version = 3");
+    legacy.close();
+
+    const db = openDb(path);
+    const columns = db.prepare("PRAGMA table_info(features)").all() as { name: string }[];
+    const names = columns.map((column) => column.name);
+    expect(names).not.toContain("size");
+    expect(names).not.toContain("quality");
+    expect(names).not.toContain("magical");
+    expect(db.prepare("SELECT origin FROM features WHERE id = 'wide'").get()).toEqual({
+      origin: "impossible",
+    });
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a new database is stamped with this server's schema version", () => {
   const db = openDb(":memory:");
   expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
