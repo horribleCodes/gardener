@@ -31,30 +31,10 @@ export function quoteChange(input: {
     : 0;
   const multiplier = MULTIPLIER[input.magnitude];
   const base = scopeCost + ward + opposition;
-  const defaults = defaultObstacles(input.scope, input.magnitude, input.kind, input.petty ?? false);
   return {
     scopeCost, ward, opposition, base, multiplier, total: base * multiplier,
-    deedsRequired: input.deedsRequired ?? defaults.deeds,
-    challengesRequired: input.challengesRequired ?? defaults.challenges,
-  };
-}
-
-function defaultObstacles(scope: Scope, magnitude: Magnitude, kind: string | undefined, petty: boolean): {
-  deeds: number; challenges: number;
-} {
-  if (petty && magnitude === "impossible" && scope === "village") return { deeds: 0, challenges: 0 };
-  if (kind === "creature_population" && (magnitude === "impossible" || magnitude === "vast")) {
-    const deeds = SCOPE_COST[scope];
-    return { deeds, challenges: deeds };
-  }
-  const large = scope === "region" || scope === "nation" || scope === "realm";
-  if (magnitude === "plausible" || magnitude === "improbable") {
-    return { deeds: 0, challenges: large ? 1 : 0 };
-  }
-  const challenges = scope === "realm" ? 6 : scope === "nation" ? 3 : scope === "region" ? 2 : 1;
-  return {
-    deeds: 1,
-    challenges: magnitude === "vast" ? Math.max(2, challenges) : challenges,
+    deedsRequired: input.deedsRequired ?? 0,
+    challengesRequired: input.challengesRequired ?? 0,
   };
 }
 
