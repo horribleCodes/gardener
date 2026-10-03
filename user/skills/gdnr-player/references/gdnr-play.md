@@ -76,7 +76,7 @@ Spy interest aimed at a faction never shows up in that faction's own view.
   1. `quote_change` — always quote before promising a cost
   2. `begin_change`
   3. `commit_resources`
-  4. Record the deeds and challenges the quote requires (`record_deed`, `create_challenge`, `record_challenge_outcome`)
+  4. If the GM sets deed or challenge quotas on `quote_change` / `begin_change` (including explicit zero), record them with `record_deed`, `create_challenge`, and `record_challenge_outcome`. Omitted quotas are 0; the quote does not invent a mighty deed.
   5. `apply_outcome` when the change lands
 
 Mundus wards raise the Influence cost of a change inside them. They do not block an immediate gift or miracle.
