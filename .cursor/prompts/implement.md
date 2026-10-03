@@ -6,7 +6,7 @@ You are pointed at a GitHub issue or pull request. Read it with `gh issue view <
 
 If that URL is missing, stop and say the issue has no draft pull request. Do not start from the issue text alone.
 
-This procedure **overrides** any default that would check out a new branch from `main` and open a new pull request. Do not do that. The #74 / #75 pattern (new branch from `main`, new implementation PR next to the spec draft) is forbidden.
+This procedure **overrides** any default that would check out a new branch from `main` and open a new pull request. Do not do that.
 
 ## Do
 
@@ -17,8 +17,8 @@ This procedure **overrides** any default that would check out a new branch from 
 5. When the planned work is done and the tests that cover it pass, put a **Test plan** checklist in **that same** pull request body. Keep the existing summary and the source-issue link. Each checklist row is a check the unit or e2e tests cannot cover. Name a file under `test/play-scripts/` only when this change requires that playtest to test. Delete empty placeholder rows.
 6. If the PR title begins with "Spec: ", remove that prefix.
 7. If the PR has the label "spec ready", remove that label.
-8. Mark **that same** pull request ready for review (`gh pr ready`).
-9. Reply with **that** pull request URL and stop.
+8. Mark the pull request ready for review (`gh pr ready`).
+9. Reply with the pull request URL and stop.
 
 ## Do not
 
@@ -27,4 +27,3 @@ This procedure **overrides** any default that would check out a new branch from 
 - Merge, approve, or enable auto-merge.
 - Set **Priority**, **Size**, **Impact**, or **Wave** on Gardener Project or move Project cards.
 - Add a test, fixture, or source change whose only purpose is to satisfy a checklist row. The reviewer runs the checklist as the branch stands.
-- Put personal names or assistant/bot product names on GitHub (titles, bodies, comments, labels, branch names).

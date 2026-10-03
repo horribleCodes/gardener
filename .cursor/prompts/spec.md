@@ -8,8 +8,8 @@ The user names the issue. Read it with `gh issue view`. If they did not name one
 
 1. Follow the brainstorming skill, then the writing-plans skill. Decisions that the issue left under **Open questions** get made here, with the user, before the plan is written.
 2. Put the design in `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and the plan in `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`.
-3. Commit that work on a new branch and open a **draft** pull request with `gh pr create --draft --label "spec ready"`. The description summarizes the issue and links it with a GitHub Development keyword: `Closes #N` or `Fixes #N` when this draft is meant to complete the issue; `Related to #N` or `Implements #N` when it is partial. This draft is the only pull request for the work: the implementer will check out this branch and push implementation here.
-4. Comment on the issue with the draft pull request URL. That comment is how the implementer finds the branch. Do not tell them to open another PR.
+3. Commit that work on a new branch and open a **draft** pull request with `gh pr create --draft --label "spec ready"`. The description summarizes the issue and links it with a GitHub Development keyword: `Closes #N` or `Fixes #N` when this draft is meant to complete the issue; `Related to #N` or `Implements #N` when it is partial.
+4. Comment on the issue with the draft pull request URL. That comment is how the implementer finds the branch.
 5. Reply with the pull request URL and stop.
 
 ## Do not
