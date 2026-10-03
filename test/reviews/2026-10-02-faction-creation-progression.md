@@ -99,3 +99,12 @@ The director manual prefers `seed_campaign` for a new campaign and `set_interest
 - `advance_month`'s description does not say that the calendar moves without faction actions. The player manual lists the tools separately and does not say that "advance N months" means N `run_faction_turn` calls with `advanceMonth`.
 - `list_rumors` says it is the latest closed turn. The play manual does not say to call it after every month or the earlier months are gone.
 - The director manual says generation fills omitted fields. It does not say faction, place, and campaign names are never generated, or that `create_faction` still requires `power` and `behavior` when the caller wanted them rolled.
+
+## Notes
+
+- Generating properties needs to be consistent across all tools that create entities
+- Custom interest natures needed
+- Agent mode needed to decide on action
+- `get_faction` should include facts
+- Manual should mention hidden fact rules
+- Manual should explain month (time step) progression
