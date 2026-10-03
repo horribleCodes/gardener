@@ -534,7 +534,8 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "sway_court",
     {
-      description: "Record court favor or control",
+      description:
+        "Record court favor or control as disposition and a fact; create a strife Problem only when createProblem is true on control",
       inputSchema: {
         campaignId: z.string(),
         courtId: z.string(),
@@ -543,6 +544,7 @@ export function buildServer(dbPath: string): McpServer {
         mode: z.enum(["favor", "control"]),
         prepared: z.boolean().optional(),
         statement: z.string().optional(),
+        createProblem: z.boolean().optional(),
       },
     },
     dbTool((a) => swayCourt(db, a)),

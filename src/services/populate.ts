@@ -1117,6 +1117,7 @@ export function swayCourt(
     mode: "favor" | "control";
     prepared?: boolean;
     statement?: string;
+    createProblem?: boolean;
   },
 ): ServiceResult<Record<string, unknown>> {
   return wrapRule(() =>
@@ -1127,16 +1128,15 @@ export function swayCourt(
         .get(input.courtId, input.campaignId) as { id: string; rules_faction_id: string | null } | undefined;
       if (!court) throw new RuleError("ENTITY_NOT_FOUND", "court not found");
 
-      let factId: string | undefined;
-      if (input.mode === "favor") {
-        const statement =
-          input.statement ?? loadCatalog().minorRelationship[0].text;
-        factId = crypto.randomUUID();
-        db.prepare(
-          `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
-           VALUES (?, ?, 'court', ?, ?, 'explicit', 'public')`,
-        ).run(factId, input.campaignId, input.courtId, statement);
-      }
+      const defaultControlStatement = "The named target now holds control of this court.";
+      const statement =
+        input.statement ??
+        (input.mode === "favor" ? loadCatalog().minorRelationship[0].text : defaultControlStatement);
+      const factId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
+         VALUES (?, ?, 'court', ?, ?, 'explicit', 'public')`,
+      ).run(factId, input.campaignId, input.courtId, statement);
 
       db.prepare(
         `INSERT INTO court_dispositions (court_id, target_type, target_id, disposition)
@@ -1144,7 +1144,7 @@ export function swayCourt(
          ON CONFLICT(court_id, target_type, target_id) DO UPDATE SET disposition = excluded.disposition`,
       ).run(input.courtId, input.targetType, input.targetId, input.mode);
 
-      if (input.mode === "control" && court.rules_faction_id && !input.prepared) {
+      if (input.mode === "control" && input.createProblem && court.rules_faction_id) {
         db.prepare("UPDATE factions SET contested_control = 1 WHERE id = ?").run(
           court.rules_faction_id,
         );
@@ -1158,7 +1158,7 @@ export function swayCourt(
           nextProblemPosition(db, court.rules_faction_id),
         );
       }
-      return factId ? { factId, mode: input.mode } : { mode: input.mode };
+      return { factId, mode: input.mode };
     }),
   );
 }
