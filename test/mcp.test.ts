@@ -19,7 +19,10 @@ test("MCP server is named gardener and registers create_hero", async () => {
   const tools = await client.listTools();
   const names = tools.tools.map((t) => t.name);
   expect(names).toContain("create_hero");
+  expect(names).toContain("remove-campaign");
+  expect(names).toContain("set_interest");
   expect(names).not.toContain("create_godbound");
+  expect(names).toHaveLength(50);
   await client.close();
 });
 
@@ -102,6 +105,49 @@ test("get_unit_view for rivalry omits dominion and behavior; quote_change still 
   await client.close();
 });
 
+test("set_interest writes a directed spies edge", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const campaignText = (
+    await client.callTool({
+      name: "create_campaign",
+      arguments: { name: "Interest", rngSeed: 1 },
+    })
+  ).content as { text: string }[];
+  const campaign = JSON.parse(campaignText[0].text);
+  const campaignId = campaign.data.campaignId as string;
+
+  const makeFaction = async (name: string) => {
+    const text = (
+      await client.callTool({
+        name: "create_faction",
+        arguments: { campaignId, name, power: 1, behavior: "directed" },
+      })
+    ).content as { text: string }[];
+    return JSON.parse(text[0].text).data.factionId as string;
+  };
+  const fromFactionId = await makeFaction("A");
+  const toFactionId = await makeFaction("B");
+
+  const result = await client.callTool({
+    name: "set_interest",
+    arguments: { campaignId, fromFactionId, toFactionId, nature: "spies" },
+  });
+  const body = JSON.parse((result.content as { text: string }[])[0].text);
+  expect(body.ok).toBe(true);
+  expect(body.data).toMatchObject({
+    fromFactionId,
+    toFactionId,
+    nature: "spies",
+    points: 1,
+  });
+  await client.close();
+});
+
 test("runTool returns envelope instead of rejecting on unexpected errors", () => {
   const result = runTool(() => {
     throw new Error("simulated bug");
@@ -114,4 +160,42 @@ test("runTool returns envelope instead of rejecting on unexpected errors", () =>
   expect(envelope.error?.code).toBe("ENTITY_NOT_FOUND");
   expect(envelope.error?.message).toBe("simulated bug");
   expect(envelope.error?.details.unexpected).toBe(true);
+});
+
+test("remove-campaign deletes the campaign through MCP", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gb-mcp-rm-"));
+  const dbPath = join(dir, "campaign.sqlite");
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(dbPath);
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const created = await client.callTool({
+    name: "create_campaign",
+    arguments: { name: "Drop" },
+  });
+  const createdBody = JSON.parse((created.content as { text: string }[])[0].text);
+  expect(createdBody.ok).toBe(true);
+  const campaignId = createdBody.data.campaignId as string;
+
+  const removed = await client.callTool({
+    name: "remove-campaign",
+    arguments: { campaignId },
+  });
+  const removedBody = JSON.parse((removed.content as { text: string }[])[0].text);
+  expect(removedBody.ok).toBe(true);
+  expect(removedBody.data.campaignId).toBe(campaignId);
+  expect(removedBody.rolls).toEqual([]);
+  expect(removedBody.derived).toEqual({});
+
+  const brief = await client.callTool({
+    name: "get_world_brief",
+    arguments: { campaignId },
+  });
+  const briefBody = JSON.parse((brief.content as { text: string }[])[0].text);
+  expect(briefBody.ok).toBe(false);
+  expect(briefBody.error.code).toBe("CAMPAIGN_NOT_FOUND");
+
+  await client.close();
 });

@@ -6,6 +6,8 @@ How the running server is shaped: storage, the MCP surface, determinism, and the
 
 A campaign is a row in `campaigns` plus every row keyed to it. The campaign row stores `preset` and the seven flags `profile`, `projectBase`, `opposition`, `wards`, `heldChanges`, `capabilityGate`, and `reachUnit`. `create_campaign` and `seed_campaign` default to the `godbound` preset. `get_world_brief` returns those flags in camelCase. One SQLite file can hold any number of campaigns; `create_campaign` and `seed_campaign` each add a row to the file that is open. Every tool call names its `campaignId`.
 
+`remove-campaign` takes a `campaignId` and deletes that campaign row and every row associated with it. Other campaigns in the same file stay. The SQLite file is not deleted.
+
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `GARDENER_WORLD_DB` | `./data/campaign.sqlite` | The SQLite file this server process opens. |
@@ -21,7 +23,7 @@ The file's SQLite `user_version` is its schema version. This server writes `SCHE
 
 ## MCP surface
 
-The server exposes 48 tools, 6 resource templates, and 2 prompts.
+The server exposes 50 tools, 6 resource templates, and 2 prompts.
 
 - **Resources:** `world://campaigns/{campaignId}/brief`, `…/factions/{factionId}`, `…/courts/{courtId}`, `…/turns/latest`, `…/hooks`, and `world://tables/{path}` (a subtree of the chart catalog).
 - **Prompts:** `gm-briefing` and `faction-turn-narration`. Both are read-only and ask the model to narrate only what the embedded JSON says.
@@ -37,7 +39,7 @@ Every tool returns one envelope:
 - `advisories` are warnings that did not fail the call, such as a court size clamped into range.
 - `derived` is the slice most relevant to the mutation. For a faction it is `trouble`, `collapseMargin` (die maximum minus Trouble; at 0 or below the faction collapses), and `status`. For a change it is its status, scope, and magnitude.
 
-Common error codes: `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_UNKNOWN`, `TURN_ALREADY_OPEN`, `WRITE_LOCKED`, `QUEUE_CLOSED`, `NOT_PENDING`, `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET`, `INTEREST_CAP`, `INTEREST_ALREADY_SPENT`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `COLLAPSED_FACTION`, `COHESION_AT_CAP`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `CHANGE_NOT_READY`, `NOTHING_TO_SOLVE`, `INTRINSIC_PROBLEM`, `MAGNITUDE_REJECTED`, and `NAME_TAKEN`.
+Common error codes: `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_UNKNOWN`, `TURN_ALREADY_OPEN`, `WRITE_LOCKED`, `QUEUE_CLOSED`, `NOT_PENDING`, `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET`, `INTEREST_CAP`, `INTEREST_NATURE_MISMATCH`, `INTEREST_ALREADY_SPENT`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `COLLAPSED_FACTION`, `COHESION_AT_CAP`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `CHANGE_NOT_READY`, `NOTHING_TO_SOLVE`, `INTRINSIC_PROBLEM`, `MAGNITUDE_REJECTED`, and `NAME_TAKEN`.
 
 ## Determinism
 

@@ -10,12 +10,13 @@ description: >-
 
 # MCP review
 
-Record how an agent uses the project MCP. Do the user's task. Do not edit server source, tool schemas, or skill files to fill a gap. Record the gap.
+Record how an agent uses the gardener MCP. Do the user's task. Do not edit server source, tool schemas, or skill files to fill a gap. Record the gap.
 
 Scratch notes live in `.docs/mcp-review-notes-<id>.md` (gitignored). Create the ID with `openssl rand -hex 8`. The finished review is `test/reviews/YYYY-MM-DD-<review-theme>.md`.
 
 ## Start
 
+Use the skills located at (`user/skills/gdnr-director/SKILL.md`) and `user/skills/gdnr-player/SKILL.md` for instructions on how to use the MCP.
 On the first turn of a review, if the scratch file is missing, create it with this skeleton and tell the user that notes are recording and that they can ask to end the review:
 
 ```markdown
