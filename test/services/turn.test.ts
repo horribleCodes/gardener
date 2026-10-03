@@ -6,6 +6,8 @@ import { decisionMakers } from "../../src/queries/brief.js";
 import { worldBrief, rumorLines } from "../../src/queries/rumors.js";
 import {
   halfInterestSatisfied,
+  loadFactionRow,
+  planFactionAction,
   preferredInterestTarget,
   runFactionTurn,
   spendInterest,
@@ -750,7 +752,7 @@ test("double-satisfied reroll runs build_strength", () => {
   expect(act.type).toBe("build_strength");
 });
 
-test("military_defeat with only non-military feature sets marginal on attack", () => {
+test("military_defeat with only a non-military feature still attacks", () => {
   const seed = 815;
   const shuffleCounter = forceStrategyRoll(seed, 3, 4);
 
@@ -787,6 +789,41 @@ test("military_defeat with only non-military feature sets marginal on attack", (
     .prepare("SELECT type FROM actions WHERE actor_id = 'actor' AND type = 'attack'")
     .get();
   expect(attack).toBeTruthy();
+});
+
+test("military_defeat with only a non-military feature does not set marginal", () => {
+  const seed = 815;
+  const shuffleCounter = forceStrategyRoll(seed, 3, 4);
+
+  const db = openDb(":memory:");
+  db.prepare(
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+  ).run("c1", "Test", seed);
+  db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter + 1);
+
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'despotic_tyrant', 'npc', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO factions (id, campaign_id, name, power, cohesion, dominion, origin, behavior, control, auto_intervene, status)
+     VALUES ('neighbor', 'c1', 'Neighbor', 1, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+     VALUES ('i1', 'actor', 'neighbor', 3, 'rivalry')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
+     VALUES ('cult', 'actor', 'Court', 'cultural', 'normal', 'normal', 0, 'native')`,
+  ).run();
+
+  const planned = planFactionAction(db, loadFactionRow(db, "actor"));
+  expect(planned.action).toEqual({
+    type: "attack",
+    targetFactionId: "neighbor",
+    attackerFeatureId: "cult",
+  });
 });
 
 test("worldBrief and rumorLines match the query contract", () => {

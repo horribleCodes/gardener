@@ -487,7 +487,6 @@ function resolveStrategy(
       .all(faction.id) as { id: string; domain: string; covert: number }[];
 
     let feature: { id: string; domain: string } | undefined;
-    let marginal = false;
 
     if (strategy === "strip_military_feature" || strategy === "bloodless_coerce") {
       const nonMil = featureRows.filter((f) => f.domain !== "military").sort((a, b) =>
@@ -509,7 +508,6 @@ function resolveStrategy(
         featureRows.find((f) => f.domain !== "military") ??
         featureRows[0];
       if (!feature) return { type: "build_strength" };
-      if (feature.domain !== "military") marginal = true;
     } else {
       feature =
         features.find((f) => f.domain === "military") ??
@@ -522,7 +520,6 @@ function resolveStrategy(
       type: "attack",
       targetFactionId: target.id,
       attackerFeatureId: feature.id,
-      ...(marginal ? { marginal: true } : {}),
     };
   }
 
