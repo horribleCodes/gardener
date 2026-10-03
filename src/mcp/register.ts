@@ -112,6 +112,8 @@ export function buildServer(dbPath: string): McpServer {
           ])
           .optional(),
         petty: z.boolean().optional(),
+        deedsRequired: z.number().int().min(0).optional(),
+        challengesRequired: z.number().int().min(0).optional(),
       },
     },
     async (args) => {
@@ -131,6 +133,8 @@ export function buildServer(dbPath: string): McpServer {
           wardRatings: (args.wardRatings as number[] | undefined) ?? [],
           resisterRatings: (args.resisterRatings as number[] | undefined) ?? [],
           petty: args.petty as boolean | undefined,
+          deedsRequired: args.deedsRequired as number | undefined,
+          challengesRequired: args.challengesRequired as number | undefined,
         });
         return mcpToolResult(toEnvelope({ ok: true, data: quote }));
       } catch (error) {
@@ -414,6 +418,8 @@ export function buildServer(dbPath: string): McpServer {
         featureText: z.string().optional(),
         heroId: z.string().optional(),
         petty: z.boolean().optional(),
+        deedsRequired: z.number().int().min(0).optional(),
+        challengesRequired: z.number().int().min(0).optional(),
       },
     },
     dbTool((a) => beginChange(db, a)),

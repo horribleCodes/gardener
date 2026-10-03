@@ -47,6 +47,12 @@ export function beginChange(
           "faction-owned changes use enact_change via runAction",
         );
       }
+      if (
+        (input.deedsRequired != null && input.deedsRequired < 0) ||
+        (input.challengesRequired != null && input.challengesRequired < 0)
+      ) {
+        throw new RuleError("FILL_INCOMPLETE", "deeds and challenges cannot be negative");
+      }
       requireCampaign(db, input.campaignId);
       const wardRatings: number[] = [];
       if (input.placeIds?.length) {
