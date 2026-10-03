@@ -125,7 +125,7 @@ Read `decision_makers` before the heroes lean on a court. It says who must agree
 `sway_court` records how the heroes moved the court:
 
 - `favor` writes a fact about the court's disposition. Pass a `statement` that says what the court now favors.
-- `control` makes the heroes, or their faction, the power behind the court. Unless `prepared` is set, the faction the court rules gets one 2-point cultural problem (someone wants the old arrangement back) and is marked as contested. This happens once; nothing grows afterwards.
+- `control` writes disposition and a fact that the target holds the court. It does not add a Problem by default. Pass `createProblem: true` when the GM wants the 2-point usurper/strife Problem on the faction the court rules (and `contested_control`).
 
 Compelling a court by force fits a court with no real protection (a village’s elders). A great court is impractical to simply shove. That coercion rots legitimacy the longer it lasts is fiction for you to narrate, not a mechanic.
 
