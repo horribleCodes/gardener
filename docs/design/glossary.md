@@ -28,6 +28,10 @@ A **cast** (target) is a cluster of people who must deal with each other, such a
 
 A **character** is a single named person, usually an NPC: a court member, a faction figure, or a local.
 
+## Cohesion
+
+**Cohesion** is the group's remaining integrity. It starts equal to Power (scale), never rises above Power, and at 0 the faction collapses. Restoring Cohesion is a paid internal action that needs a usable Feature.
+
 ## Chart
 
 A **chart** is a generation list: an array of strings, or of dictionaries that may include an optional `weight`. A roll picks one entry. Do not call a chart a table.
@@ -44,6 +48,14 @@ Not implemented yet. Today there is one catalog file, `src/tables/catalog.json`.
 
 A **fact** is a basic truth about a subject in the world. Facts are never used in calculations by the rules layer, but defines the subject beyond its mechanical properties. They can be immutable characteristics, but also elements that could change over time.
 
+## Feature
+
+A **Feature** is a sentence-long tool on a faction sheet: what the group uses to act, resist, or be targeted. A Feature may have parts; it works until every part is gone.
+
+Optional marks, used only for contest modifiers when they apply: size (`normal` or `vast`), quality (`normal` or `superior`), edged (code: `magical`), and origin (`native`, `improbable`, `impossible`). Those marks are product of the Feature, not a second sheet.
+
+Heroes removing the person or thing a Feature names can delete that Feature with no contest (`apply_outcome`). That is an adventure override, not a turn action.
+
 ## Hero
 
 A **hero** is a player character: a row in `heroes` with level, Words, Influence, Dominion, wealth, and divinity.
@@ -56,11 +68,23 @@ A **module** declares the database tables it needs, a chart catalog, actions, in
 
 Note that this feature is yet to be implemented. The first implementation fixes that module set when the campaign is created and does not change it afterward. Adding, removing, or updating a module during play is a later feature.
 
+## Problem
+
+A **Problem** is a scored affliction on the faction sheet, usually 1 or 2 points. Problems are the only sheet rows whose points sum into Trouble.
+
+Some Problems are marked **intrinsic** in code. That flag is approximately the holy-law Problems concept: they are not shrinkable by the usual solve path (`NOTHING_TO_SOLVE` / `INTRINSIC_PROBLEM`). Not every Problem is intrinsic. Ordinary Problems are the ones a faction can work down.
+
 ## Table
 
 A **table** is a database table (SQLite schema row storage).
 
 Legacy code still uses `tables` for charts (`src/tables/`, `world://tables/{path}`, the `catalog-table` resource). Do not copy that into new writing.
+
+## Trouble
+
+**Trouble** is a derived number: the sum of the faction's Problem points. Callers never write it. A roll-over check succeeds only when the roll is greater than Trouble. Trouble at or above the action-die maximum collapses the faction.
+
+On a failed roll-over check, play names a Problem as the reason. Gardener compares the failed face to contiguous **culprit bands** (each Problem covers a band as wide as its points, in stored order) so `get_faction` can show which Problem the face landed in. Culprit bands are that compare implementation. They are not a separate book concept and must not be taught as a third sheet row.
 
 ## Aliases
 
