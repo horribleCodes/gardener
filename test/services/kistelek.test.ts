@@ -35,9 +35,9 @@ function createKistelekDb(): Database.Database {
 
   const featureId = "mil-feature";
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(featureId, "neighbor", "Standing army", "military", "normal", "normal", 0, "native");
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(featureId, "neighbor", "Standing army", "military", "native");
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
   ).run("mil-part", featureId, "Standing army", 0);
@@ -203,9 +203,9 @@ test("applyOutcome rejects removing another faction's feature", () => {
   ).run("neighbor", "c1", "Neighbor City", 2, 2, 0, "native", "martial_conqueror", "npc", 0, "active");
   const featureId = "mil-feature";
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(featureId, "neighbor", "Standing army", "military", "normal", "normal", 0, "native");
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(featureId, "neighbor", "Standing army", "military", "native");
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
   ).run("mil-part", featureId, "Standing army", 0);
@@ -299,9 +299,9 @@ test("contested attack win adds catalog military problem text", () => {
   db.prepare("UPDATE problems SET points = 1 WHERE id = ?").run("despair");
   const defenderFeatureId = "village-mil";
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(defenderFeatureId, "village", "Militia", "military", "normal", "normal", 0, "native");
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(defenderFeatureId, "village", "Militia", "military", "native");
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
   ).run("village-mil-part", defenderFeatureId, "Militia", 0);
@@ -457,9 +457,9 @@ test("attack against a faction in another campaign is ENTITY_NOT_FOUND before an
   ).run("def-problem", "defender", "Woes", 1, 0);
   const attackerFeatureId = "atk-feature";
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(attackerFeatureId, "attacker", "Army", "military", "normal", "normal", 0, "native");
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(attackerFeatureId, "attacker", "Army", "military", "native");
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
   ).run("atk-part", attackerFeatureId, "Army", 0);

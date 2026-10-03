@@ -530,16 +530,13 @@ function runAttack(
   }
   const attackerFeature = db
     .prepare(
-      `SELECT id, faction_id, domain, size, quality, magical, origin FROM features WHERE id = ?`,
+      `SELECT id, faction_id, domain, origin FROM features WHERE id = ?`,
     )
     .get(input.attackerFeatureId) as
     | {
         id: string;
         faction_id: string;
         domain: string;
-        size: string;
-        quality: string;
-        magical: number;
         origin: string;
       }
     | undefined;
@@ -720,16 +717,13 @@ function runExtendInterest(
 
   const attackerFeature = db
     .prepare(
-      `SELECT id, faction_id, domain, size, quality, magical, origin FROM features WHERE id = ?`,
+      `SELECT id, faction_id, domain, origin FROM features WHERE id = ?`,
     )
     .get(input.attackerFeatureId) as
     | {
         id: string;
         faction_id: string;
         domain: string;
-        size: string;
-        quality: string;
-        magical: number;
         origin: string;
       }
     | undefined;

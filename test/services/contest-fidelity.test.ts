@@ -16,9 +16,9 @@ function contestDb(): { db: Database.Database; campaignId: string } {
             ('def', ?, 'Def', 1, 1, 1, 'existing', 'martial_conqueror', 'npc', 0, 'active')`,
   ).run(campaignId, campaignId);
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('af', 'atk', 'A', 'cultural', 'vast', 'superior', 1, 'impossible'),
-            ('df', 'def', 'D', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('af', 'atk', 'A', 'cultural', 'impossible'),
+            ('df', 'def', 'D', 'military', 'native')`,
   ).run();
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES ('pa', 'af', 'A', 0), ('pd', 'df', 'D', 0)",

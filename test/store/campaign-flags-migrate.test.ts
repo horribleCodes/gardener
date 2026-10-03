@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { openDb } from "../../src/store/db.js";
+import { SCHEMA_VERSION, openDb } from "../../src/store/db.js";
 
 test("a v2 campaign file gains godbound flag columns without changing month", () => {
   const dir = mkdtempSync(join(tmpdir(), "gb-flags-"));
@@ -27,7 +27,7 @@ test("a v2 campaign file gains godbound flag columns without changing month", ()
     v2.close();
 
     const db = openDb(path);
-    expect(db.pragma("user_version", { simple: true })).toBe(3);
+    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
     const row = db.prepare(
       "SELECT month, preset, profile, project_base, opposition, wards, held_changes, capability_gate, reach_unit FROM campaigns WHERE id = 'c1'",
     ).get() as Record<string, unknown>;

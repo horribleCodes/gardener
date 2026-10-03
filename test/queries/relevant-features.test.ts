@@ -13,10 +13,10 @@ test("relevant_features reports origin bonus only", () => {
             ('f2', 'c1', 'G', 1, 1, 0, 'existing', 'directed', 'npc', 0, 'active')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('wide', 'f1', 'Wide', 'military', 'vast', 'superior', 1, 'impossible'),
-            ('econ', 'f1', 'Market', 'economic', 'normal', 'normal', 0, 'improbable'),
-            ('foe', 'f2', 'Foe', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('wide', 'f1', 'Wide', 'military', 'impossible'),
+            ('econ', 'f1', 'Market', 'economic', 'improbable'),
+            ('foe', 'f2', 'Foe', 'military', 'native')`,
   ).run();
 
   const alone = relevantFeatures(db, { factionId: "f1", domain: "military" });

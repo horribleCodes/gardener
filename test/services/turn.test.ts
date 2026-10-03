@@ -241,8 +241,8 @@ test("proxy transfers dominion to a military faction", () => {
      VALUES ('ally', 'c1', 'Ally', 1, 1, 3, 'native', 'directed', 'player', 0, 'active')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('mil', 'ally', 'Army', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('mil', 'ally', 'Army', 'military', 'native')`,
   ).run();
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES ('mil-p', 'mil', 'Army', 0)",
@@ -296,8 +296,8 @@ test("no_external_until_hit attacks after a prior attacker win", () => {
      VALUES ('link', 'victim', 'neighbor', 2, 'rivalry')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('vmil', 'victim', 'Militia', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('vmil', 'victim', 'Militia', 'military', 'native')`,
   ).run();
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
@@ -370,8 +370,8 @@ test("no_external_until_hit ignores attacker wins on older closed turns", () => 
      VALUES ('link', 'victim', 'neighbor', 2, 'rivalry')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('vmil', 'victim', 'Militia', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('vmil', 'victim', 'Militia', 'military', 'native')`,
   ).run();
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
@@ -502,12 +502,12 @@ test("cunning_solve records non-military means on enact_change", () => {
      VALUES ('actor', 'c1', 'Actor', 1, 1, 5, 'native', 'scheming_manipulator', 'npc', 0, 'active')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('z-means', 'actor', 'Spy ring', 'cultural', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('z-means', 'actor', 'Spy ring', 'cultural', 'native')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('a-means', 'actor', 'Guild ties', 'economic', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('a-means', 'actor', 'Guild ties', 'economic', 'native')`,
   ).run();
   for (let i = 0; i < 6; i++) {
     db.prepare(
@@ -620,8 +620,8 @@ test("half_interest extends against preferred neighbor", () => {
      VALUES ('i1', 'actor', 'weak', 1, 'trade'), ('i2', 'actor', 'strong', 1, 'rivalry')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('z-feat', 'actor', 'Levy', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('z-feat', 'actor', 'Levy', 'military', 'native')`,
   ).run();
 
   const result = runFactionTurn(db, ":memory:", { campaignId: "c1" });
@@ -670,8 +670,8 @@ test("max_interest extends once per neighbor up to power", () => {
     ).run(`i-${id}`, id);
   }
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('a-feat', 'actor', 'Spies', 'cultural', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('a-feat', 'actor', 'Spies', 'cultural', 'native')`,
   ).run();
 
   const result = runFactionTurn(db, ":memory:", { campaignId: "c1" });
@@ -775,8 +775,8 @@ test("military_defeat with only a non-military feature still attacks", () => {
      VALUES ('i1', 'actor', 'neighbor', 3, 'rivalry')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('cult', 'actor', 'Court', 'cultural', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('cult', 'actor', 'Court', 'cultural', 'native')`,
   ).run();
 
   db.prepare(
@@ -814,8 +814,8 @@ test("military_defeat with only a non-military feature does not set marginal", (
      VALUES ('i1', 'actor', 'neighbor', 3, 'rivalry')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('cult', 'actor', 'Court', 'cultural', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('cult', 'actor', 'Court', 'cultural', 'native')`,
   ).run();
 
   const planned = planFactionAction(db, loadFactionRow(db, "actor"));
@@ -886,8 +886,8 @@ test("extend_interest increments interest and records action", () => {
      VALUES ('b', 'c1', 'B', 1, 1, 1, 'native', 'directed', 'player', 0, 'active')`,
   ).run();
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES ('f1', 'a', 'Envoy', 'cultural', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES ('f1', 'a', 'Envoy', 'cultural', 'native')`,
   ).run();
 
   const result = runAction(db, {

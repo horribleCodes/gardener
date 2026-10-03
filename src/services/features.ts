@@ -5,13 +5,10 @@ export type FeatureRow = {
   id: string;
   faction_id: string;
   domain: string;
-  size: string;
-  quality: string;
-  magical: number;
   origin: string;
 };
 
-const FEATURE_SELECT = `SELECT f.id, f.faction_id, f.domain, f.size, f.quality, f.magical, f.origin
+const FEATURE_SELECT = `SELECT f.id, f.faction_id, f.domain, f.origin
   FROM features f
   WHERE f.faction_id = ?
     AND EXISTS (SELECT 1 FROM feature_parts fp WHERE fp.feature_id = f.id)
@@ -29,7 +26,7 @@ export function resolveDefenderFeature(
   if (defenderFeatureId) {
     const row = db
       .prepare(
-        `SELECT id, faction_id, domain, size, quality, magical, origin FROM features WHERE id = ?`,
+        `SELECT id, faction_id, domain, origin FROM features WHERE id = ?`,
       )
       .get(defenderFeatureId) as FeatureRow | undefined;
     if (!row || row.faction_id !== defenderFactionId) {

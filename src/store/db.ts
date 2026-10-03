@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { RuleError } from "../domain/types.js";
 
 /** Schema this server writes. A higher user_version is a newer file. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 /** Lowest user_version this server can migrate. 0 is an unversioned v1 file. */
 export const MIN_SCHEMA_VERSION = 0;
 
@@ -84,6 +84,17 @@ function migrateLegacyStrain(db: Database.Database): void {
   }
 }
 
+function dropFeatureComparisonColumns(db: Database.Database): void {
+  const hasFeatures = db
+    .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'features'")
+    .get() as { ok: number } | undefined;
+  if (!hasFeatures) return;
+  const present = columnNames(db, "features");
+  for (const name of ["size", "quality", "magical"]) {
+    if (present.has(name)) db.exec(`ALTER TABLE features DROP COLUMN ${name}`);
+  }
+}
+
 function migrateCampaignFlags(db: Database.Database): void {
   const hasCampaigns = db
     .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'campaigns'")
@@ -123,6 +134,7 @@ export function migrate(db: Database.Database, fileVersion = Number(db.pragma("u
         migrateLegacyStrain(db);
       }
       migrateCampaignFlags(db);
+      dropFeatureComparisonColumns(db);
       db.pragma(`user_version = ${SCHEMA_VERSION}`);
     });
     apply();

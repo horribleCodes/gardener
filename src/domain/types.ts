@@ -26,9 +26,6 @@ export const MULTIPLIER: Record<Magnitude, number> = {
 export interface ProblemRef { id: string; points: number; intrinsic?: boolean }
 
 export interface FeatureTags {
-  size: "normal" | "vast";
-  quality: "normal" | "superior";
-  magical: boolean;
   origin: FeatureOrigin;
   domain: Domain;
 }

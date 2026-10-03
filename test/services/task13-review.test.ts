@@ -26,8 +26,8 @@ function pauseDb(dbPath: string) {
   ).run(campaignId);
   const featureId = "mil-feature";
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES (?, 'neighbor', 'Army', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES (?, 'neighbor', 'Army', 'military', 'native')`,
   ).run(featureId);
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, 'Army', 0)",

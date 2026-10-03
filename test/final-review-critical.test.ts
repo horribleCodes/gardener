@@ -56,9 +56,9 @@ test("attack without defender feature still contests when defender has a feature
   const af = "af1";
   const df = "df1";
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin)
-     VALUES (?, 'atk', 'A', 'military', 'normal', 'normal', 0, 'native'),
-            (?, 'def', 'D', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin)
+     VALUES (?, 'atk', 'A', 'military', 'native'),
+            (?, 'def', 'D', 'military', 'native')`,
   ).run(af, df);
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES ('p1', ?, 'A', 0), ('p2', ?, 'D', 0)",
@@ -100,7 +100,7 @@ test("cohesion zero collapses faction", () => {
   );
   const af = "af";
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin) VALUES (?, 'f1', 'x', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin) VALUES (?, 'f1', 'x', 'military', 'native')`,
   ).run(af);
   db.prepare("INSERT INTO feature_parts (id, feature_id, text, position) VALUES ('p', ?, 'x', 0)").run(af);
   db.prepare(
@@ -108,7 +108,7 @@ test("cohesion zero collapses faction", () => {
      VALUES ('f2', ?, 'G', 1, 1, 1, 'existing', 'martial_conqueror', 'npc', 0, 'active')`,
   ).run(campaignId);
   db.prepare(
-    `INSERT INTO features (id, faction_id, text, domain, size, quality, magical, origin) VALUES (?, 'f2', 'y', 'military', 'normal', 'normal', 0, 'native')`,
+    `INSERT INTO features (id, faction_id, text, domain, origin) VALUES (?, 'f2', 'y', 'military', 'native')`,
   ).run("af2");
   db.prepare("INSERT INTO feature_parts (id, feature_id, text, position) VALUES ('p2', 'af2', 'y', 0)");
 
