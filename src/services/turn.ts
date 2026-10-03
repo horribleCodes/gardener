@@ -9,7 +9,7 @@ import { monthlyDominion } from "../rules/cults.js";
 import type { Harshness } from "../domain/types.js";
 import { rollDie } from "../rules/dice.js";
 import { planGoal } from "../rules/goals.js";
-import { resolveContest } from "../rules/contest.js";
+import { resolveContest, type ContestEdge } from "../rules/contest.js";
 import { interestCap, interestModifier } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
 import { loadCatalog } from "../tables/catalog.js";
@@ -53,6 +53,8 @@ export type FactionAction =
       defenderFeatureId?: string;
       defenderChoice?: "cohesion" | "sacrifice" | "problem";
       marginal?: boolean;
+      attackerEdge?: ContestEdge;
+      defenderEdge?: ContestEdge;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     }
@@ -60,6 +62,10 @@ export type FactionAction =
       type: "extend_interest";
       targetFactionId: string;
       attackerFeatureId: string;
+      defenderFeatureId?: string;
+      marginal?: boolean;
+      attackerEdge?: ContestEdge;
+      defenderEdge?: ContestEdge;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     };
@@ -481,7 +487,6 @@ function resolveStrategy(
       .all(faction.id) as { id: string; domain: string; covert: number }[];
 
     let feature: { id: string; domain: string } | undefined;
-    let marginal = false;
 
     if (strategy === "strip_military_feature" || strategy === "bloodless_coerce") {
       const nonMil = featureRows.filter((f) => f.domain !== "military").sort((a, b) =>
@@ -503,7 +508,6 @@ function resolveStrategy(
         featureRows.find((f) => f.domain !== "military") ??
         featureRows[0];
       if (!feature) return { type: "build_strength" };
-      if (feature.domain !== "military") marginal = true;
     } else {
       feature =
         features.find((f) => f.domain === "military") ??
@@ -516,7 +520,6 @@ function resolveStrategy(
       type: "attack",
       targetFactionId: target.id,
       attackerFeatureId: feature.id,
-      ...(marginal ? { marginal: true } : {}),
     };
   }
 
