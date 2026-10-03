@@ -49,3 +49,5 @@ Any runtime asset imported using `new URL(..., import.meta.url)` must be explici
 ## Pull requests
 
 When a PR comes from a known GitHub issue, link that issue in the body (`Closes` / `Fixes` when it completes the issue; `Related to` / `Implements` otherwise). See `.cursor/prompts/implement.md` and `.cursor/prompts/spec.md`.
+
+Implementing a spec continues on the spec draft: check out that PR's branch, push implementation there, and mark it ready. Do not open a second implementation PR from `main`.

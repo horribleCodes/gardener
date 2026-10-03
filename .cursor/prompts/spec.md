@@ -20,3 +20,4 @@ The user names the issue. Read it with `gh issue view`. If they did not name one
 - Add a different label to the new PR.
 - Set **Priority**, **Size**, **Impact**, or **Wave** on Gardener Project or move Project cards.
 - Follow a skill step that commits the spec onto the default branch. The draft pull request is the only landing place.
+- Tell the implementer to branch from `main` or open a second pull request.
