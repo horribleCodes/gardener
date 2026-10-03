@@ -1,34 +1,21 @@
 import { expect, test } from "vitest";
-import { featureRoll, resolveContest, resolveContestEdge, unevenBonus } from "../../src/rules/contest.js";
+import { featureRoll, readGmBonus, resolveContest, unevenBonus } from "../../src/rules/contest.js";
 import { cultBudget, monthlyDominion } from "../../src/rules/cults.js";
 import { mulberry32 } from "../../src/rules/dice.js";
 import { RuleError } from "../../src/domain/types.js";
 
-const none = resolveContestEdge(undefined, "edge");
-const every = resolveContestEdge(
-  { vast: true, superior: true, edged: true },
-  "edge",
-);
-
 test("origin is the only automatic bonus", () => {
-  expect(unevenBonus({ origin: "impossible", edge: none, opposingEdge: none })).toBe(2);
-  expect(unevenBonus({ origin: "improbable", edge: none, opposingEdge: none })).toBe(1);
-  expect(unevenBonus({ origin: "native", edge: none, opposingEdge: none })).toBe(0);
-  expect(unevenBonus({ origin: "other", edge: none, opposingEdge: none })).toBe(0);
-  expect(unevenBonus({ origin: "impossible", edge: every, opposingEdge: null })).toBe(0);
+  expect(unevenBonus({ origin: "impossible", gmBonus: 0, hasOpponent: true })).toBe(2);
+  expect(unevenBonus({ origin: "improbable", gmBonus: 0, hasOpponent: true })).toBe(1);
+  expect(unevenBonus({ origin: "native", gmBonus: 0, hasOpponent: true })).toBe(0);
+  expect(unevenBonus({ origin: "other", gmBonus: 0, hasOpponent: true })).toBe(0);
+  expect(unevenBonus({ origin: "impossible", gmBonus: 3, hasOpponent: false })).toBe(0);
 });
 
-test("caller edges add scale, quality, and supernatural bonuses", () => {
-  expect(unevenBonus({ origin: "impossible", edge: every, opposingEdge: none })).toBe(5);
-  expect(
-    unevenBonus({
-      origin: "native",
-      edge: resolveContestEdge({ vast: true, superior: true }, "edge"),
-      opposingEdge: resolveContestEdge({ vast: true }, "edge"),
-    }),
-  ).toBe(1);
-  const bothEdged = resolveContestEdge({ edged: true }, "edge");
-  expect(unevenBonus({ origin: "native", edge: bothEdged, opposingEdge: bothEdged })).toBe(1);
+test("a GM bonus from 0 to 3 stacks with origin when both sides have a feature", () => {
+  expect(unevenBonus({ origin: "impossible", gmBonus: 3, hasOpponent: true })).toBe(5);
+  expect(unevenBonus({ origin: "native", gmBonus: 2, hasOpponent: true })).toBe(2);
+  expect(unevenBonus({ origin: "native", gmBonus: 0, hasOpponent: true })).toBe(0);
 });
 
 test("a natural 1 zeros the bonus and a marginal roll keeps the lower die", () => {
@@ -47,15 +34,20 @@ test("a natural 1 zeros the bonus and a marginal roll keeps the lower die", () =
   expect(roll.kept).toBe(2);
 });
 
-test("a non-boolean edge field is FILL_INCOMPLETE", () => {
-  expect(() => resolveContestEdge({ vast: "yes" }, "attackerEdge")).toThrow(RuleError);
+test("a GM bonus outside 0 to 3 is FILL_INCOMPLETE", () => {
+  expect(readGmBonus(undefined, "attackerBonus")).toBe(0);
+  expect(readGmBonus(null, "attackerBonus")).toBe(0);
+  expect(readGmBonus(0, "attackerBonus")).toBe(0);
+  expect(readGmBonus(3, "attackerBonus")).toBe(3);
+  expect(() => readGmBonus(4, "attackerBonus")).toThrow(RuleError);
   try {
-    resolveContestEdge({ vast: "yes" }, "attackerEdge");
+    readGmBonus({ vast: true }, "attackerBonus");
   } catch (error) {
     expect(error).toBeInstanceOf(RuleError);
     expect((error as RuleError).code).toBe("FILL_INCOMPLETE");
   }
-  expect(() => resolveContestEdge("vast", "attackerEdge")).toThrow(RuleError);
+  expect(() => readGmBonus(1.5, "defenderBonus")).toThrow(RuleError);
+  expect(() => readGmBonus(-1, "defenderBonus")).toThrow(RuleError);
 });
 
 test("ties go to higher power, then to the defender", () => {

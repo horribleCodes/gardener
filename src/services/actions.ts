@@ -11,9 +11,8 @@ import {
   featureRoll,
   readMarginal,
   resolveContest,
-  resolveContestEdge,
+  readGmBonus,
   unevenBonus,
-  type ContestEdge,
 } from "../rules/contest.js";
 import { restoreCohesionCost } from "../rules/cost.js";
 import { rollDie, type Rng } from "../rules/dice.js";
@@ -76,8 +75,8 @@ export type RunActionInput = {
       defenderChoice?: DefenseChoice;
       problemId?: string;
       marginal?: boolean;
-      attackerEdge?: ContestEdge;
-      defenderEdge?: ContestEdge;
+      attackerBonus?: number;
+      defenderBonus?: number;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     }
@@ -88,8 +87,8 @@ export type RunActionInput = {
       defenderFeatureId?: string;
       willing?: boolean;
       marginal?: boolean;
-      attackerEdge?: ContestEdge;
-      defenderEdge?: ContestEdge;
+      attackerBonus?: number;
+      defenderBonus?: number;
       forcedAttackerRoll?: number;
       forcedDefenderRoll?: number;
     }
@@ -484,14 +483,14 @@ function settledContest(input: {
   attackerOrigin: string;
   defenderOrigin: string;
   marginal: unknown;
-  attackerEdge: unknown;
-  defenderEdge: unknown;
+  attackerBonus: unknown;
+  defenderBonus: unknown;
   forcedAttackerRoll?: number;
   forcedDefenderRoll?: number;
 }): { attackerRoll: ReturnType<typeof featureRoll>; defenderRoll: ReturnType<typeof featureRoll> } {
   const marginal = readMarginal(input.marginal);
-  const attackerEdge = resolveContestEdge(input.attackerEdge, "attackerEdge");
-  const defenderEdge = resolveContestEdge(input.defenderEdge, "defenderEdge");
+  const attackerBonus = readGmBonus(input.attackerBonus, "attackerBonus");
+  const defenderBonus = readGmBonus(input.defenderBonus, "defenderBonus");
   return {
     attackerRoll: featureRoll({
       rng: input.rng,
@@ -499,8 +498,8 @@ function settledContest(input: {
       marginal,
       bonus: unevenBonus({
         origin: input.attackerOrigin,
-        edge: attackerEdge,
-        opposingEdge: defenderEdge,
+        gmBonus: attackerBonus,
+        hasOpponent: true,
       }),
       forced: input.forcedAttackerRoll,
     }),
@@ -510,8 +509,8 @@ function settledContest(input: {
       marginal,
       bonus: unevenBonus({
         origin: input.defenderOrigin,
-        edge: defenderEdge,
-        opposingEdge: attackerEdge,
+        gmBonus: defenderBonus,
+        hasOpponent: true,
       }),
       forced: input.forcedDefenderRoll,
     }),
@@ -545,8 +544,8 @@ function runAttack(
   }
 
   const marginal = readMarginal(input.marginal);
-  resolveContestEdge(input.attackerEdge, "attackerEdge");
-  resolveContestEdge(input.defenderEdge, "defenderEdge");
+  readGmBonus(input.attackerBonus, "attackerBonus");
+  readGmBonus(input.defenderBonus, "defenderBonus");
 
   const rng = nextRng(db, attacker.campaign_id);
   const attackerFaces = DIE_BY_POWER[attacker.power];
@@ -576,8 +575,8 @@ function runAttack(
       attackerOrigin: attackerFeature.origin,
       defenderOrigin: defenderFeature.origin,
       marginal: input.marginal,
-      attackerEdge: input.attackerEdge,
-      defenderEdge: input.defenderEdge,
+      attackerBonus: input.attackerBonus,
+      defenderBonus: input.defenderBonus,
       forcedAttackerRoll: input.forcedAttackerRoll,
       forcedDefenderRoll: input.forcedDefenderRoll,
     });
@@ -743,8 +742,8 @@ function runExtendInterest(
   }
 
   const marginal = readMarginal(input.marginal);
-  resolveContestEdge(input.attackerEdge, "attackerEdge");
-  resolveContestEdge(input.defenderEdge, "defenderEdge");
+  readGmBonus(input.attackerBonus, "attackerBonus");
+  readGmBonus(input.defenderBonus, "defenderBonus");
 
   const attackerFaces = dieMax;
   let defenderFeature: typeof attackerFeature | undefined;
@@ -782,8 +781,8 @@ function runExtendInterest(
       attackerOrigin: attackerFeature.origin,
       defenderOrigin: defenderFeature.origin,
       marginal: input.marginal,
-      attackerEdge: input.attackerEdge,
-      defenderEdge: input.defenderEdge,
+      attackerBonus: input.attackerBonus,
+      defenderBonus: input.defenderBonus,
       forcedAttackerRoll: input.forcedAttackerRoll,
       forcedDefenderRoll: input.forcedDefenderRoll,
     });

@@ -37,7 +37,7 @@ function attackerRoll(db: Database.Database): { natural: number; kept: number; b
   return payload.attacker;
 }
 
-test("domain mismatch keeps one die and ignores stored vast, superior, and magical marks", () => {
+test("domain mismatch keeps one die and scores origin only", () => {
   const { db, campaignId } = contestDb();
   const result = runAction(db, {
     campaignId,
@@ -58,7 +58,7 @@ test("domain mismatch keeps one die and ignores stored vast, superior, and magic
   expect(roll.total).toBe(8);
 });
 
-test("explicit edges add comparative scale and quality plus one-sided edged", () => {
+test("a GM bonus stacks with origin and is not compared between sides", () => {
   const { db, campaignId } = contestDb();
   runAction(db, {
     campaignId,
@@ -70,13 +70,13 @@ test("explicit edges add comparative scale and quality plus one-sided edged", ()
     forcedAttackerRoll: 6,
     forcedDefenderRoll: 1,
     defenderChoice: "cohesion",
-    attackerEdge: { vast: true, superior: true, edged: true },
-    defenderEdge: { vast: true },
+    attackerBonus: 3,
+    defenderBonus: 1,
   });
-  expect(attackerRoll(db).bonus).toBe(4);
+  expect(attackerRoll(db).bonus).toBe(5);
 });
 
-test("a natural 1 zeros origin and edges", () => {
+test("a natural 1 zeros origin and the GM bonus", () => {
   const { db, campaignId } = contestDb();
   runAction(db, {
     campaignId,
@@ -87,7 +87,7 @@ test("a natural 1 zeros origin and edges", () => {
     defenderFeatureId: "df",
     forcedAttackerRoll: 1,
     forcedDefenderRoll: 6,
-    attackerEdge: { vast: true, superior: true, edged: true },
+    attackerBonus: 3,
   });
   const roll = attackerRoll(db);
   expect(roll.bonus).toBe(0);
@@ -110,7 +110,7 @@ test("extend_interest uses the same origin bonus", () => {
   expect(attackerRoll(db).bonus).toBe(2);
 });
 
-test("a non-boolean edge or marginal returns FILL_INCOMPLETE", () => {
+test("a GM bonus outside 0 to 3 or a non-boolean marginal returns FILL_INCOMPLETE", () => {
   const { db, campaignId } = contestDb();
   const badEdge = runAction(db, {
     campaignId,
@@ -119,8 +119,8 @@ test("a non-boolean edge or marginal returns FILL_INCOMPLETE", () => {
     targetFactionId: "def",
     attackerFeatureId: "af",
     defenderFeatureId: "df",
-    attackerEdge: { vast: "yes" },
-  } as never);
+    attackerBonus: 4,
+  });
   expect(badEdge.ok).toBe(false);
   if (!badEdge.ok) expect(badEdge.error.code).toBe("FILL_INCOMPLETE");
 
@@ -139,26 +139,26 @@ test("a non-boolean edge or marginal returns FILL_INCOMPLETE", () => {
   expect(rolls.n).toBe(0);
 });
 
-test("a unit plan accepts contest edges and rejects a non-boolean vast", () => {
+test("a unit plan accepts a GM bonus and rejects one outside 0 to 3", () => {
   const plan = parseUnitPlan({
     type: "attack",
     targetFactionId: "def",
     attackerFeatureId: "af",
-    attackerEdge: { edged: true },
-    defenderEdge: { superior: true },
+    attackerBonus: 2,
+    defenderBonus: 1,
     marginal: true,
   });
   expect(plan).toMatchObject({
     marginal: true,
-    attackerEdge: { edged: true },
-    defenderEdge: { superior: true },
+    attackerBonus: 2,
+    defenderBonus: 1,
   });
   expect(() =>
     parseUnitPlan({
       type: "extend_interest",
       targetFactionId: "def",
       attackerFeatureId: "af",
-      attackerEdge: { vast: "yes" },
+      attackerBonus: 4,
     }),
   ).toThrow();
 });

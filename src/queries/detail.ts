@@ -2,7 +2,7 @@ import type Database from "better-sqlite3";
 import { DIE_BY_POWER, RuleError, type Power } from "../domain/types.js";
 import { interestCap } from "../rules/actions.js";
 import { monthlyDominion } from "../rules/cults.js";
-import { resolveContestEdge, unevenBonus } from "../rules/contest.js";
+import { unevenBonus } from "../rules/contest.js";
 import type { Harshness } from "../domain/types.js";
 import { decisionMakers, type PowerStructure } from "./brief.js";
 import { loadProblemsOrdered, sumTrouble } from "../services/util.js";
@@ -261,9 +261,8 @@ export function relevantFeatures(
   return features
     .filter((f) => f.domain === input.domain || input.domain === "any")
     .map((f) => {
-      const quiet = resolveContestEdge(undefined, "edge");
       const bonus = opposing
-        ? unevenBonus({ origin: f.origin, edge: quiet, opposingEdge: quiet })
+        ? unevenBonus({ origin: f.origin, gmBonus: 0, hasOpponent: true })
         : 0;
       return { ...f, unevenBonus: bonus };
     });

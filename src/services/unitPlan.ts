@@ -8,11 +8,7 @@ const standingOrderSchema = z.object({
   maxSpend: z.number().int().positive(),
 });
 
-const contestEdgeSchema = z.object({
-  vast: z.boolean().optional(),
-  superior: z.boolean().optional(),
-  edged: z.boolean().optional(),
-});
+const gmBonusSchema = z.number().int().min(0).max(3).optional();
 
 const unitPlanBase = z.object({
   standingOrders: z.array(standingOrderSchema).optional(),
@@ -40,8 +36,8 @@ const unitPlanSchema = z.discriminatedUnion("type", [
     defenderFeatureId: z.string().optional(),
     problemId: z.string().optional(),
     marginal: z.boolean().optional(),
-    attackerEdge: contestEdgeSchema.optional(),
-    defenderEdge: contestEdgeSchema.optional(),
+    attackerBonus: gmBonusSchema,
+    defenderBonus: gmBonusSchema,
   }),
   unitPlanBase.extend({
     type: z.literal("extend_interest"),
@@ -49,8 +45,8 @@ const unitPlanSchema = z.discriminatedUnion("type", [
     attackerFeatureId: z.string(),
     defenderFeatureId: z.string().optional(),
     marginal: z.boolean().optional(),
-    attackerEdge: contestEdgeSchema.optional(),
-    defenderEdge: contestEdgeSchema.optional(),
+    attackerBonus: gmBonusSchema,
+    defenderBonus: gmBonusSchema,
   }),
   unitPlanBase.extend({
     type: z.literal("aid"),

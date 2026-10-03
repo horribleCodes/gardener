@@ -2,20 +2,6 @@ import type { Power, RollRecord } from "../domain/types.js";
 import { RuleError } from "../domain/types.js";
 import { rollDie, type Rng } from "./dice.js";
 
-export type ContestEdge = {
-  vast?: boolean;
-  superior?: boolean;
-  edged?: boolean;
-};
-
-export type ResolvedEdge = {
-  vast: boolean;
-  superior: boolean;
-  edged: boolean;
-};
-
-const EDGE_KEYS = ["vast", "superior", "edged"] as const;
-
 export function readMarginal(raw: unknown): boolean {
   if (raw == null) return false;
   if (typeof raw !== "boolean") {
@@ -24,35 +10,23 @@ export function readMarginal(raw: unknown): boolean {
   return raw;
 }
 
-export function resolveContestEdge(raw: unknown, label: string): ResolvedEdge {
-  if (raw == null) return { vast: false, superior: false, edged: false };
-  if (typeof raw !== "object" || Array.isArray(raw)) {
-    throw new RuleError("FILL_INCOMPLETE", `${label} must be an object`);
+export function readGmBonus(raw: unknown, label: string): number {
+  if (raw == null) return 0;
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0 || raw > 3) {
+    throw new RuleError("FILL_INCOMPLETE", `${label} must be an integer from 0 to 3`);
   }
-  const obj = raw as Record<string, unknown>;
-  const resolved: ResolvedEdge = { vast: false, superior: false, edged: false };
-  for (const key of EDGE_KEYS) {
-    if (!(key in obj) || obj[key] === undefined) continue;
-    if (typeof obj[key] !== "boolean") {
-      throw new RuleError("FILL_INCOMPLETE", `${label}.${key} must be a boolean`);
-    }
-    resolved[key] = obj[key];
-  }
-  return resolved;
+  return raw;
 }
 
 export function unevenBonus(input: {
   origin: string;
-  edge: ResolvedEdge;
-  opposingEdge: ResolvedEdge | null;
+  gmBonus: number;
+  hasOpponent: boolean;
 }): number {
-  if (!input.opposingEdge) return 0;
-  let bonus = 0;
+  if (!input.hasOpponent) return 0;
+  let bonus = input.gmBonus;
   if (input.origin === "improbable") bonus += 1;
   if (input.origin === "impossible") bonus += 2;
-  if (input.edge.vast && !input.opposingEdge.vast) bonus += 1;
-  if (input.edge.superior && !input.opposingEdge.superior) bonus += 1;
-  if (input.edge.edged) bonus += 1;
   return bonus;
 }
 
