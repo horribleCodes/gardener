@@ -737,7 +737,8 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "faction_action",
     {
-      description: "Take one faction action on the open turn",
+      description:
+        "Take one faction action now. Returns PLAN_ALREADY_QUEUED when that faction already has a queued plan on the open turn.",
       inputSchema: {
         campaignId: z.string(),
         factionId: z.string(),

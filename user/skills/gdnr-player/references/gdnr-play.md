@@ -145,7 +145,7 @@ Plan types: `idle`, `build_strength`, `enact_change`, `attack`, `extend_interest
 
 Each turn a faction gets at most one internal action and up to its Power in external actions, with at most one external action per target. A faction with `behavior: directed` idles unless it is given a plan, so keep NPC factions on a real behavior.
 
-`faction_action` takes one action for one faction right now. It opens a turn if none is open and counts against the same budgets. Do not use it for a faction that already has a plan queued in the open turn; apply or replace that plan instead.
+`faction_action` takes one action for one faction right now. It opens a turn if none is open and counts against the same budgets. If that faction already has a plan queued on the open turn, the call returns `PLAN_ALREADY_QUEUED` and does not run. Apply the queue, or replace the plan with `submit_unit_plan`, then call `faction_action` only once that plan is no longer queued.
 
 `resolve_attack` finishes a pending defender choice on an attack already in progress. It is not a separate battle.
 
