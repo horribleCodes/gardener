@@ -926,6 +926,17 @@ export function factionAction(
 
       const turnId = ensureOpenTurn(db, input.campaignId);
 
+      const queuedPlan = db
+        .prepare(
+          `SELECT id FROM write_queue
+           WHERE turn_id = ? AND unit_type = 'faction' AND unit_id = ? AND kind = 'plan' AND status = 'queued'
+           LIMIT 1`,
+        )
+        .get(turnId, input.factionId);
+      if (queuedPlan) {
+        throw new RuleError("PLAN_ALREADY_QUEUED", "plan already queued");
+      }
+
       if (input.action.type === "idle") {
         return { idle: true };
       }

@@ -19,6 +19,7 @@ import { generateCourt, type CourtDraft } from "../generate/court.js";
 import {
   generateProblems,
   problemBudget,
+  rollChartBehavior,
 } from "../generate/faction.js";
 import { defaultFill, displayName, quarrelSummary } from "../generate/fill.js";
 import { loadCatalog, pickOrRoll } from "../tables/catalog.js";
@@ -533,6 +534,17 @@ export function createCourt(
   );
 }
 
+function outlineBehavior(
+  provided: string | undefined,
+  fill: FillMode,
+  seed: number,
+  index: number,
+): string {
+  if (provided != null && provided !== "") return provided;
+  if (fill !== "missing") throw new RuleError("FILL_INCOMPLETE", "behavior required");
+  return rollChartBehavior(loadCatalog(), mulberry32(seed + 17000 + index));
+}
+
 export function seedCampaign(
   db: Database.Database,
   input: {
@@ -578,13 +590,12 @@ export function seedCampaign(
       const placeIds = new Map<string, string>();
 
       for (const place of input.outline?.places ?? []) {
-        const scope = place.scope ?? (fill === "require" ? undefined : "village");
-        if (!scope) throw new RuleError("FILL_INCOMPLETE", "place scope required");
+        if (!place.scope) throw new RuleError("FILL_INCOMPLETE", "place scope required");
         const parentPlaceId = place.parentKey ? placeIds.get(place.parentKey) : undefined;
         const res = createPlace(db, {
           campaignId,
           name: place.name,
-          scope,
+          scope: place.scope,
           parentPlaceId,
           cultureId: place.cultureId,
         });
@@ -593,7 +604,7 @@ export function seedCampaign(
       }
 
       const factionIds = new Map<string, string>();
-      for (const fac of input.outline?.factions ?? []) {
+      for (const [factionIndex, fac] of (input.outline?.factions ?? []).entries()) {
         let power = fac.power;
         if (!power && fac.homePlaceKey) {
           const place = input.outline?.places?.find((p) => p.key === fac.homePlaceKey);
@@ -608,11 +619,12 @@ export function seedCampaign(
           power = scopeToPower[scope] ?? 1;
         }
         power = power ?? 1;
+        const behavior = outlineBehavior(fac.behavior, fill, seed, factionIndex);
         const res = createFaction(db, {
           campaignId,
           name: fac.name,
           power,
-          behavior: fac.behavior ?? "self_absorbed_survivor",
+          behavior,
           homePlaceId: fac.homePlaceKey ? placeIds.get(fac.homePlaceKey) : undefined,
           fill,
           seed: seed + factionIds.size,
