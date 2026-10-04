@@ -33,3 +33,10 @@ test("play and director copy teach a GM bonus and omit automatic origin", () => 
   }
   expect(glossary).not.toMatch(/`magical`/);
 });
+
+test("glossary records 8-character hex identifiers", () => {
+  expect(glossary).toContain("## Identifier");
+  expect(glossary).toMatch(/8 lowercase hex characters/);
+  expect(glossary).toContain("`newId()`");
+  expect(glossary).toMatch(/Nothing rewrites them/);
+});
