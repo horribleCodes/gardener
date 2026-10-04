@@ -98,7 +98,6 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 
 **Generation and setup**
 
-- `seed_campaign` defaults an omitted behavior to `self_absorbed_survivor`. Intent: behavior is required unless the caller opts into random generation.
 - An invalid `courtType` in `seed_campaign` drops the court silently.
 - `create_faction` ignores `fill`.
 - `ensure_setpiece` always uses "Local figure" for a character and supports a fact only with `fill: blank`.
