@@ -43,7 +43,7 @@ Every tool returns one envelope:
 - `advisories` are warnings that did not fail the call, such as a court size clamped into range.
 - `derived` is the slice most relevant to the mutation. For a faction it is `trouble`, `collapseMargin` (die maximum minus Trouble; at 0 or below the faction collapses), and `status`. For a change it is its status, scope, and magnitude.
 
-Common error codes: `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_UNKNOWN`, `TURN_ALREADY_OPEN`, `WRITE_LOCKED`, `QUEUE_CLOSED`, `NOT_PENDING`, `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET`, `INTEREST_CAP`, `INTEREST_NATURE_MISMATCH`, `INTEREST_ALREADY_SPENT`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `COLLAPSED_FACTION`, `COHESION_AT_CAP`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `CHANGE_NOT_READY`, `NOTHING_TO_SOLVE`, `INTRINSIC_PROBLEM`, `MAGNITUDE_REJECTED`, and `NAME_TAKEN`.
+Common error codes: `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_UNKNOWN`, `TURN_ALREADY_OPEN`, `WRITE_LOCKED`, `QUEUE_CLOSED`, `QUEUE_NOT_EMPTY`, `NOT_PENDING`, `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET`, `INTEREST_CAP`, `INTEREST_NATURE_MISMATCH`, `INTEREST_ALREADY_SPENT`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `COLLAPSED_FACTION`, `COHESION_AT_CAP`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `CHANGE_NOT_READY`, `NOTHING_TO_SOLVE`, `INTRINSIC_PROBLEM`, `MAGNITUDE_REJECTED`, and `NAME_TAKEN`.
 
 ## Determinism
 
@@ -60,7 +60,7 @@ A campaign has at most one open turn.
 - **Budgets.** One plan is one faction's actions for the turn: at most one internal action and up to Power external actions, at most one external action per target. `max_interest` may extend up to Power times.
 - **Plan errors.** A plan that names an entity absent from the unit's view must fail loudly, not be dropped.
 - **`faction_action`.** Takes one action now. It opens a turn if none is open and enforces the same budgets. It accepts forced rolls, `defenderChoice`, and `willing` as declared director overrides. If that faction already has a plan queued on the open turn, the call returns `PLAN_ALREADY_QUEUED` and leaves that plan queued.
-- **`advance_month`.** Moves the calendar and grants monthly Dominion. It may close an open turn that has nothing queued, such as a turn left open by `faction_action`. If any plan or reaction is still queued, it must fail rather than abandon it. Discarding queued work, if it is ever needed, would be a separate explicit action.
+- **`advance_month`.** Moves the calendar and grants monthly Dominion. It may close an open turn that has nothing queued, such as a turn left open by `faction_action`. A queued plan or reaction on that turn returns `QUEUE_NOT_EMPTY` and leaves the turn open. Discarding queued work, if it is ever needed, would be a separate explicit action.
 - **Lock.** Writes take a lock file beside the database (`<db path>.lock`); in-memory databases use an in-process mutex. A stale lock (older than 30 seconds, holder not running) is cleared. Intent is that every mutation takes the lock.
 
 ## Visibility and rumors

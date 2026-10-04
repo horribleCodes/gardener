@@ -254,7 +254,11 @@ export function buildServer(dbPath: string): McpServer {
 
   reg(
     "advance_month",
-    { description: "Close an open turn if needed and advance the calendar", inputSchema: { campaignId: z.string() } },
+    {
+      description:
+        "Close an open turn if needed and advance the calendar. Returns QUEUE_NOT_EMPTY when the open turn still has a queued plan or reaction.",
+      inputSchema: { campaignId: z.string() },
+    },
     dbTool((a) => advanceMonthForCampaign(db, a.campaignId)),
   );
 
