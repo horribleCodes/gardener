@@ -578,13 +578,12 @@ export function seedCampaign(
       const placeIds = new Map<string, string>();
 
       for (const place of input.outline?.places ?? []) {
-        const scope = place.scope ?? (fill === "require" ? undefined : "village");
-        if (!scope) throw new RuleError("FILL_INCOMPLETE", "place scope required");
+        if (!place.scope) throw new RuleError("FILL_INCOMPLETE", "place scope required");
         const parentPlaceId = place.parentKey ? placeIds.get(place.parentKey) : undefined;
         const res = createPlace(db, {
           campaignId,
           name: place.name,
-          scope,
+          scope: place.scope,
           parentPlaceId,
           cultureId: place.cultureId,
         });

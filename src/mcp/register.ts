@@ -192,7 +192,7 @@ export function buildServer(dbPath: string): McpServer {
                 z.object({
                   key: z.string(),
                   name: z.string(),
-                  scope: scopeZ.optional(),
+                  scope: scopeZ,
                   parentKey: z.string().optional(),
                   cultureId: z.string().optional(),
                 }),
