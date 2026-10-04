@@ -23,7 +23,7 @@ New row ids minted by the server are 8 lowercase hex characters from `newId()`. 
 
 ## Schema versioning
 
-The file's SQLite `user_version` is its schema version. This server writes `SCHEMA_VERSION` 4 and migrates files from `MIN_SCHEMA_VERSION` 0 (an unversioned v1 file) upward. A version 3 file drops stored feature `size`, `quality`, and `magical` on open. A file newer than the server, older than the minimum, or a legacy file whose migration would drop orphaned challenges is refused with `INCOMPATIBLE_SCHEMA` before any write.
+The file's SQLite `user_version` is its schema version.
 
 ## MCP surface
 
