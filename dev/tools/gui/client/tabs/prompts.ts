@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { attachCampaignPicker } from "../campaigns";
 import { submitOnEnter } from "../submit-key";
 
 type Prompt = {
@@ -43,6 +44,7 @@ export async function mountPromptsTab(container: HTMLElement): Promise<void> {
           if (arg.name === "campaignId") input.placeholder = "";
           label.append(input);
           fields.append(label);
+          if (arg.name === "campaignId") attachCampaignPicker(input);
         }
       });
       listEl.append(btn);

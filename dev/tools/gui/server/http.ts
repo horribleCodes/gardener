@@ -3,6 +3,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import type { LogBus, LogEvent } from "./log-bus.js";
 import type { McpSession } from "./mcp-session.js";
+import { listCampaigns } from "./campaigns.js";
 import { runSql } from "./sql-runner.js";
 
 export type GuiDeps = {
@@ -301,6 +302,12 @@ export function createGuiHandler(deps: GuiDeps) {
         });
         json(res, 400, { error: message });
       }
+      return;
+    }
+
+    if (route === "GET /api/campaigns") {
+      const campaigns = listCampaigns(repoRoot, session.getDbPath());
+      json(res, 200, { campaigns });
       return;
     }
 

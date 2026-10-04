@@ -1,4 +1,6 @@
 import { api } from "../api";
+import { attachCampaignPicker } from "../campaigns";
+import { schemaSkeleton } from "../schema-skeleton";
 import { submitOnEnter } from "../submit-key";
 
 type JsonSchema = {
@@ -142,7 +144,13 @@ function renderField(name: string, schema: JsonSchema, required: boolean, editab
   }
   field.append(head);
 
-  if (editable && isFillable(schema)) field.append(renderInput(name, schema));
+  if (editable && isFillable(schema)) {
+    const control = renderInput(name, schema);
+    field.append(control);
+    if (name === "campaignId" && control instanceof HTMLInputElement && control.type === "text") {
+      attachCampaignPicker(control);
+    }
+  }
 
   const nest = document.createElement("div");
   nest.className = "schema-nest";
@@ -187,6 +195,7 @@ export async function mountToolsTab(container: HTMLElement): Promise<void> {
       <div class="detail">
         <p id="tool-desc" class="hint">Select a tool.</p>
         <div id="tool-fields" class="fields"></div>
+        <button id="tool-fill" type="button" disabled>Fill from schema</button>
         <textarea id="tool-json" class="code">{}</textarea>
         <button id="tool-call" type="button">Call</button>
         <pre id="tool-result" class="json"></pre>
@@ -197,6 +206,7 @@ export async function mountToolsTab(container: HTMLElement): Promise<void> {
   const desc = container.querySelector("#tool-desc")!;
   const fields = container.querySelector("#tool-fields") as HTMLElement;
   const jsonArea = container.querySelector("#tool-json") as HTMLTextAreaElement;
+  const fill = container.querySelector("#tool-fill") as HTMLButtonElement;
   const result = container.querySelector("#tool-result")!;
   const search = container.querySelector("#tool-search") as HTMLInputElement;
   let tools: Tool[] = [];
@@ -214,6 +224,7 @@ export async function mountToolsTab(container: HTMLElement): Promise<void> {
         desc.textContent = `${tool.name}: ${tool.description ?? ""}`;
         renderForm(tool.inputSchema, fields);
         jsonArea.value = "{}";
+        fill.disabled = false;
       });
       listEl.append(btn);
     }
@@ -229,6 +240,11 @@ export async function mountToolsTab(container: HTMLElement): Promise<void> {
   }
 
   search.addEventListener("input", renderList);
+
+  fill.addEventListener("click", () => {
+    if (!selected) return;
+    jsonArea.value = JSON.stringify(schemaSkeleton(selected.inputSchema), null, 2);
+  });
 
   const call = container.querySelector("#tool-call") as HTMLButtonElement;
   submitOnEnter(container.querySelector(".detail")!, () => call.click());
