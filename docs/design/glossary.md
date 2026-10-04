@@ -44,6 +44,10 @@ A **chart catalog** is a folder of charts. Folder and file names tell the server
 
 Not implemented yet. Today there is one catalog file, `src/tables/catalog.json`.
 
+## Cult
+
+A **cult** is a faction bound to a hero whose divinity is `cult`. `set_theology` costs that cult 1 Power and its internal action. At Power 1 the cult stops being a faction: the faction row is removed, divinity stays `cult`, and `cult_faction_id` is cleared. Leftover worshipers and the cult gift remain, and they do not pay cult Dominion. This is not a collapse.
+
 ## Fact
 
 A **fact** is a basic truth about a subject in the world. Facts are never used in calculations by the rules layer, but defines the subject beyond its mechanical properties. They can be immutable characteristics, but also elements that could change over time.

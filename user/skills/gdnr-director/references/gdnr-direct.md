@@ -117,7 +117,7 @@ Not a free-text adjective like “mercantile.”
 - `fit_blank`: names blank court or character rows left by `fill: blank`.
 - `ensure_setpiece`: makes sure a court, challenge, character, fact, or problem face exists for a scene. Calling it again with the same `key` returns the same row.
 - `form_cult`: binds a hero with `divinity: cult` to a cult faction, new or adopted (`adoptFactionId`). It needs `acknowledged: true`, meaning at least a village of willing worshippers exists. `harshness` is `nominal`, `sharp`, `grueling`, or `overwhelming`; harsher cults carry more intrinsic problems and pay more Dominion each month.
-- `set_theology`: changes a cult's harshness or feature text. It costs the cult 1 Power and its internal action for the turn; a Power 1 cult collapses instead.
+- `set_theology`: changes a cult's harshness or feature text. It costs the cult 1 Power and its internal action for the turn. A Power 1 cult stops being a faction: divinity stays `cult`, the hero's faction link is cleared, and the leftover worshipers and cult gift remain without paying cult Dominion.
 - `set_divinity`: switches a hero's divinity. The choice is normally fixed, so this needs `gmOverride: true`.
 - `set_power`: sets a faction's Power (1–5) by fiat.
 - `expand_change`: grows an active change. The same scope and magnitude costs nothing; a larger one pays the difference.
