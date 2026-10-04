@@ -63,6 +63,10 @@ A campaign has at most one open turn.
 - **`advance_month`.** Moves the calendar and grants monthly Dominion. It may close an open turn that has nothing queued, such as a turn left open by `faction_action`. A queued plan or reaction on that turn returns `QUEUE_NOT_EMPTY` and leaves the turn open. Discarding queued work, if it is ever needed, would be a separate explicit action.
 - **Lock.** Writes take a lock file beside the database (`<db path>.lock`); in-memory databases use an in-process mutex. A stale lock (older than 30 seconds, holder not running) is cleared. Intent is that every mutation takes the lock.
 
+## Cult theology
+
+`set_theology` costs the cult 1 Power and its internal action. A Power 1 cult stops being a faction: the faction row is removed, the hero's divinity stays `cult`, and `cult_faction_id` is cleared. Leftover worshipers and the cult gift remain as public facts, and they do not pay cult Dominion. This is not a collapse.
+
 ## Visibility and rumors
 
 Facts carry `visibility`: `public` (visible with their subject), `local` (visible to units at the fact's place), `privileged` (the owner plus holders of `alliance`, `aid`, or any `spies`), or `hidden` (the owner plus spies at or above their own die maximum in points). A unit's rumors are the events it took part in plus public events at places it knows. `list_rumors` writes template sentences from the actions actually resolved in the latest turn, naming the real culprit of a failed check.

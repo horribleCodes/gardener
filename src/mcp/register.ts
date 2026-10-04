@@ -580,7 +580,7 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "set_theology",
     {
-      description: "Change cult theology at the cost of power",
+      description: "Change cult theology. Costs 1 Power and the internal action. A Power 1 cult stops being a faction.",
       inputSchema: {
         campaignId: z.string(),
         cultFactionId: z.string(),
