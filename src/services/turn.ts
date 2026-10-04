@@ -884,6 +884,23 @@ export function advanceMonthForCampaign(
 ): ServiceResult<{ month: number }> {
   return wrapRule(() =>
     withTransaction(db, () => {
+      const openTurn = db
+        .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
+        .get(campaignId) as { id: string } | undefined;
+
+      if (openTurn) {
+        const queued = db
+          .prepare(
+            `SELECT id FROM write_queue
+             WHERE turn_id = ? AND status = 'queued' AND kind IN ('plan', 'reaction')
+             LIMIT 1`,
+          )
+          .get(openTurn.id);
+        if (queued) {
+          throw new RuleError("QUEUE_NOT_EMPTY", "plan or reaction queued");
+        }
+      }
+
       const pending = db
         .prepare(
           `SELECT a.id FROM actions a
@@ -895,9 +912,6 @@ export function advanceMonthForCampaign(
         throw new RuleError("TURN_ALREADY_OPEN", "defender choice pending");
       }
 
-      const openTurn = db
-        .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
-        .get(campaignId) as { id: string } | undefined;
       if (openTurn) {
         db.prepare("UPDATE turns SET open = 0 WHERE id = ?").run(openTurn.id);
       }

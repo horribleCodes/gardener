@@ -37,6 +37,7 @@ Every reply is `{ ok, data, rolls, advisories, derived }`, or `{ ok: false, erro
 | `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND` | An id is wrong or belongs to another campaign. |
 | `UNKNOWN_TO_UNIT` | A plan names an id that is not in that unit's frozen view. |
 | `TURN_ALREADY_OPEN` | Finish or apply the open turn first. |
+| `QUEUE_NOT_EMPTY` | The open turn still has a queued plan or reaction. Apply the queue or finish the reaction, then advance the month. |
 | `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET` | The faction has used its actions for this turn, or already acted on that target. |
 | `INTEREST_CAP` | The edge is already at twice the owner's die maximum. |
 | `INTEREST_NATURE_MISMATCH` | The directed pair already has a different nature. Pass `replaceNature: true` or pick the existing nature. |
@@ -156,7 +157,7 @@ Use `list_rumors` or the `faction-turn-narration` prompt. `list_hooks` is the ne
 
 ### 7. Advance the calendar
 
-`advance_month` moves the calendar. It closes an open turn only when no plan or reaction is still queued; apply the queue or finish the reaction first. Cult Dominion accrues by the month (`cult_income`). Skipping time is how worship piles up; a campaign that never skips stays Dominion-poor. Encourage spending Dominion on changes rather than hoarding it.
+`advance_month` moves the calendar. It closes an open turn only when no plan or reaction is still queued. If one is, the call returns `QUEUE_NOT_EMPTY` and leaves the turn open; apply the queue or finish the reaction first. Cult Dominion accrues by the month (`cult_income`). Skipping time is how worship piles up; a campaign that never skips stays Dominion-poor. Encourage spending Dominion on changes rather than hoarding it.
 
 ## Intent → action
 
