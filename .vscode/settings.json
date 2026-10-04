@@ -4,9 +4,7 @@
         "**/.svn": true,
         "**/.hg": true,
         "**/.DS_Store": true,
-        "**/Thumbs.db": true,
-        "**/dist": true,
-        "**/data": true
+        "**/Thumbs.db": true
     },
     "search.exclude": {
         "**/node_modules": true,
