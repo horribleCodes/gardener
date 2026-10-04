@@ -15,6 +15,7 @@ The user names the issue. Read it with `gh issue view`. If they did not name one
 ## Do not
 
 - Write product code or tests.
+- Plan a unit test that reads a documentation file or a prompt file and asserts on that file's text. A documentation file is `AGENTS.md`, `README.md`, or markdown under `docs/`. A prompt file is markdown under `.cursor/prompts/`, `.cursor/skills/`, or `user/`. Substring and regular-expression matches (`toContain`, `toMatch`, `includes`, and the same check under another name) are this kind of test, including negative matches. Do not schedule a string guard, an exact-text assertion, or a snapshot of that file. This overrides the writing-plans skill for that subject. A test of a function return value is not this kind of test.
 - Mark the pull request ready.
 - Merge.
 - Add a different label to the new PR.
