@@ -41,11 +41,12 @@ Open `http://127.0.0.1:3847`.
 1. Confirm the database path (default `data/campaign.sqlite` under the repo, or `GARDENER_WORLD_DB` if set when the GUI process started).
 2. Click **Save path** while MCP is stopped. Changing the path while connected is rejected; stop first, save, then start.
 3. Click **Start MCP**. Status should show `Connected (gardener 0.1.0)`. If start fails with `BUILD_REQUIRED`, run `npm run build` from the repo root.
-4. **Tools** — pick a tool, fill primitive fields and/or the JSON args textarea, **Call**. Results show the parsed Gardener envelope when the tool returns JSON text.
+4. **Tools** — pick a tool, fill primitive fields and/or the JSON args textarea, **Call**. **Fill from schema** replaces the JSON textarea with an object that contains every property the tool schema defines, including nested objects and one sample array element. Results show the parsed Gardener envelope when the tool returns JSON text.
 5. **Resources** — pick a `world://` template, fill `{params}`, **Read**. Example after `seed_campaign`: `world://campaigns/{campaignId}/brief`.
 6. **Prompts** — pick `gm-briefing` or `faction-turn-narration`, set args such as `campaignId`, **Run**.
 7. **SQL** — run `SELECT` / `PRAGMA` (table view) or other statements (text/JSON). There is no table explorer in v1. The SQL connection is a separate `better-sqlite3` handle on the same file as MCP; concurrent writes may block briefly.
-8. The **traffic log** streams MCP, SQL, and system events (last 500 in memory). Filter All / MCP / SQL / Errors.
+8. The **traffic log** streams MCP, SQL, and system events (last 500 in memory). Filter All / MCP / SQL / Errors. **Collapse** hides the lines and the filters. The session log stays; **Expand** shows it again, including events that arrived while it was collapsed.
+9. Any text field named `campaignId` (tool arguments, resource parameters, prompt arguments) opens a menu of campaigns in the current database file. Each row shows the name and the id. Choosing a row puts the id in the field. The list loads in the background and does not block the rest of the GUI. The field still accepts a typed id when the list is empty.
 
 Example tool call (`quote_change` works on an empty database):
 

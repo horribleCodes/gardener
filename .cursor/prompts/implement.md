@@ -15,10 +15,11 @@ This procedure **overrides** any default that would check out a new branch from 
 3. Commit the implementation on that same branch and `git push` to the **existing** remote branch so the commits land on the spec PR. Do not `git push -u` a new branch name.
 4. If the plan cannot be implemented as written, stop and tell the user. Do not rewrite the spec in order to keep going.
 5. When the planned work is done and the tests that cover it pass, put a **Test plan** checklist in **that same** pull request body. Keep the existing summary and the source-issue link. Each checklist row is a check the unit or e2e tests cannot cover. Name a file under `test/play-scripts/` only when this change requires that playtest to test. Delete empty placeholder rows.
-6. If the PR title begins with "Spec: ", remove that prefix.
-7. If the PR has the label "spec ready", remove that label.
-8. Mark the pull request ready for review (`gh pr ready`).
-9. Reply with the pull request URL and stop.
+6. If the Test plan checklist contains empty (unchecked) items, apply the GitHub label "test run required".
+7. If the PR title begins with "Spec: ", remove that prefix.
+8. If the PR has the label "spec ready", remove that label.
+9. Mark the pull request ready for review (`gh pr ready`).
+10. Reply with the pull request URL and stop.
 
 ## Do not
 
@@ -27,3 +28,4 @@ This procedure **overrides** any default that would check out a new branch from 
 - Merge, approve, or enable auto-merge.
 - Set **Priority**, **Size**, **Impact**, or **Wave** on Gardener Project or move Project cards.
 - Add a test, fixture, or source change whose only purpose is to satisfy a checklist row. The reviewer runs the checklist as the branch stands.
+- Add a unit test that reads a documentation file or a prompt file and asserts on that file's text. A documentation file is `AGENTS.md`, `README.md`, or markdown under `docs/`. A prompt file is markdown under `.cursor/prompts/`, `.cursor/skills/`, or `user/`. Substring and regular-expression matches (`toContain`, `toMatch`, `includes`, and the same check under another name) are this kind of test, including negative matches. Do not replace a deleted test of that kind with another assertion on the same file text, including an exact-text assertion or a snapshot. A test of a function return value is not this kind of test.
