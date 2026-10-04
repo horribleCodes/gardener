@@ -62,6 +62,10 @@ A **hero** is a player character: a row in `heroes` with level, Words, Influence
 
 A user may take any role: an individual, a small group, or a faction. Today those are different entity types. A faction the user steers is a faction with `control: player`, not a hero.
 
+## Identifier
+
+A randomly generated **identifier** is 8 lowercase hex characters (`0-9`, `a-f`), about 32 bits. The server mints one through `newId()` whenever it creates a row id. Collision risk at that size is accepted; the generator does not retry. Identifiers already stored, including full UUID v4 values and short fixture ids, stay valid. Nothing rewrites them.
+
 ## Module
 
 A **module** declares the database tables it needs, a chart catalog, actions, interactions, generation config, instructions, dependencies, and its own version. The campaign database is created with only the tables of the modules chosen for it.

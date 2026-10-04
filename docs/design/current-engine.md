@@ -17,6 +17,10 @@ A relative path, including the default, resolves against the working directory o
 
 There is no tool that lists campaigns. The `campaignId` exists only in the reply from `seed_campaign` or `create_campaign`, and a lost id cannot be recovered through any current tool. A list tool is tracked on the Project.
 
+## Identifiers
+
+New row ids minted by the server are 8 lowercase hex characters from `newId()`. A stored id is an opaque string: a full UUID from an older file, or a caller-chosen id, still addresses its row. The server does not rewrite existing ids and does not reject a longer id. Eight hex characters are about 32 bits. A duplicate inside one table surfaces as a SQLite constraint error; the generator does not retry.
+
 ## Schema versioning
 
 The file's SQLite `user_version` is its schema version. This server writes `SCHEMA_VERSION` 4 and migrates files from `MIN_SCHEMA_VERSION` 0 (an unversioned v1 file) upward. A version 3 file drops stored feature `size`, `quality`, and `magical` on open. A file newer than the server, older than the minimum, or a legacy file whose migration would drop orphaned challenges is refused with `INCOMPATIBLE_SCHEMA` before any write.

@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import type { Power } from "../domain/types.js";
 import { collapseState } from "../rules/collapse.js";
 import { loadProblemsOrdered, sumTrouble } from "./util.js";
+import { newId } from "./ids.js";
 
 export function applyCollapseIfNeeded(
   db: Database.Database,
@@ -30,7 +31,7 @@ export function applyCollapseIfNeeded(
     `INSERT INTO events (id, campaign_id, turn_id, type, payload, created_at)
      VALUES (?, ?, ?, 'faction_collapsed', ?, ?)`,
   ).run(
-    crypto.randomUUID(),
+    newId(),
     row.campaign_id,
     turnId ?? null,
     JSON.stringify({ factionId, trouble, cohesion }),

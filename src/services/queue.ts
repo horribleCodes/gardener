@@ -24,6 +24,7 @@ import {
   wrapRule,
   type ServiceResult,
 } from "./util.js";
+import { newId } from "./ids.js";
 import { rollDie } from "../rules/dice.js";
 import {
   factionActionFromUnitPlan,
@@ -356,7 +357,7 @@ function freezeView(
   db.prepare(
     `INSERT INTO unit_views (id, turn_id, unit_type, unit_id, snapshot)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(crypto.randomUUID(), turnId, unit.type, unit.id, JSON.stringify(snapshot));
+  ).run(newId(), turnId, unit.type, unit.id, JSON.stringify(snapshot));
 }
 
 export function openParallelTurn(
@@ -395,7 +396,7 @@ export function openParallelTurn(
         }
 
         const campaign = requireCampaign(db, input.campaignId);
-        const turnId = crypto.randomUUID();
+        const turnId = newId();
         const seqRow = db
           .prepare("SELECT COALESCE(MAX(sequence), 0) + 1 AS seq FROM turns WHERE campaign_id = ?")
           .get(input.campaignId) as { seq: number };
@@ -547,7 +548,7 @@ export function submitUnitPlan(
           return { status: "queued" };
         }
 
-        const id = crypto.randomUUID();
+        const id = newId();
         if (unknownId) {
           db.prepare(
             `INSERT INTO write_queue (id, campaign_id, turn_id, unit_type, unit_id, kind, payload, status, error_code, enqueued_at)
@@ -581,7 +582,7 @@ function recordUnitAction(
   db.prepare(
     `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, feature_ids, outcome)
      VALUES (?, ?, ?, ?, ?, '[]', ?)`,
-  ).run(crypto.randomUUID(), turnId, actionType, actorType, actorId, outcome);
+  ).run(newId(), turnId, actionType, actorType, actorId, outcome);
 }
 
 type TurnRow = {
@@ -728,7 +729,7 @@ function enqueueDefenderReaction(
   db.prepare(
     `INSERT INTO write_queue (id, campaign_id, turn_id, unit_type, unit_id, kind, payload, status, error_code, enqueued_at)
      VALUES (?, ?, ?, ?, ?, 'reaction', ?, 'queued', NULL, ?)`,
-  ).run(crypto.randomUUID(), campaignId, turnId, defender.type, defender.id, payload, now);
+  ).run(newId(), campaignId, turnId, defender.type, defender.id, payload, now);
 }
 
 function applyFactionPlan(
