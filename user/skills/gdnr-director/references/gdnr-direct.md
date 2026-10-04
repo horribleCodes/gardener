@@ -45,7 +45,7 @@ Each faction: `key`, `name`, `behavior`, optional `homePlaceKey`, optional `powe
 | `martial_conqueror` | Beat weaker neighbors, arm against the strongest, strip rivals' military. |
 | `directed` | Never choose for itself; it acts only on plans the caller gives. Not for NPC factions. |
 
-Free text is not a behavior. Leave `behavior` out only if the user asked for it to be random.
+Free text is not a behavior. Leave `behavior` out only when the user asked for a random chart behavior. With `fill` omitted or `missing`, that omission rolls one of `despotic_tyrant`, `self_absorbed_survivor`, `scheming_manipulator`, or `martial_conqueror`. The roll never picks `directed`. `fill: require` and `fill: blank` reject an omitted `behavior`.
 
 An explicit `power` always wins. Without one, Power follows the home place's scope (village 1, city 2, region 3, nation 4, realm 5), or 1 with no home.
 
