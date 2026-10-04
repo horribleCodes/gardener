@@ -815,22 +815,33 @@ export function advanceMonth(db: Database.Database, campaignId: string): void {
   }
 }
 
+function submitCallerPlans(
+  db: Database.Database,
+  dbPath: string,
+  campaignId: string,
+  actions: Record<string, FactionAction> | undefined,
+): { ok: false; error: { code: string; message: string; details: Record<string, unknown> } } | undefined {
+  if (!actions) return undefined;
+  for (const [factionId, action] of Object.entries(actions)) {
+    const submitted = submitUnitPlan(db, dbPath, {
+      campaignId,
+      unitType: "faction",
+      unitId: factionId,
+      plan: action,
+    });
+    if (!submitted.ok && submitted.error.code === "UNKNOWN_TO_UNIT") return submitted;
+  }
+  return undefined;
+}
+
 export function runFactionTurn(
   db: Database.Database,
   dbPath: string,
   input: RunFactionTurnInput,
 ): ServiceResult<{ order: string[]; paused?: boolean }> {
   if (input.resume) {
-    if (input.actions) {
-      for (const [factionId, action] of Object.entries(input.actions)) {
-        submitUnitPlan(db, dbPath, {
-          campaignId: input.campaignId,
-          unitType: "faction",
-          unitId: factionId,
-          plan: action,
-        });
-      }
-    }
+    const rejected = submitCallerPlans(db, dbPath, input.campaignId, input.actions);
+    if (rejected) return rejected;
     const applied = applyWriteQueue(db, dbPath, {
       campaignId: input.campaignId,
       advanceMonth: input.advanceMonth,
@@ -850,16 +861,8 @@ export function runFactionTurn(
   });
   if (!opened.ok) return opened;
 
-  if (input.actions) {
-    for (const [factionId, action] of Object.entries(input.actions)) {
-      submitUnitPlan(db, dbPath, {
-        campaignId: input.campaignId,
-        unitType: "faction",
-        unitId: factionId,
-        plan: action,
-      });
-    }
-  }
+  const rejected = submitCallerPlans(db, dbPath, input.campaignId, input.actions);
+  if (rejected) return rejected;
 
   const applied = applyWriteQueue(db, dbPath, {
     campaignId: input.campaignId,

@@ -35,6 +35,7 @@ Every reply is `{ ok, data, rolls, advisories, derived }`, or `{ ok: false, erro
 | Error | Meaning |
 | --- | --- |
 | `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND` | An id is wrong or belongs to another campaign. |
+| `UNKNOWN_TO_UNIT` | A plan names an id that is not in that unit's frozen view. |
 | `TURN_ALREADY_OPEN` | Finish or apply the open turn first. |
 | `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET` | The faction has used its actions for this turn, or already acted on that target. |
 | `INTEREST_CAP` | The edge is already at twice the owner's die maximum. |
