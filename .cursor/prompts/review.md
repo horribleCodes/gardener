@@ -26,7 +26,7 @@ Locate the section labeled `## Test plan` in **this** description (`body`; optio
 
 Skip rows whose text is empty or only a placeholder (`…`, `...`, `TODO`).
 
-If there are **no incomplete items**, stop. Do not review. Do not edit the description.
+If there are **no incomplete items**, remove the label "test run required" if it exists. Then stop. Do not review. Do not edit the description.
 
 ## 2. Perform incomplete items only
 
@@ -48,6 +48,7 @@ Only after the runs finish: tick items that **passed**.
 - Leave failures, blocked items, already-ticked rows, and every other line of the description untouched, including source-issue links (`Closes` / `Fixes` / `Related to` / `Implements`).
 - If nothing passed, skip this step.
 - Write the full body to a temp file and apply it with `gh pr edit N --body-file /tmp/…`. That is a PR-description edit, not a file change in the repo.
+- If no unchecked checklist items remain and the PR has the label "test run required", remove it.
 
 ## 4. Leave a review
 
