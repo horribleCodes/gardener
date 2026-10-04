@@ -38,6 +38,7 @@ import {
   wrapRule,
   type ServiceResult,
 } from "./util.js";
+import { newId } from "./ids.js";
 
 export type RunActionInput = {
   campaignId: string;
@@ -153,7 +154,7 @@ function runBuildStrength(
     turnId,
     troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
   );
-  const actionId = crypto.randomUUID();
+  const actionId = newId();
   let dominionDelta = 0;
   if (check.success) {
     dominionDelta = Math.ceil(faction.power / 2);
@@ -250,7 +251,7 @@ function runEnactChange(
     turnId,
     troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
   );
-  const actionId = crypto.randomUUID();
+  const actionId = newId();
   const enactFeatureIds = input.meansFeatureId
     ? JSON.stringify([input.meansFeatureId])
     : "[]";
@@ -305,7 +306,7 @@ function runEnactChange(
     const partText = input.featureText ?? "";
     db.prepare(
       "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, ?)",
-    ).run(crypto.randomUUID(), input.addPartToFeatureId, partText, posRow.p);
+    ).run(newId(), input.addPartToFeatureId, partText, posRow.p);
     if (input.aimedAtFactionId) {
       db.prepare("UPDATE features SET aimed_at_faction_id = ? WHERE id = ?").run(
         input.aimedAtFactionId,
@@ -400,7 +401,7 @@ function spendStandingOrdersOnContest(
       db.prepare(
         `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, outcome)
          VALUES (?, ?, 'spend_interest', 'faction', ?, 'faction', ?, 'success')`,
-      ).run(crypto.randomUUID(), turnId, spenderId, order.targetFactionId);
+      ).run(newId(), turnId, spenderId, order.targetFactionId);
     }
   }
   return { attackerTotal: aTotal, defenderTotal: dTotal };
@@ -451,7 +452,7 @@ export function applyAttackDefense(
         throw new RuleError("ENTITY_NOT_FOUND", "problem not found");
       }
     } else {
-      const problemId = crypto.randomUUID();
+      const problemId = newId();
       const problemText = loadCatalog().problems.military[0];
       db.prepare(
         `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
@@ -613,7 +614,7 @@ function runAttack(
     defenderTotal,
     winner,
   });
-  const actionId = crypto.randomUUID();
+  const actionId = newId();
 
   if (winner === "defender") {
     db.prepare(
@@ -819,7 +820,7 @@ function runExtendInterest(
     });
   }
 
-  const actionId = crypto.randomUUID();
+  const actionId = newId();
 
   if (winner === "defender") {
     db.prepare(
@@ -849,7 +850,7 @@ function runExtendInterest(
     db.prepare(
       `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
        VALUES (?, ?, ?, 1, ?)`,
-    ).run(crypto.randomUUID(), attacker.id, defender.id, natureDefault);
+    ).run(newId(), attacker.id, defender.id, natureDefault);
   }
 
   db.prepare(
@@ -913,7 +914,7 @@ function runRestoreCohesion(
     turnId,
     troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
   );
-  const actionId = crypto.randomUUID();
+  const actionId = newId();
   if (check.success) {
     db.prepare("UPDATE factions SET cohesion = cohesion + 1 WHERE id = ?").run(faction.id);
   }
@@ -962,7 +963,7 @@ function runAid(
     turnId,
     troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
   );
-  const actionId = crypto.randomUUID();
+  const actionId = newId();
   if (check.success) {
     db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(amount, faction.id);
     db.prepare("UPDATE factions SET dominion = dominion + ? WHERE id = ?").run(
@@ -1018,7 +1019,7 @@ function runRemoveInterest(
     throw new RuleError("ENTITY_NOT_FOUND", "no interest to remove");
   }
 
-  const actionId = crypto.randomUUID();
+  const actionId = newId();
   let rollId: string | null = null;
   let outcome: string;
 

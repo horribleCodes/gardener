@@ -10,6 +10,7 @@ import {
 import { quoteChange } from "../rules/cost.js";
 import { mulberry32 } from "../rules/dice.js";
 import { loadCatalog } from "../tables/catalog.js";
+import { newId } from "./ids.js";
 
 export type ServiceResult<T> =
   | { ok: true; data: T }
@@ -86,7 +87,7 @@ export function ensureOpenTurn(db: Database.Database, campaignId: string): strin
     .get(campaignId) as { id: string } | undefined;
   if (existing) return existing.id;
   const campaign = requireCampaign(db, campaignId);
-  const turnId = crypto.randomUUID();
+  const turnId = newId();
   const seqRow = db
     .prepare("SELECT COALESCE(MAX(sequence), 0) + 1 AS seq FROM turns WHERE campaign_id = ?")
     .get(campaignId) as { seq: number };
@@ -126,7 +127,7 @@ export function recordActionEvent(
     `INSERT INTO events (id, campaign_id, turn_id, type, payload, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(
-    crypto.randomUUID(),
+    newId(),
     input.campaignId,
     input.turnId,
     input.type,
@@ -204,7 +205,7 @@ export function insertBacklashProblem(
   factionId: string,
   text?: string,
 ): string {
-  const problemId = crypto.randomUUID();
+  const problemId = newId();
   const problemText = text ?? loadCatalog().backlash[0];
   db.prepare(
     `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
@@ -224,7 +225,7 @@ export function insertFeatureFromText(
     aimedAtFactionId?: string | null;
   },
 ): string {
-  const featureId = crypto.randomUUID();
+  const featureId = newId();
   const domain = tags?.domain ?? "other";
   const origin = tags?.origin ?? "native";
   const covert = tags?.covert ?? 0;
@@ -233,7 +234,7 @@ export function insertFeatureFromText(
     `INSERT INTO features (id, faction_id, text, domain, origin, aimed_at_faction_id, covert)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(featureId, factionId, featureText, domain, origin, aimedAt, covert);
-  const partId = crypto.randomUUID();
+  const partId = newId();
   db.prepare(
     "INSERT INTO feature_parts (id, feature_id, text, position) VALUES (?, ?, ?, 0)",
   ).run(partId, featureId, featureText);
@@ -246,7 +247,7 @@ export function persistRoll(
   turnId: string,
   payload: unknown,
 ): string {
-  const rollId = crypto.randomUUID();
+  const rollId = newId();
   db.prepare(
     "INSERT INTO rolls (id, campaign_id, turn_id, payload) VALUES (?, ?, ?, ?)",
   ).run(rollId, campaignId, turnId, JSON.stringify(payload));

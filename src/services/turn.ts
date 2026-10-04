@@ -26,6 +26,7 @@ import {
   wrapRule,
   type ServiceResult,
 } from "./util.js";
+import { newId } from "./ids.js";
 
 export type FactionAction =
   | { type: "build_strength"; forcedRoll?: number }
@@ -272,7 +273,7 @@ function executeAid(
   db.prepare(
     `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, dominion_delta)
      VALUES (?, ?, 'aid', 'faction', ?, 'faction', ?, -1)`,
-  ).run(crypto.randomUUID(), turnId, actorId, targetId);
+  ).run(newId(), turnId, actorId, targetId);
 }
 
 function militaryDefeatTarget(
@@ -754,7 +755,7 @@ function runGlorifyIfNeeded(
   const data = actionResult.data as { success?: boolean };
   if (!data.success) return;
   const statement = loadCatalog().minorRelationship[0]?.text ?? "A boastful proclamation";
-  const factId = crypto.randomUUID();
+  const factId = newId();
   const faction = requireFaction(db, factionId);
   db.prepare(
     `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
@@ -805,7 +806,7 @@ export function advanceMonth(db: Database.Database, campaignId: string): void {
         `INSERT INTO events (id, campaign_id, type, payload, created_at)
          VALUES (?, ?, 'income', ?, ?)`,
       ).run(
-        crypto.randomUUID(),
+        newId(),
         campaignId,
         JSON.stringify({ heroId: gb.id, kind, amount: grant, month: campaign.month + 1 }),
         Date.now(),
@@ -1174,7 +1175,7 @@ export function spendInterest(
       db.prepare(
         `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, target_type, target_id, outcome)
          VALUES (?, ?, 'spend_interest', 'faction', ?, 'faction', ?, 'success')`,
-      ).run(crypto.randomUUID(), turn.id, input.fromFactionId, input.toFactionId);
+      ).run(newId(), turn.id, input.fromFactionId, input.toFactionId);
 
       return report;
     }),

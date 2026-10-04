@@ -20,6 +20,7 @@ import {
   wrapRule,
   type ServiceResult,
 } from "./util.js";
+import { newId } from "./ids.js";
 
 export function beginChange(
   db: Database.Database,
@@ -73,7 +74,7 @@ export function beginChange(
         deedsRequired: input.deedsRequired,
         challengesRequired: input.challengesRequired,
       });
-      const changeId = crypto.randomUUID();
+      const changeId = newId();
       db.prepare(
         `INSERT INTO changes (
           id, campaign_id, scope, magnitude, kind, place_ids, faction_id, owner, status,
@@ -95,11 +96,11 @@ export function beginChange(
         for (const r of input.resisters) {
           db.prepare(
             `INSERT INTO resisters (id, change_id, rating, label) VALUES (?, ?, ?, ?)`,
-          ).run(crypto.randomUUID(), changeId, r.rating, r.label ?? "");
+          ).run(newId(), changeId, r.rating, r.label ?? "");
         }
       }
       if (input.featureText) {
-        const factId = crypto.randomUUID();
+        const factId = newId();
         db.prepare(
           `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id, visibility)
            VALUES (?, ?, 'change', ?, ?, 'feature_draft', ?, 'privileged')`,
@@ -490,12 +491,12 @@ export function resolveWithdrawal(
             visibility: string;
             place_id: string | null;
           };
-          const newId = crypto.randomUUID();
+          const successorFactId = newId();
           db.prepare(
             `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id, visibility, place_id)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).run(
-            newId,
+            successorFactId,
             old.campaign_id,
             old.subject,
             old.subject_id,
@@ -505,7 +506,7 @@ export function resolveWithdrawal(
             old.visibility,
             old.place_id,
           );
-          db.prepare("UPDATE facts SET superseded_by = ? WHERE id = ?").run(newId, f.id);
+          db.prepare("UPDATE facts SET superseded_by = ? WHERE id = ?").run(successorFactId, f.id);
         }
         if (change.feature_id) {
           db.prepare("DELETE FROM feature_parts WHERE feature_id = ?").run(change.feature_id);
@@ -524,7 +525,7 @@ export function resolveWithdrawal(
           `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
            VALUES (?, ?, ?, 1, 'cultural', 0, 0, 0, ?)`,
         ).run(
-          crypto.randomUUID(),
+          newId(),
           change.faction_id,
           catalog.backlash[0],
           nextProblemPosition(db, change.faction_id),
@@ -601,7 +602,7 @@ export function expandChange(
 
       let deltaPaid = 0;
       if (input.scope === change.scope && input.magnitude === change.magnitude) {
-        const factId = crypto.randomUUID();
+        const factId = newId();
         db.prepare(
           `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id)
            VALUES (?, ?, 'change', ?, ?, 'change', ?)`,
@@ -675,7 +676,7 @@ export function expandChange(
         change.id,
       );
 
-      const factId = crypto.randomUUID();
+      const factId = newId();
       db.prepare(
         `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, source_change_id)
          VALUES (?, ?, 'change', ?, ?, 'change', ?)`,

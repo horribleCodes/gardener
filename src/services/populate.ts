@@ -32,6 +32,7 @@ import {
   type ServiceResult,
 } from "./util.js";
 import { applyCollapseIfNeeded } from "./collapse.js";
+import { newId } from "./ids.js";
 
 function persistCourt(
   db: Database.Database,
@@ -39,7 +40,7 @@ function persistCourt(
   draft: CourtDraft,
   opts: { placeId?: string | null; rulesFactionId?: string | null },
 ): string {
-  const courtId = crypto.randomUUID();
+  const courtId = newId();
   db.prepare(
     `INSERT INTO courts (id, campaign_id, type, power_structure, atmosphere, place_id, rules_faction_id, blank)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -56,12 +57,12 @@ function persistCourt(
 
   const idMap = new Map<string, string>();
   for (const actor of draft.actors) {
-    idMap.set(actor.id, crypto.randomUUID());
+    idMap.set(actor.id, newId());
   }
-  const protagonistId = idMap.get(draft.conflict.protagonistId) ?? crypto.randomUUID();
-  const antagonistId = idMap.get(draft.conflict.antagonistId) ?? crypto.randomUUID();
+  const protagonistId = idMap.get(draft.conflict.protagonistId) ?? newId();
+  const antagonistId = idMap.get(draft.conflict.antagonistId) ?? newId();
 
-  const conflictId = crypto.randomUUID();
+  const conflictId = newId();
   db.prepare(
     `INSERT INTO conflicts (id, court_id, text, fitted_summary, protagonist_id, antagonist_id)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -74,11 +75,11 @@ function persistCourt(
     antagonistId,
   );
 
-  const consId = crypto.randomUUID();
+  const consId = newId();
   db.prepare(
     "INSERT INTO court_consequences (id, court_id, text) VALUES (?, ?, ?)",
   ).run(consId, courtId, draft.destruction.text);
-  const defId = crypto.randomUUID();
+  const defId = newId();
   db.prepare("INSERT INTO court_defenses (id, court_id, text) VALUES (?, ?, ?)").run(
     defId,
     courtId,
@@ -86,7 +87,7 @@ function persistCourt(
   );
 
   for (const actor of draft.actors) {
-    const charId = idMap.get(actor.id) ?? crypto.randomUUID();
+    const charId = idMap.get(actor.id) ?? newId();
     db.prepare(
       `INSERT INTO characters (
         id, campaign_id, name, role, court_id, faction_id, problem_id, power_source, side,
@@ -134,7 +135,7 @@ export function createCampaign(
 ): ServiceResult<{ campaignId: string; rngSeed: number; flags: CampaignFlags }> {
   return wrapRule(() =>
     withTransaction(db, () => {
-      const campaignId = crypto.randomUUID();
+      const campaignId = newId();
       const rngSeed = input.rngSeed ?? Math.floor(Math.random() * 0xffffffff);
       const flags = resolveCampaignFlags({ preset: input.preset, flags: input.flags });
       db.prepare(
@@ -248,7 +249,7 @@ export function createPlace(
   return wrapRule(() =>
     withTransaction(db, () => {
       requireCampaign(db, input.campaignId);
-      const placeId = crypto.randomUUID();
+      const placeId = newId();
       db.prepare(
         `INSERT INTO places (id, campaign_id, name, scope, parent_place_id, culture_id)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -263,7 +264,7 @@ export function createPlace(
       for (const ward of input.wards ?? []) {
         db.prepare(
           "INSERT INTO wards (id, place_id, rating) VALUES (?, ?, ?)",
-        ).run(crypto.randomUUID(), placeId, ward.rating);
+        ).run(newId(), placeId, ward.rating);
       }
       return { placeId };
     }),
@@ -286,7 +287,7 @@ export function createHero(
   return wrapRule(() =>
     withTransaction(db, () => {
       requireCampaign(db, input.campaignId);
-      const heroId = crypto.randomUUID();
+      const heroId = newId();
       const influence = input.influence ?? 1 + input.level;
       db.prepare(
         `INSERT INTO heroes (id, campaign_id, name, level, words, influence, dominion, wealth, divinity)
@@ -332,7 +333,7 @@ export function createFaction(
       if (input.cohesion != null && input.cohesion > input.power) {
         throw new RuleError("COHESION_ABOVE_POWER", "cohesion cannot exceed power");
       }
-      const factionId = crypto.randomUUID();
+      const factionId = newId();
       const origin = input.origin ?? "existing";
       const dominion =
         input.dominion ?? (origin === "existing" ? input.power : 0);
@@ -372,7 +373,7 @@ export function createFaction(
         db.prepare(
           `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
            VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?)`,
-        ).run(crypto.randomUUID(), factionId, p.text, p.points, p.domain, i);
+        ).run(newId(), factionId, p.text, p.points, p.domain, i);
       }
 
       const featureTarget = input.featureCount ?? input.power;
@@ -455,7 +456,7 @@ export function setInterest(
 
       if (!existing) {
         const points = input.points ?? 1;
-        const interestId = crypto.randomUUID();
+        const interestId = newId();
         db.prepare(
           `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
            VALUES (?, ?, ?, ?, ?)`,
@@ -660,11 +661,11 @@ export function seedCampaign(
             db.prepare(
               `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
                VALUES (?, ?, ?, ?, ?)`,
-            ).run(crypto.randomUUID(), aId, bId, DIE_BY_POWER[aPower.power], natureRow);
+            ).run(newId(), aId, bId, DIE_BY_POWER[aPower.power], natureRow);
             db.prepare(
               `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
                VALUES (?, ?, ?, ?, ?)`,
-            ).run(crypto.randomUUID(), bId, aId, DIE_BY_POWER[bPower.power], natureRow);
+            ).run(newId(), bId, aId, DIE_BY_POWER[bPower.power], natureRow);
           }
         }
       }
@@ -798,7 +799,7 @@ export function createCharacter(
       requireCampaign(db, input.campaignId);
       const fill = defaultFill(input.fill);
       const name = displayName(fill, input.role, input.name);
-      const characterId = crypto.randomUUID();
+      const characterId = newId();
       db.prepare(
         `INSERT INTO characters (
           id, campaign_id, name, role, court_id, faction_id, side, is_leader, is_hidden_controller, shares_authority
@@ -854,7 +855,7 @@ export function createFact(
       if (statement === null && fill !== "blank") {
         throw new RuleError("FILL_INCOMPLETE", "statement required");
       }
-      const factId = crypto.randomUUID();
+      const factId = newId();
       db.prepare(
         `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -895,7 +896,7 @@ export function ensureSetpiece(
         .get(input.campaignId, input.key) as { id: string } | undefined;
       if (existing) return { setpieceId: existing.id, created: false };
 
-      const setpieceId = crypto.randomUUID();
+      const setpieceId = newId();
       db.prepare(
         "INSERT INTO setpieces (id, campaign_id, key, need, status) VALUES (?, ?, ?, ?, 'ready')",
       ).run(setpieceId, input.campaignId, input.key, input.need);
@@ -927,7 +928,7 @@ export function ensureSetpiece(
           changeId = input.changeId;
         }
         const text = pickOrRoll(catalog, `challenges.${kind}`, rng).text;
-        const challengeId = crypto.randomUUID();
+        const challengeId = newId();
         db.prepare(
           "INSERT INTO challenges (id, campaign_id, kind, text, change_id, status) VALUES (?, ?, ?, ?, ?, 'open')",
         ).run(challengeId, input.campaignId, kind, text, changeId);
@@ -1005,7 +1006,7 @@ export function createChallenge(
       const rng = mulberry32(seed);
       const text =
         input.text ?? pickOrRoll(catalog, `challenges.${input.kind}`, rng).text;
-      const challengeId = crypto.randomUUID();
+      const challengeId = newId();
       db.prepare(
         "INSERT INTO challenges (id, campaign_id, kind, text, change_id, status) VALUES (?, ?, ?, ?, ?, 'open')",
       ).run(challengeId, change.campaign_id, input.kind, text, input.changeId);
@@ -1071,7 +1072,7 @@ export function createChampion(
       if (gb.dominion < 8) throw new RuleError("INSUFFICIENT_DOMINION", "champion costs 8 dominion");
       db.prepare("UPDATE heroes SET dominion = dominion - 8 WHERE id = ?").run(input.heroId);
       const stats = championStats(input.level, input.loyal ?? false);
-      const changeId = crypto.randomUUID();
+      const changeId = newId();
       db.prepare(
         `INSERT INTO changes (id, campaign_id, scope, magnitude, kind, place_ids, owner, status, dominion_spent, deeds_required, deeds_done, challenges_required, challenges_done)
          VALUES (?, ?, 'village', 'plausible', 'champion', '[]', 'pc', 'active', 8, 0, 0, 0, 0)`,
@@ -1094,7 +1095,7 @@ export function recordShatter(
   return wrapRule(() =>
     withTransaction(db, () => {
       requireCampaign(db, input.campaignId);
-      const factId = crypto.randomUUID();
+      const factId = newId();
       db.prepare(
         `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
          VALUES (?, ?, 'faction', ?, ?, 'explicit', 'public')`,
@@ -1132,7 +1133,7 @@ export function swayCourt(
       const statement =
         input.statement ??
         (input.mode === "favor" ? loadCatalog().minorRelationship[0].text : defaultControlStatement);
-      const factId = crypto.randomUUID();
+      const factId = newId();
       db.prepare(
         `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
          VALUES (?, ?, 'court', ?, ?, 'explicit', 'public')`,
@@ -1152,7 +1153,7 @@ export function swayCourt(
           `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
            VALUES (?, ?, ?, 2, 'cultural', 0, 0, 0, ?)`,
         ).run(
-          crypto.randomUUID(),
+          newId(),
           court.rules_faction_id,
           USURPER_TEXT,
           nextProblemPosition(db, court.rules_faction_id),
@@ -1215,7 +1216,7 @@ export function formCult(
         db.prepare(
           `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
            VALUES (?, ?, ?, ?, 'cultural', 1, 0, 0, 0)`,
-        ).run(crypto.randomUUID(), factionId, input.featureText, budget);
+        ).run(newId(), factionId, input.featureText, budget);
       }
 
       db.prepare("UPDATE heroes SET divinity = 'cult', cult_faction_id = ? WHERE id = ?").run(
@@ -1258,7 +1259,7 @@ export function setTheology(
           `INSERT INTO events (id, campaign_id, turn_id, type, payload, created_at)
            VALUES (?, ?, ?, 'faction_collapsed', ?, ?)`,
         ).run(
-          crypto.randomUUID(),
+          newId(),
           input.campaignId,
           turnId,
           JSON.stringify({ reason: "theology", factionId: faction.id }),
@@ -1295,7 +1296,7 @@ function ensureInternalTurnSlot(db: Database.Database, campaignId: string, facti
     .get(campaignId) as { id: string } | undefined;
   let turnId = turn?.id;
   if (!turnId) {
-    turnId = crypto.randomUUID();
+    turnId = newId();
     const campaign = requireCampaign(db, campaignId);
     db.prepare(
       `INSERT INTO turns (id, campaign_id, month, sequence, open, faction_order) VALUES (?, ?, ?, 1, 1, '[]')`,
@@ -1309,7 +1310,7 @@ function ensureInternalTurnSlot(db: Database.Database, campaignId: string, facti
   if (internal) throw new RuleError("INTERNAL_BUDGET", "internal action already taken");
   db.prepare(
     `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, outcome) VALUES (?, ?, 'set_theology', 'faction', ?, 'success')`,
-  ).run(crypto.randomUUID(), turnId, factionId);
+  ).run(newId(), turnId, factionId);
   return turnId;
 }
 
@@ -1325,7 +1326,7 @@ function rescaleIntrinsic(db: Database.Database, factionId: string, power: Power
     db.prepare(
       `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
        VALUES (?, ?, ?, ?, 'cultural', 1, 0, 0, 0)`,
-    ).run(crypto.randomUUID(), factionId, text, budget);
+    ).run(newId(), factionId, text, budget);
     return;
   }
   if (budget > total && rows[0]) {
