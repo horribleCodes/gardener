@@ -68,7 +68,7 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 
 - One plan applies as one action. Intent: one internal plus up to Power external actions.
 - `open_parallel_turn` without `missing` idles every NPC faction that has no plan. Intent: they run their goal strategy.
-- A plan naming an id outside the unit's view is dropped silently, and a `player` faction's entry in `run_faction_turn` `actions` is dropped silently. Both must fail loudly.
+- A `player` faction's entry in `run_faction_turn` `actions` is dropped silently. It must fail loudly.
 - After `faction_action`, `run_faction_turn` with `resume: true` automates nobody.
 - `open_parallel_turn` with `unitIds` keeps the caller's order and treats every id as a faction.
 - Only `npc` and `player` control exist; `chart`, `agent`, and `GM` do not.
@@ -97,7 +97,6 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 
 **Generation and setup**
 
-- `seed_campaign` defaults an omitted behavior to `self_absorbed_survivor`. Intent: behavior is required unless the caller opts into random generation.
 - An invalid `courtType` in `seed_campaign` drops the court silently.
 - `create_faction` ignores `fill`.
 - `ensure_setpiece` always uses "Local figure" for a character and supports a fact only with `fill: blank`.
