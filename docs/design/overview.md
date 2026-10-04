@@ -69,7 +69,6 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 - One plan applies as one action. Intent: one internal plus up to Power external actions.
 - `open_parallel_turn` without `missing` idles every NPC faction that has no plan. Intent: they run their goal strategy.
 - A plan naming an id outside the unit's view is dropped silently, and a `player` faction's entry in `run_faction_turn` `actions` is dropped silently. Both must fail loudly.
-- `faction_action` for a faction with a queued plan leaves that plan unapplied. It must fail.
 - `advance_month` abandons queued plans and reactions when it closes a turn. It must fail while anything is queued.
 - After `faction_action`, `run_faction_turn` with `resume: true` automates nobody.
 - `open_parallel_turn` with `unitIds` keeps the caller's order and treats every id as a faction.

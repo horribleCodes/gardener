@@ -126,7 +126,7 @@ Not a free-text adjective like “mercantile.”
 
 ## Director overrides
 
-`faction_action` accepts `forcedRoll`, `forcedAttackerRoll`, `forcedDefenderRoll`, `defenderChoice`, and `willing`. With `willing: true`, `extend_interest` succeeds with no contest. On a new edge the nature is still **rolled**, not chosen, so `willing` grows an existing edge but cannot pick a nature.
+`faction_action` accepts `forcedRoll`, `forcedAttackerRoll`, `forcedDefenderRoll`, `defenderChoice`, and `willing`. With `willing: true`, `extend_interest` succeeds with no contest. On a new edge the nature is still **rolled**, not chosen, so `willing` grows an existing edge but cannot pick a nature. If that faction already has a plan queued on the open turn, `faction_action` returns `PLAN_ALREADY_QUEUED` and does not run. Apply the queue or replace the plan with `submit_unit_plan`.
 
 Use these only as a declared director act, never silently for a player's faction. Unit plans cannot carry them.
 
