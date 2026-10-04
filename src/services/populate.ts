@@ -1253,31 +1253,101 @@ export function setTheology(
     withTransaction(db, () => {
       requireCampaign(db, input.campaignId);
       const faction = db
-        .prepare("SELECT id, power, cohesion, cult FROM factions WHERE id = ? AND campaign_id = ?")
+        .prepare(
+          `SELECT id, power, cohesion, cult, patron_hero_id, home_place_id
+           FROM factions WHERE id = ? AND campaign_id = ?`,
+        )
         .get(input.cultFactionId, input.campaignId) as
-        | { id: string; power: Power; cohesion: number; cult: number }
+        | {
+            id: string;
+            power: Power;
+            cohesion: number;
+            cult: number;
+            patron_hero_id: string | null;
+            home_place_id: string | null;
+          }
         | undefined;
       if (!faction || faction.cult === 0) {
         throw new RuleError("ENTITY_NOT_FOUND", "cult faction not found");
       }
 
-      const turnId = ensureInternalTurnSlot(db, input.campaignId, faction.id);
+      ensureInternalTurnSlot(db, input.campaignId, faction.id);
 
       if (faction.power <= 1) {
-        db.prepare("UPDATE factions SET status = 'collapsed', cohesion = 0 WHERE id = ?").run(
+        const features = db
+          .prepare("SELECT id, text FROM features WHERE faction_id = ? ORDER BY id ASC")
+          .all(faction.id) as { id: string; text: string }[];
+        const giftTexts = features.map((row) => row.text);
+        const factIds: string[] = [];
+
+        let factSubject: "hero" | "place" | null = null;
+        let factSubjectId: string | null = null;
+        if (faction.patron_hero_id) {
+          const patron = db
+            .prepare("SELECT id FROM heroes WHERE id = ? AND campaign_id = ?")
+            .get(faction.patron_hero_id, input.campaignId) as { id: string } | undefined;
+          if (patron) {
+            factSubject = "hero";
+            factSubjectId = patron.id;
+          }
+        }
+        if (!factSubjectId && faction.home_place_id) {
+          const place = db
+            .prepare("SELECT id FROM places WHERE id = ? AND campaign_id = ?")
+            .get(faction.home_place_id, input.campaignId) as { id: string } | undefined;
+          if (place) {
+            factSubject = "place";
+            factSubjectId = place.id;
+          }
+        }
+        if (factSubject && factSubjectId) {
+          const insertFact = db.prepare(
+            `INSERT INTO facts (id, campaign_id, subject, subject_id, statement, kind, visibility)
+             VALUES (?, ?, ?, ?, ?, 'explicit', 'public')`,
+          );
+          for (const text of giftTexts) {
+            const factId = newId();
+            insertFact.run(factId, input.campaignId, factSubject, factSubjectId, text);
+            factIds.push(factId);
+          }
+          const worshipersId = newId();
+          insertFact.run(
+            worshipersId,
+            input.campaignId,
+            factSubject,
+            factSubjectId,
+            "Worshipers remain, and they are not a faction.",
+          );
+          factIds.push(worshipersId);
+        }
+
+        db.prepare("UPDATE heroes SET cult_faction_id = NULL WHERE cult_faction_id = ?").run(faction.id);
+        db.prepare("UPDATE characters SET faction_id = NULL WHERE faction_id = ?").run(faction.id);
+        db.prepare("UPDATE courts SET rules_faction_id = NULL WHERE rules_faction_id = ?").run(faction.id);
+        db.prepare("UPDATE changes SET faction_id = NULL WHERE faction_id = ?").run(faction.id);
+        db.prepare(
+          `UPDATE changes SET feature_id = NULL
+           WHERE feature_id IN (SELECT id FROM features WHERE faction_id = ?)`,
+        ).run(faction.id);
+        db.prepare(
+          `UPDATE changes SET backlash_problem_id = NULL
+           WHERE backlash_problem_id IN (SELECT id FROM problems WHERE faction_id = ?)`,
+        ).run(faction.id);
+        db.prepare("UPDATE features SET aimed_at_faction_id = NULL WHERE aimed_at_faction_id = ?").run(
           faction.id,
         );
         db.prepare(
-          `INSERT INTO events (id, campaign_id, turn_id, type, payload, created_at)
-           VALUES (?, ?, ?, 'faction_collapsed', ?, ?)`,
-        ).run(
-          newId(),
-          input.campaignId,
-          turnId,
-          JSON.stringify({ reason: "theology", factionId: faction.id }),
-          Date.now(),
+          `DELETE FROM feature_parts WHERE feature_id IN (SELECT id FROM features WHERE faction_id = ?)`,
+        ).run(faction.id);
+        db.prepare("DELETE FROM problems WHERE faction_id = ?").run(faction.id);
+        db.prepare("DELETE FROM interests WHERE from_faction_id = ? OR to_faction_id = ?").run(
+          faction.id,
+          faction.id,
         );
-        return { collapsed: true };
+        db.prepare("DELETE FROM features WHERE faction_id = ?").run(faction.id);
+        db.prepare("DELETE FROM factions WHERE id = ?").run(faction.id);
+
+        return { ended: true, factionId: faction.id, giftTexts, factIds };
       }
 
       const newPower = (faction.power - 1) as Power;
