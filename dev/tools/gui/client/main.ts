@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { refreshCampaigns } from "./campaigns";
 import { mountToolsTab } from "./tabs/tools";
 import { mountResourcesTab } from "./tabs/resources";
 import { mountPromptsTab } from "./tabs/prompts";
@@ -40,6 +41,7 @@ startBtn.addEventListener("click", async () => {
   try {
     await api("/api/mcp/start", { method: "POST" });
     await refreshStatus();
+    refreshCampaigns();
   } catch (error) {
     window.alert(error instanceof Error ? error.message : String(error));
   }
@@ -61,6 +63,7 @@ saveBtn.addEventListener("click", async () => {
       body: JSON.stringify({ path: dbPathEl.value }),
     });
     await refreshStatus();
+    refreshCampaigns();
   } catch (error) {
     window.alert(error instanceof Error ? error.message : String(error));
   }
@@ -120,6 +123,7 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>(".tabs button")) 
 }
 
 async function boot() {
+  refreshCampaigns();
   try {
     const cfg = await api<{ dbPath: string }>("/api/config");
     dbPathEl.value = cfg.dbPath;

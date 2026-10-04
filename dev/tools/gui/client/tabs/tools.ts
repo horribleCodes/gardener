@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { attachCampaignPicker } from "../campaigns";
 import { schemaSkeleton } from "../schema-skeleton";
 import { submitOnEnter } from "../submit-key";
 
@@ -143,7 +144,13 @@ function renderField(name: string, schema: JsonSchema, required: boolean, editab
   }
   field.append(head);
 
-  if (editable && isFillable(schema)) field.append(renderInput(name, schema));
+  if (editable && isFillable(schema)) {
+    const control = renderInput(name, schema);
+    field.append(control);
+    if (name === "campaignId" && control instanceof HTMLInputElement && control.type === "text") {
+      attachCampaignPicker(control);
+    }
+  }
 
   const nest = document.createElement("div");
   nest.className = "schema-nest";

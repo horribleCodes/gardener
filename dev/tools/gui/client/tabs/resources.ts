@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { attachCampaignPicker } from "../campaigns";
 import { submitOnEnter } from "../submit-key";
 
 type Template = { uriTemplate: string; name?: string; description?: string };
@@ -96,6 +97,7 @@ export async function mountResourcesTab(container: HTMLElement): Promise<void> {
           if (name === "campaignId") input.placeholder = "campaign id";
           label.append(input);
           fields.append(label);
+          if (name === "campaignId") attachCampaignPicker(input);
         }
       });
       listEl.append(btn);
