@@ -1,6 +1,13 @@
+import { RuleError } from "../domain/types.js";
 import type { Catalog } from "../tables/catalog.js";
 import { pickOrRoll } from "../tables/catalog.js";
 import type { Rng } from "../rules/dice.js";
+
+export function rollChartBehavior(catalog: Catalog, rng: Rng): string {
+  const keys = Object.keys(catalog.goals).sort();
+  if (keys.length === 0) throw new RuleError("PICK_UNKNOWN", "no chart behaviors");
+  return keys[Math.floor(rng.next() * keys.length)];
+}
 
 export function problemBudget(
   dieMax: number,
