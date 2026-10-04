@@ -6,6 +6,8 @@ How the running server is shaped: storage, the MCP surface, determinism, and the
 
 A campaign is a row in `campaigns` plus every row keyed to it. The campaign row stores `preset` and the seven flags `profile`, `projectBase`, `opposition`, `wards`, `heldChanges`, `capabilityGate`, and `reachUnit`. `create_campaign` and `seed_campaign` default to the `godbound` preset. `get_world_brief` returns those flags in camelCase. One SQLite file can hold any number of campaigns; `create_campaign` and `seed_campaign` each add a row to the file that is open. Every tool call names its `campaignId`.
 
+An outline place on `seed_campaign` requires `scope`: `village`, `city`, `region`, `nation`, or `realm`. Omitting it fails the call. `fill` does not supply a scope. The server does not default an omitted scope to `village` and does not roll one.
+
 `remove-campaign` takes a `campaignId` and deletes that campaign row and every row associated with it. Other campaigns in the same file stay. The SQLite file is not deleted.
 
 | Variable | Default | Meaning |
@@ -57,7 +59,7 @@ A campaign has at most one open turn.
 - **Write queue.** `submit_unit_plan` queues or replaces a unit's plan. `apply_write_queue` applies plans in the shuffled order under the write lock, pauses when a player-controlled defender must choose, and `submit_reaction` resumes it. `run_faction_turn` is open, mechanical plans for units without one, and apply in one call.
 - **Budgets.** One plan is one faction's actions for the turn: at most one internal action and up to Power external actions, at most one external action per target. `max_interest` may extend up to Power times.
 - **Plan errors.** A plan that names an entity absent from the unit's view must fail loudly, not be dropped.
-- **`faction_action`.** Takes one action now. It opens a turn if none is open and enforces the same budgets. It accepts forced rolls, `defenderChoice`, and `willing` as declared director overrides. Calling it for a faction that already has a plan in the write queue must fail rather than leave that plan unapplied.
+- **`faction_action`.** Takes one action now. It opens a turn if none is open and enforces the same budgets. It accepts forced rolls, `defenderChoice`, and `willing` as declared director overrides. If that faction already has a plan queued on the open turn, the call returns `PLAN_ALREADY_QUEUED` and leaves that plan queued.
 - **`advance_month`.** Moves the calendar and grants monthly Dominion. It may close an open turn that has nothing queued, such as a turn left open by `faction_action`. If any plan or reaction is still queued, it must fail rather than abandon it. Discarding queued work, if it is ever needed, would be a separate explicit action.
 - **Lock.** Writes take a lock file beside the database (`<db path>.lock`); in-memory databases use an in-process mutex. A stale lock (older than 30 seconds, holder not running) is cleared. Intent is that every mutation takes the lock.
 
