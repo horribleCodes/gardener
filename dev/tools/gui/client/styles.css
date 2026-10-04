@@ -327,3 +327,18 @@ td {
   border-radius: 0;
   background: transparent;
 }
+
+.log-title {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.log-drawer.collapsed .log-lines,
+.log-drawer.collapsed .filters {
+  display: none;
+}
+
+.log-drawer.collapsed {
+  max-height: none;
+}

@@ -32,7 +32,10 @@
     <main id="panel" class="panel"></main>
     <aside id="log-drawer" class="log-drawer">
       <div class="log-header">
-        <strong>Traffic log</strong>
+        <div class="log-title">
+          <strong>Traffic log</strong>
+          <button id="log-toggle" type="button" aria-expanded="true" aria-controls="log-lines">Collapse</button>
+        </div>
         <div class="filters">
           <button type="button" data-filter="all" class="active">All</button>
           <button type="button" data-filter="mcp">MCP</button>

@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { refreshCampaigns } from "./campaigns";
+import { appendLogEvent, initialLogDrawer, toggleLogDrawer } from "./log-drawer";
 import { mountToolsTab } from "./tabs/tools";
 import { mountResourcesTab } from "./tabs/resources";
 import { mountPromptsTab } from "./tabs/prompts";
@@ -11,6 +12,14 @@ type Status = {
   serverVersion?: { name: string; version: string };
 };
 
+type ClientLogEvent = {
+  level: string;
+  direction: string;
+  ts: string;
+  summary: string;
+  detail?: string;
+};
+
 const statusEl = document.getElementById("status")!;
 const dbPathEl = document.getElementById("db-path") as HTMLInputElement;
 const saveBtn = document.getElementById("btn-save-path") as HTMLButtonElement;
@@ -18,9 +27,17 @@ const startBtn = document.getElementById("btn-start") as HTMLButtonElement;
 const stopBtn = document.getElementById("btn-stop") as HTMLButtonElement;
 const panel = document.getElementById("panel")!;
 const logLines = document.getElementById("log-lines")!;
+const logDrawer = document.getElementById("log-drawer")!;
+const logToggle = document.getElementById("log-toggle") as HTMLButtonElement;
 
 let logFilter: "all" | "mcp" | "sql" | "error" = "all";
-const logEvents: Array<{ level: string; direction: string; ts: string; summary: string; detail?: string }> = [];
+let drawerState = initialLogDrawer<ClientLogEvent>();
+
+function applyLogDrawer(): void {
+  logDrawer.classList.toggle("collapsed", drawerState.collapsed);
+  logToggle.textContent = drawerState.collapsed ? "Expand" : "Collapse";
+  logToggle.setAttribute("aria-expanded", String(!drawerState.collapsed));
+}
 
 async function refreshStatus() {
   const s = await api<Status>("/api/mcp/status");
@@ -71,7 +88,7 @@ saveBtn.addEventListener("click", async () => {
 
 function renderLog() {
   logLines.replaceChildren();
-  for (const event of logEvents) {
+  for (const event of drawerState.events) {
     if (logFilter === "mcp" && event.direction !== "mcp") continue;
     if (logFilter === "sql" && event.direction !== "sql") continue;
     if (logFilter === "error" && event.level !== "error") continue;
@@ -83,10 +100,15 @@ function renderLog() {
   logLines.scrollTop = logLines.scrollHeight;
 }
 
+logToggle.addEventListener("click", () => {
+  drawerState = toggleLogDrawer(drawerState);
+  applyLogDrawer();
+});
+
 const es = new EventSource("/api/logs");
 es.onmessage = (ev) => {
   try {
-    logEvents.push(JSON.parse(ev.data) as (typeof logEvents)[number]);
+    drawerState = appendLogEvent(drawerState, JSON.parse(ev.data) as ClientLogEvent);
     renderLog();
   } catch {
     /* ignore malformed SSE */
