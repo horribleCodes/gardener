@@ -500,7 +500,7 @@ export function submitUnitPlan(
     unitId: string;
     plan: FactionAction | Record<string, unknown>;
   },
-): ServiceResult<{ status: string; errorCode?: string }> {
+): ServiceResult<{ status: "queued" }> {
   return wrapRule(() =>
     withWriteLock(dbPath, () =>
       withTransaction(db, () => {
@@ -528,20 +528,22 @@ export function submitUnitPlan(
         } catch {
           throw new RuleError("FILL_INCOMPLETE", "invalid unit plan");
         }
-        const planObj = factionActionFromUnitPlan(unitPlan) as FactionAction & Record<string, unknown>;
+        const unknownId = planReferencesUnknown(
+          snapshot,
+          unitPlan as Record<string, unknown>,
+        );
+        if (unknownId) {
+          throw new RuleError(
+            "UNKNOWN_TO_UNIT",
+            `plan names an id outside the frozen view: ${unknownId}`,
+            { id: unknownId, unitType: input.unitType, unitId: input.unitId },
+          );
+        }
 
-        const unknownId = planReferencesUnknown(snapshot, planObj);
         const now = Date.now();
         const payload = JSON.stringify({ ...unitPlan });
 
         if (existing && existing.status === "queued") {
-          if (unknownId) {
-            db.prepare(
-              `UPDATE write_queue SET payload = ?, status = 'rejected', error_code = 'UNKNOWN_TO_UNIT', enqueued_at = ?
-               WHERE id = ?`,
-            ).run(payload, now, existing.id);
-            return { status: "rejected", errorCode: "UNKNOWN_TO_UNIT" };
-          }
           db.prepare(
             `UPDATE write_queue SET payload = ?, status = 'queued', error_code = NULL, enqueued_at = ? WHERE id = ?`,
           ).run(payload, now, existing.id);
@@ -549,14 +551,6 @@ export function submitUnitPlan(
         }
 
         const id = newId();
-        if (unknownId) {
-          db.prepare(
-            `INSERT INTO write_queue (id, campaign_id, turn_id, unit_type, unit_id, kind, payload, status, error_code, enqueued_at)
-             VALUES (?, ?, ?, ?, ?, 'plan', ?, 'rejected', 'UNKNOWN_TO_UNIT', ?)`,
-          ).run(id, input.campaignId, turn.id, input.unitType, input.unitId, payload, now);
-          return { status: "rejected", errorCode: "UNKNOWN_TO_UNIT" };
-        }
-
         db.prepare(
           `INSERT INTO write_queue (id, campaign_id, turn_id, unit_type, unit_id, kind, payload, status, error_code, enqueued_at)
            VALUES (?, ?, ?, ?, ?, 'plan', ?, 'queued', NULL, ?)`,
