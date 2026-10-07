@@ -432,7 +432,8 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "commit_resources",
     {
-      description: "Commit influence or wealth to a change",
+      description:
+        "Commit influence or wealth to a change. When a feature change's coverage, deeds, and challenges are met, this call adds the Feature and one backlash Problem.",
       inputSchema: {
         changeId: z.string(),
         heroId: z.string(),
@@ -526,7 +527,8 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "apply_outcome",
     {
-      description: "Apply a scripted adventure outcome",
+      description:
+        "Apply a scripted adventure outcome. addFeatureText without changeId adds one Feature and one backlash Problem. addFeatureText with changeId adds neither: CHANGE_ALREADY_LANDED if that feature change already landed, CHANGE_NOT_READY if it has not landed or is not a feature change, ENTITY_NOT_FOUND if that change is not on this faction in this campaign.",
       inputSchema: {
         campaignId: z.string(),
         factionId: z.string(),

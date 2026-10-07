@@ -46,6 +46,8 @@ Every reply is `{ ok, data, rolls, advisories, derived }`, or `{ ok: false, erro
 | `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH` | Not enough to pay. |
 | `NOTHING_TO_SOLVE` | No non-intrinsic problem to shrink, or Trouble is 0. |
 | `FILL_INCOMPLETE` | A required field is missing (for example under `fill: require`, or `form_cult` without `acknowledged`). |
+| `CHANGE_ALREADY_LANDED` | This feature change already has its Feature and backlash. `commit_resources` recorded them. |
+| `CHANGE_NOT_READY` | The call does not fit the change. `apply_outcome` was asked to add the Feature for a change that has not landed, or for a change that is not a feature change. The same code already covers a withdrawal that is not decaying and a deed when none remain. |
 | `PICK_UNKNOWN` | A value is not a known chart key (for example a free-text behavior). |
 | `WRITE_LOCKED` | Another write held the lock too long. Retry. |
 
@@ -76,7 +78,7 @@ Spy interest aimed at a faction never shows up in that faction's own view.
 ### 2. Resolve what the heroes do this session
 
 - A **single concrete act** (overthrow a monarch, smash a relic, break a foe) is an adventure outcome, not a change project:
-  - `apply_outcome` changes a faction with no dice: `removeFeatureId` when what a feature depended on is gone, `removeFeaturePartId` for one part of it, `reduceProblemId` with `reduceBy` to shrink a problem that is not intrinsic, or `addFeatureText` for a new structure. An added feature also adds a 1-point backlash problem (`backlash`, or the next catalog row).
+  - `apply_outcome` changes a faction with no dice: `removeFeatureId` when what a feature depended on is gone, `removeFeaturePartId` for one part of it, `reduceProblemId` with `reduceBy` to shrink a problem that is not intrinsic, or `addFeatureText` for a new structure that is not a change project. That new structure also adds a 1-point backlash problem (`backlash`, or the next catalog row). Passing `changeId` with `addFeatureText` does not add a Feature or a backlash. A feature change that already landed returns `CHANGE_ALREADY_LANDED`. A feature change that has not landed, or a change that is not a feature change, returns `CHANGE_NOT_READY`. An unknown change id returns `ENTITY_NOT_FOUND`.
   - `record_deed` counts a mighty deed toward a change that needs one.
   - `record_shatter` records how an **already collapsed** faction ended (`splintered`, `conquered`, `abandoned`, or `other`). It does not collapse a faction and does not undo a collapse.
 - How far an adventure should move the world is your judgment. As a guideline, a job can count as faction actions that succeed without a roll: one for a scene, two for a solid favor, three or four for a long or hard job, and it may also yield Dominion to the side it served.
@@ -84,8 +86,8 @@ Spy interest aimed at a faction never shows up in that faction's own view.
   1. `quote_change` — always quote before promising a cost
   2. `begin_change`
   3. `commit_resources`
-  4. If the GM sets deed or challenge quotas on `quote_change` / `begin_change` (including explicit zero), record them with `record_deed`, `create_challenge`, and `record_challenge_outcome`. Omitted quotas are 0; the quote does not invent a mighty deed.
-  5. `apply_outcome` when the change lands
+  4. If the GM sets deed or challenge quotas on `quote_change` / `begin_change` (including explicit zero), record them with `record_deed`, `create_challenge`, and `record_challenge_outcome`. Omitted quotas are 0; the quote does not invent a mighty deed. Recording a deed or a challenge does not itself add the Feature. When the quotas are met, call `commit_resources` again.
+  5. When `commit_resources` returns `active` for a feature change, that call has already added the Feature and its one backlash Problem. Do not call `apply_outcome` to add that Feature or that Problem again.
 
 Mundus wards raise the Influence cost of a change inside them. They do not block an immediate gift or miracle.
 
