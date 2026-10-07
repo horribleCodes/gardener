@@ -156,7 +156,7 @@ export function buildServer(dbPath: string): McpServer {
       inputSchema: {
         name: z.string(),
         rngSeed: z.number().int().optional(),
-        nameLists: z.record(z.array(z.string())).optional(),
+        nameLists: z.record(z.string(), z.array(z.string())).optional(),
         preset: z.string().optional(),
         flags: campaignFlagFieldsZ,
       },
@@ -662,7 +662,7 @@ export function buildServer(dbPath: string): McpServer {
         campaignId: z.string(),
         unitType: z.enum(["faction", "court", "character", "hero"]),
         unitId: z.string(),
-        plan: z.record(z.unknown()),
+        plan: z.record(z.string(), z.unknown()),
       },
     },
     dbTool((a) =>
@@ -725,7 +725,7 @@ export function buildServer(dbPath: string): McpServer {
         campaignId: z.string(),
         advanceMonth: z.boolean().optional(),
         resume: z.boolean().optional(),
-        actions: z.record(z.unknown()).optional(),
+        actions: z.record(z.string(), z.unknown()).optional(),
       },
     },
     dbTool((a) =>
@@ -746,7 +746,7 @@ export function buildServer(dbPath: string): McpServer {
       inputSchema: {
         campaignId: z.string(),
         factionId: z.string(),
-        action: z.record(z.unknown()),
+        action: z.record(z.string(), z.unknown()),
       },
     },
     dbTool((a) =>
