@@ -536,6 +536,7 @@ export function buildServer(dbPath: string): McpServer {
         reduceBy: z.number().int().optional(),
         addFeatureText: z.string().optional(),
         backlash: z.string().optional(),
+        changeId: z.string().optional(),
       },
     },
     dbTool((a) => applyOutcome(db, a)),
