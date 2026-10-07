@@ -64,7 +64,7 @@ test("omitted place scope fails validation before the handler", async () => {
     });
     expect(missing.isError).toBe(true);
     expect(textOf(missing)).toBe(
-      "MCP error -32602: Input validation error: Invalid arguments for tool seed_campaign: Required at outline.places[0].scope",
+      'MCP error -32602: Input validation error: Invalid arguments for tool seed_campaign: Invalid option: expected one of "village"|"city"|"region"|"nation"|"realm" at outline.places[0].scope',
     );
 
     const later = await client.callTool({
@@ -81,7 +81,7 @@ test("omitted place scope fails validation before the handler", async () => {
     });
     expect(later.isError).toBe(true);
     expect(textOf(later)).toBe(
-      "MCP error -32602: Input validation error: Invalid arguments for tool seed_campaign: Required at outline.places[1].scope",
+      'MCP error -32602: Input validation error: Invalid arguments for tool seed_campaign: Invalid option: expected one of "village"|"city"|"region"|"nation"|"realm" at outline.places[1].scope',
     );
   });
 });
@@ -97,7 +97,7 @@ test("a scope outside the enum is rejected", async () => {
     });
     expect(result.isError).toBe(true);
     expect(textOf(result)).toBe(
-      "MCP error -32602: Input validation error: Invalid arguments for tool seed_campaign: Invalid enum value. Expected 'village' | 'city' | 'region' | 'nation' | 'realm', received 'hamlet' at outline.places[0].scope",
+      'MCP error -32602: Input validation error: Invalid arguments for tool seed_campaign: Invalid option: expected one of "village"|"city"|"region"|"nation"|"realm" at outline.places[0].scope',
     );
   });
 });
