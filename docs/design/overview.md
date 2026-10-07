@@ -82,7 +82,6 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 
 **Changes, Influence, and Dominion**
 
-- A PC feature change lands inside `commit_resources`, so a later `apply_outcome` for the same change adds the feature and its backlash twice.
 - Hero Dominion cannot be spent on changes; only `create_champion` debits it.
 - `wealthSpent` debits the hero's Influence pool instead of adding coverage bought with wealth.
 - `record_deed` and `record_challenge_outcome` do not re-check activation; a further commit is needed.

@@ -248,6 +248,7 @@ export function applyOutcome(
     reduceBy?: number;
     addFeatureText?: string;
     backlash?: string;
+    changeId?: string;
   },
 ): ServiceResult<Record<string, unknown>> {
   return wrapRule(() =>
@@ -312,6 +313,44 @@ export function applyOutcome(
       }
 
       if (input.addFeatureText) {
+        if (input.changeId) {
+          const change = db
+            .prepare(
+              `SELECT id, campaign_id, faction_id, kind, feature_id, backlash_problem_id
+               FROM changes WHERE id = ?`,
+            )
+            .get(input.changeId) as
+            | {
+                id: string;
+                campaign_id: string;
+                faction_id: string | null;
+                kind: string;
+                feature_id: string | null;
+                backlash_problem_id: string | null;
+              }
+            | undefined;
+          if (
+            !change ||
+            change.campaign_id !== input.campaignId ||
+            change.faction_id !== input.factionId
+          ) {
+            throw new RuleError("ENTITY_NOT_FOUND", `change ${input.changeId} not found`);
+          }
+          if (change.kind !== "feature") {
+            throw new RuleError("CHANGE_NOT_READY", "change is not a feature change", {
+              changeId: change.id,
+            });
+          }
+          if (change.feature_id) {
+            throw new RuleError("CHANGE_ALREADY_LANDED", "feature change already landed", {
+              featureId: change.feature_id,
+              backlashProblemId: change.backlash_problem_id,
+            });
+          }
+          throw new RuleError("CHANGE_NOT_READY", "feature change lands in commit_resources", {
+            changeId: change.id,
+          });
+        }
         const featureId = insertFeatureFromText(db, input.factionId, input.addFeatureText);
         const backlashId = insertBacklashProblem(db, input.factionId, input.backlash);
         return { featureId, backlashProblemId: backlashId };
