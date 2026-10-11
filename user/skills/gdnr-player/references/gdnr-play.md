@@ -147,7 +147,9 @@ Crushing a court outright is `apply_outcome` on the faction it ruled, plus a `cr
 
 Plan types: `idle`, `build_strength`, `enact_change`, `attack`, `extend_interest`, `aid`, `restore_cohesion`, `remove_interest`, plus standing orders to help or harm.
 
-Each turn a faction gets at most one internal action and up to its Power in external actions, with at most one external action per target. A faction with `behavior: directed` idles unless it is given a plan, so keep NPC factions on a real behavior.
+Each turn is one month. A second turn in that month returns `TURN_ALREADY_TAKEN`; advance the month before another turn. On the turn, a faction gets at most one internal action and up to its Power in external actions, with at most one external action per target faction. `spend_interest` does not use those slots. `faction_action` type `skip` leaves a slow faction out: it must be called on an open turn, it does not open a turn, and that faction then takes no budgeted action this month. A faction with `behavior: directed` idles unless it is given a plan, so keep NPC factions on a real behavior.
+
+`run_faction_turn` passes every Interest offer and does not spend for those factions. When a faction should be offered the chance, use `faction_action` or `apply_write_queue`. A `PENDING_INTEREST` result names who may spend. Call `spend_interest` or `pass_interest` for each of them. A spend offers the remaining factions again.
 
 `faction_action` takes one action for one faction right now. It opens a turn if none is open and counts against the same budgets. If that faction already has a plan queued on the open turn, the call returns `PLAN_ALREADY_QUEUED` and does not run. Apply the queue, or replace the plan with `submit_unit_plan`, then call `faction_action` only once that plan is no longer queued.
 
@@ -182,7 +184,7 @@ Each **direction** is its own edge: `from` faction → `to` faction, with `point
 | Kinship among elites | `marriage`. |
 | Payments, hostages, acknowledged superiority | `tribute`. |
 | Grow a tie during a month | `extend_interest` (contest, one point; nature **rolled** if the edge is new). |
-| Tilt a contest with points already on an edge | `spend_interest`. |
+| Tilt a roll, or steal Dominion, with points already on an edge | `spend_interest`. `direction` is `raise` or `lower` on a roll. Before the roll costs Interest only. After the roll also costs that much Dominion. `timing: steal` takes Dominion the target actually has. |
 | Weaken or drop a tie | `remove_interest`: 1 point per action from the acting faction's own outgoing edge. The edge is deleted at 0. |
 | Color that mechanics must not see | `create_fact`, and say so plainly. |
 | “What do we know?” | In character: `get_unit_view`. As director: the queries above, plus `world://` resources and `gm-briefing`. Those prompts are narration only. |
