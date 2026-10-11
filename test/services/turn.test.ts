@@ -279,7 +279,7 @@ test("no_external_until_hit attacks after a prior attacker win", () => {
 
   const db = openDb(":memory:");
   db.prepare(
-    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 1, ?, 0)",
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 2, ?, 0)",
   ).run("c1", "Test", seed);
   db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
 
@@ -353,7 +353,7 @@ test("no_external_until_hit ignores attacker wins on older closed turns", () => 
 
   const db = openDb(":memory:");
   db.prepare(
-    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 2, ?, 0)",
+    "INSERT INTO campaigns (id, name, month, rng_seed, roll_counter) VALUES (?, ?, 3, ?, 0)",
   ).run("c1", "Test", seed);
   db.prepare("UPDATE campaigns SET roll_counter = ? WHERE id = 'c1'").run(shuffleCounter);
 
@@ -950,32 +950,33 @@ test("spendInterest with no open turn returns ENTITY_NOT_FOUND", () => {
   }
 });
 
-test("spendInterest before reduces interest without charging dominion", () => {
+test("spendInterest before with no window returns NOT_PENDING", () => {
   const db = spendInterestFixture();
-  const beforeDom = (
-    db.prepare("SELECT dominion FROM factions WHERE id = 'spender'").get() as { dominion: number }
-  ).dominion;
   const result = spendInterest(db, {
     campaignId: "c1",
     fromFactionId: "spender",
     toFactionId: "target",
     timing: "before",
     modifier: 2,
+    direction: "raise",
   });
-  expect(result.ok).toBe(true);
-  const afterDom = (
-    db.prepare("SELECT dominion FROM factions WHERE id = 'spender'").get() as { dominion: number }
-  ).dominion;
-  expect(afterDom).toBe(beforeDom);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      code: "NOT_PENDING",
+      message: "no interest window",
+      details: {},
+    });
+  }
   const points = (
     db.prepare("SELECT points FROM interests WHERE from_faction_id = 'spender'").get() as {
       points: number;
     }
   ).points;
-  expect(points).toBe(3);
+  expect(points).toBe(5);
 });
 
-test("spendInterest after with short dominion leaves interest unchanged", () => {
+test("spendInterest after with no window returns NOT_PENDING", () => {
   const db = spendInterestFixture();
   db.prepare("UPDATE factions SET dominion = 1 WHERE id = 'spender'").run();
   const result = spendInterest(db, {
@@ -984,15 +985,26 @@ test("spendInterest after with short dominion leaves interest unchanged", () => 
     toFactionId: "target",
     timing: "after",
     modifier: 2,
+    direction: "lower",
   });
   expect(result.ok).toBe(false);
-  if (!result.ok) expect(result.error.code).toBe("INSUFFICIENT_DOMINION");
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      code: "NOT_PENDING",
+      message: "no interest window",
+      details: {},
+    });
+  }
   const points = (
     db.prepare("SELECT points FROM interests WHERE from_faction_id = 'spender'").get() as {
       points: number;
     }
   ).points;
   expect(points).toBe(5);
+  const dominion = (
+    db.prepare("SELECT dominion FROM factions WHERE id = 'spender'").get() as { dominion: number }
+  ).dominion;
+  expect(dominion).toBe(1);
 });
 
 test("spendInterest steal moves dominion without charging spender extra dominion", () => {

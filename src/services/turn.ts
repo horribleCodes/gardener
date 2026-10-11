@@ -10,7 +10,7 @@ import type { Harshness } from "../domain/types.js";
 import { rollDie } from "../rules/dice.js";
 import { planGoal } from "../rules/goals.js";
 import { resolveContest } from "../rules/contest.js";
-import { interestCap, interestModifier } from "../rules/actions.js";
+import { interestCap } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
 import { loadCatalog } from "../tables/catalog.js";
 import { withTransaction } from "../store/db.js";
@@ -1061,6 +1061,13 @@ function storedDominionCost(
   return undefined;
 }
 
+function loadOpenInterestWindow(
+  _db: Database.Database,
+  _turnId: string,
+): { phase: "steal" | "before" | "after"; subjectFactionId: string } | undefined {
+  return undefined;
+}
+
 export function spendInterest(
   db: Database.Database,
   input: {
@@ -1070,18 +1077,33 @@ export function spendInterest(
     timing: "before" | "after" | "steal";
     modifier: number;
     actionId?: string;
+    direction?: "raise" | "lower";
   },
 ): ServiceResult<Record<string, unknown>> {
   return wrapRule(() =>
     withTransaction(db, () => {
       const faction = requireFaction(db, input.fromFactionId);
-      const dieMax = DIE_BY_POWER[faction.power];
-      interestModifier(dieMax, input.modifier);
 
       const turn = db
         .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
         .get(input.campaignId) as { id: string } | undefined;
       if (!turn) throw new RuleError("ENTITY_NOT_FOUND", "no open turn");
+
+      if (!Number.isInteger(input.modifier) || input.modifier < 1) {
+        throw new RuleError("MODIFIER_EXCEEDS_DIE", "modifier must be at least 1");
+      }
+      const window = loadOpenInterestWindow(db, turn.id);
+      if (input.timing === "before" || input.timing === "after") {
+        if (!input.direction) {
+          throw new RuleError("FILL_INCOMPLETE", "direction must be raise or lower");
+        }
+        if (!window || window.phase !== input.timing || window.subjectFactionId !== input.toFactionId) {
+          throw new RuleError("NOT_PENDING", "no interest window");
+        }
+      }
+      if (window && (window.phase !== input.timing || window.subjectFactionId !== input.toFactionId)) {
+        throw new RuleError("NOT_PENDING", "no interest window");
+      }
 
       const spent = db
         .prepare(
