@@ -234,6 +234,13 @@ function walkWindow(
   while (payload.cursor < payload.queue.length) {
     const step = payload.queue[payload.cursor];
     if (step.kind === "steal" || step.kind === "before" || step.kind === "after") {
+      const cost = dominionCost(db, factionId, action);
+      const actorNow = requireFaction(db, factionId);
+      if (step.kind !== "steal" && cost > 0 && actorNow.dominion < cost) {
+        const rollIndex = payload.queue.findIndex((entry) => entry.kind === "roll");
+        payload.cursor = rollIndex >= 0 ? rollIndex : payload.cursor + 1;
+        continue;
+      }
       payload.phase = step.kind;
       payload.subjectFactionId = step.subjectFactionId;
       const remaining =
@@ -430,7 +437,7 @@ function reofferOrAdvance(
   const remaining = remainingEligible(db, turnId, payload);
   if (remaining.length > 0) {
     savePayload(db, rowId, payload);
-    return pendingFrom(payload, remaining);
+    return { ...pendingFrom(payload, remaining), ...report };
   }
   payload.cursor += 1;
   const advanced = walkWindow(db, turnId, payload, "pause", rowId);
