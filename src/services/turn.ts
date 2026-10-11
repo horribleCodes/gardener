@@ -876,9 +876,6 @@ export function runFactionTurn(
   };
 }
 
-const INTERNAL_ACTIONS = new Set(["build_strength", "enact_change", "restore_cohesion", "set_theology"]);
-const EXTERNAL_ACTIONS = new Set(["attack", "extend_interest", "aid", "remove_interest"]);
-
 export function advanceMonthForCampaign(
   db: Database.Database,
   campaignId: string,
@@ -995,36 +992,6 @@ export function factionAction(
 
       if (input.action.type === "idle") {
         return { idle: true };
-      }
-
-      const prior = db
-        .prepare(
-          `SELECT type, target_id FROM actions WHERE turn_id = ? AND actor_type = 'faction' AND actor_id = ?`,
-        )
-        .all(turnId, input.factionId) as { type: string; target_id: string | null }[];
-
-      const actionType = input.action.type;
-      const isInternal = INTERNAL_ACTIONS.has(actionType);
-      const isExternal = EXTERNAL_ACTIONS.has(actionType);
-
-      if (isInternal) {
-        const internalCount = prior.filter((a) => INTERNAL_ACTIONS.has(a.type)).length;
-        if (internalCount > 0) {
-          throw new RuleError("INTERNAL_BUDGET", "internal action already taken");
-        }
-      }
-
-      if (isExternal) {
-        const externalCount = prior.filter((a) => EXTERNAL_ACTIONS.has(a.type)).length;
-        if (externalCount >= faction.power) {
-          throw new RuleError("EXTERNAL_BUDGET", "external action budget exhausted");
-        }
-        const targetId =
-          "targetFactionId" in input.action ? input.action.targetFactionId : undefined;
-        if (targetId) {
-          const dup = prior.some((a) => a.target_id === targetId && EXTERNAL_ACTIONS.has(a.type));
-          if (dup) throw new RuleError("DUPLICATE_EXTERNAL_TARGET", "already acted on target");
-        }
       }
 
       const result = runAction(db, {

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../../src/store/db.js";
 import { openParallelTurn } from "../../src/services/queue.js";
-import { advanceMonthForCampaign, factionAction } from "../../src/services/turn.js";
+import { advanceMonthForCampaign, factionAction, spendInterest } from "../../src/services/turn.js";
 
 function world(): { db: Database.Database; dbPath: string } {
   const dir = mkdtempSync(join(tmpdir(), "gb-budget-"));
@@ -150,6 +150,126 @@ test("skip after a budgeted action returns ALREADY_ACTED", () => {
     expect(skipped.error).toEqual({
       code: "ALREADY_ACTED",
       message: "faction already acted",
+      details: {},
+    });
+  }
+});
+
+test("one internal action and power external actions, one per target", () => {
+  const { db } = world();
+  db.prepare("UPDATE factions SET power = 2, cohesion = 2 WHERE id = 'a'").run();
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, origin) VALUES ('fa', 'a', 'Envoy', 'cultural', 'native')`,
+  ).run();
+  const first = factionAction(db, {
+    campaignId: "c1",
+    factionId: "a",
+    action: { type: "build_strength", forcedRoll: 6 },
+  });
+  expect(first.ok).toBe(true);
+  const secondInternal = factionAction(db, {
+    campaignId: "c1",
+    factionId: "a",
+    action: { type: "restore_cohesion" },
+  });
+  expect(secondInternal.ok).toBe(false);
+  if (!secondInternal.ok) {
+    expect(secondInternal.error).toEqual({
+      code: "INTERNAL_BUDGET",
+      message: "internal action already taken",
+      details: {},
+    });
+  }
+  const external = factionAction(db, {
+    campaignId: "c1",
+    factionId: "a",
+    action: {
+      type: "extend_interest",
+      targetFactionId: "b",
+      attackerFeatureId: "fa",
+      willing: true,
+    },
+  });
+  expect(external.ok).toBe(true);
+  const repeated = factionAction(db, {
+    campaignId: "c1",
+    factionId: "a",
+    action: {
+      type: "remove_interest",
+      targetFactionId: "b",
+      willing: true,
+    },
+  });
+  expect(repeated.ok).toBe(false);
+  if (!repeated.ok) {
+    expect(repeated.error.code).toBe("DUPLICATE_EXTERNAL_TARGET");
+    expect(repeated.error.message).toBe("already acted on target");
+  }
+});
+
+test("a free steal does not consume the external budget", () => {
+  const { db } = world();
+  db.prepare(
+    `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+     VALUES ('edge', 'a', 'b', 2, 'rivalry')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, origin) VALUES ('fa', 'a', 'Envoy', 'cultural', 'native')`,
+  ).run();
+  expect(
+    factionAction(db, {
+      campaignId: "c1",
+      factionId: "a",
+      action: { type: "idle" },
+    }).ok,
+  ).toBe(true);
+  expect(
+    factionAction(db, {
+      campaignId: "c1",
+      factionId: "a",
+      action: {
+        type: "extend_interest",
+        targetFactionId: "b",
+        attackerFeatureId: "fa",
+        willing: true,
+      },
+    }).ok,
+  ).toBe(true);
+  const stolen = spendInterest(db, {
+    campaignId: "c1",
+    fromFactionId: "a",
+    toFactionId: "b",
+    timing: "steal",
+    modifier: 1,
+  });
+  expect(stolen.ok).toBe(true);
+  const exhausted = factionAction(db, {
+    campaignId: "c1",
+    factionId: "a",
+    action: { type: "aid", targetFactionId: "b", amount: 1 },
+  });
+  expect(exhausted.ok).toBe(false);
+  if (!exhausted.ok) expect(exhausted.error.code).toBe("EXTERNAL_BUDGET");
+});
+
+test("a budgeted action after skip returns FACTION_SKIPPED", () => {
+  const { db } = world();
+  expect(
+    factionAction(db, { campaignId: "c1", factionId: "a", action: { type: "idle" } }).ok,
+  ).toBe(true);
+  expect(
+    factionAction(db, { campaignId: "c1", factionId: "a", action: { type: "skip" } }).ok,
+  ).toBe(true);
+  const blocked = factionAction(db, {
+    campaignId: "c1",
+    factionId: "a",
+    action: { type: "build_strength" },
+  });
+  expect(blocked.ok).toBe(false);
+  if (!blocked.ok) {
+    expect(blocked.error).toEqual({
+      code: "FACTION_SKIPPED",
+      message: "faction skipped this month",
       details: {},
     });
   }

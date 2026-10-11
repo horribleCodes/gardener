@@ -39,6 +39,7 @@ import {
   type ServiceResult,
 } from "./util.js";
 import { newId } from "./ids.js";
+import { assertFactionBudget } from "./factionBudget.js";
 
 export type RunActionInput = {
   campaignId: string;
@@ -103,6 +104,9 @@ export function runAction(db: Database.Database, input: RunActionInput): Service
         throw new RuleError("ENTITY_NOT_FOUND", "faction not in campaign");
       }
       const turnId = ensureOpenTurn(db, input.campaignId);
+      const targetFactionId =
+        "targetFactionId" in input ? input.targetFactionId : undefined;
+      assertFactionBudget(db, turnId, faction.id, input.type, targetFactionId);
 
       if (input.type === "build_strength") {
         return runBuildStrength(db, faction, turnId, input.forcedRoll);
