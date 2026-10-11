@@ -16,7 +16,12 @@ import {
   advanceMonth,
   resolvePendingAttack,
 } from "./turn.js";
-import { runAction } from "./actions.js";
+import {
+  beginInterestWindow,
+  continueInterest,
+  queuedInterest,
+  type PendingInterest,
+} from "./interestWindow.js";
 import {
   nextRng,
   persistRoll,
@@ -736,18 +741,25 @@ function applyFactionPlan(
   turnId: string,
   factionId: string,
   action: FactionAction,
-  standingOrders?: ReturnType<typeof standingOrdersFromPlan>,
-): { pending?: boolean; defenderUnit?: UnitRef; actionId?: string } {
+  standingOrders: ReturnType<typeof standingOrdersFromPlan> | undefined,
+  interestMode: "pause" | "pass",
+): { pending?: boolean; defenderUnit?: UnitRef; actionId?: string; interest?: PendingInterest } {
   if (action.type === "idle") {
     recordIdleAction(db, turnId, factionId);
     return {};
   }
-  const result = runAction(db, { campaignId, factionId, ...action, standingOrders });
-  if (!result.ok) {
-    throw new RuleError(result.error.code, result.error.message, result.error.details);
+  const started = beginInterestWindow(db, {
+    campaignId,
+    factionId,
+    action,
+    mode: interestMode,
+    standingOrders,
+  });
+  if ("code" in started && started.code === "PENDING_INTEREST") {
+    return { pending: true, interest: started };
   }
-  const data = result.data as { pending?: boolean; code?: string; actionId?: string };
-  if (data.pending && data.code === "PENDING_DEFENDER_CHOICE") {
+  const data = started.result as { pending?: boolean; code?: string; actionId?: string };
+  if (data?.pending && data.code === "PENDING_DEFENDER_CHOICE") {
     const pending = pendingDefenderChoice(db, turnId);
     return {
       pending: true,
@@ -765,7 +777,7 @@ function planRowDone(db: Database.Database, turnId: string, unit: UnitRef): void
   }
 }
 
-type ApplyPause = { paused: true; defenderUnit: UnitRef };
+type ApplyPause = { paused: true; defenderUnit?: UnitRef; interest?: PendingInterest };
 type ApplyDone = { paused?: false };
 
 function applyUnitsInOrder(
@@ -776,9 +788,10 @@ function applyUnitsInOrder(
     order: UnitRef[];
     missing: "idle" | "mechanical";
     startIndex: number;
+    interestMode: "pause" | "pass";
   },
 ): ApplyPause | ApplyDone {
-  const { campaignId, turnId, order, missing, startIndex } = input;
+  const { campaignId, turnId, order, missing, startIndex, interestMode } = input;
 
   for (let i = startIndex; i < order.length; i++) {
     const unit = order[i];
@@ -811,6 +824,10 @@ function applyUnitsInOrder(
     const row = queueRowForUnit(db, turnId, "faction", factionId);
 
     if (row?.status === "applying") {
+      const interestPause = queuedInterest(db, turnId);
+      if (interestPause) {
+        return { paused: true, interest: interestPause };
+      }
       const pause = pendingDefenderChoice(db, turnId);
       if (pause) {
         return { paused: true, defenderUnit: pause.defenderUnit };
@@ -862,7 +879,15 @@ function applyUnitsInOrder(
       db.prepare("SAVEPOINT unit_apply").run();
       let outcome: ReturnType<typeof applyFactionPlan>;
       try {
-        outcome = applyFactionPlan(db, campaignId, turnId, factionId, action, standingOrders);
+        outcome = applyFactionPlan(
+          db,
+          campaignId,
+          turnId,
+          factionId,
+          action,
+          standingOrders,
+          interestMode,
+        );
         db.prepare("RELEASE unit_apply").run();
       } catch (error) {
         db.prepare("ROLLBACK TO unit_apply").run();
@@ -880,6 +905,9 @@ function applyUnitsInOrder(
       }
 
       if (outcome.pending) {
+        if (outcome.interest) {
+          return { paused: true, interest: outcome.interest };
+        }
         const defender = outcome.defenderUnit ?? { type: "faction", id: factionId };
         if (attackPlan && outcome.actionId) {
           enqueueDefenderReaction(db, campaignId, turnId, defender, outcome.actionId, attackPlan);
@@ -905,13 +933,22 @@ export function applyWriteQueue(
     campaignId: string;
     missing?: "idle" | "mechanical";
     advanceMonth?: boolean;
+    interestMode?: "pause" | "pass";
   },
-): ServiceResult<{ paused?: boolean; defenderUnit?: UnitRef }> {
+): ServiceResult<{ paused?: boolean; defenderUnit?: UnitRef; interest?: PendingInterest }> {
   return wrapRule(() =>
     withWriteLock(dbPath, () =>
       withTransaction(db, () => {
         const turn = loadOpenTurn(db, input.campaignId);
         if (!turn) throw new RuleError("ENTITY_NOT_FOUND", "no open turn");
+        const interestMode = input.interestMode ?? "pause";
+
+        if (interestMode === "pass") {
+          continueInterest(db, turn.id, "pass");
+        } else {
+          const interest = queuedInterest(db, turn.id);
+          if (interest) return { paused: true, interest };
+        }
 
         const reactionWait = queuedReactionDefender(db, turn.id);
         if (reactionWait) {
@@ -927,6 +964,7 @@ export function applyWriteQueue(
           order,
           missing,
           startIndex: 0,
+          interestMode,
         });
 
         if (result.paused) {
@@ -1000,6 +1038,7 @@ export function submitReaction(
           order,
           missing: turn.missing ?? "idle",
           startIndex: resumeFrom,
+          interestMode: "pause",
         });
 
         if (!continueResult.paused) {
