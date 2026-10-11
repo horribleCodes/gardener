@@ -31,6 +31,7 @@ import { newId } from "./ids.js";
 export type FactionAction =
   | { type: "build_strength"; forcedRoll?: number }
   | { type: "idle" }
+  | { type: "skip" }
   | { type: "aid"; targetFactionId: string; amount?: number }
   | { type: "restore_cohesion"; forcedRoll?: number }
   | { type: "remove_interest"; targetFactionId: string; willing?: boolean; forcedRoll?: number }
@@ -936,6 +937,47 @@ export function factionAction(
       const faction = requireFaction(db, input.factionId);
       if (faction.campaign_id !== input.campaignId) {
         throw new RuleError("ENTITY_NOT_FOUND", "faction not in campaign");
+      }
+
+      if (input.action.type === "skip") {
+        const turn = db
+          .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
+          .get(input.campaignId) as { id: string } | undefined;
+        if (!turn) throw new RuleError("ENTITY_NOT_FOUND", "no open turn");
+        const queuedPlan = db
+          .prepare(
+            `SELECT id FROM write_queue
+             WHERE turn_id = ? AND unit_type = 'faction' AND unit_id = ? AND kind = 'plan' AND status = 'queued'
+             LIMIT 1`,
+          )
+          .get(turn.id, input.factionId);
+        if (queuedPlan) throw new RuleError("PLAN_ALREADY_QUEUED", "plan already queued");
+        const prior = db
+          .prepare(
+            `SELECT type FROM actions WHERE turn_id = ? AND actor_type = 'faction' AND actor_id = ?`,
+          )
+          .all(turn.id, input.factionId) as { type: string }[];
+        const budgeted = new Set([
+          "build_strength",
+          "enact_change",
+          "restore_cohesion",
+          "set_theology",
+          "attack",
+          "extend_interest",
+          "aid",
+          "remove_interest",
+        ]);
+        if (prior.some((row) => budgeted.has(row.type))) {
+          throw new RuleError("ALREADY_ACTED", "faction already acted");
+        }
+        if (prior.some((row) => row.type === "skip")) {
+          throw new RuleError("FACTION_SKIPPED", "faction skipped this month");
+        }
+        db.prepare(
+          `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, outcome)
+           VALUES (?, ?, 'skip', 'faction', ?, 'skipped')`,
+        ).run(newId(), turn.id, input.factionId);
+        return { skipped: true };
       }
 
       const turnId = ensureOpenTurn(db, input.campaignId);

@@ -380,6 +380,12 @@ export function openParallelTurn(
           throw new RuleError("TURN_ALREADY_OPEN", "a turn is already open");
         }
 
+        const campaign = requireCampaign(db, input.campaignId);
+        const taken = db
+          .prepare("SELECT id FROM turns WHERE campaign_id = ? AND month = ? LIMIT 1")
+          .get(input.campaignId, campaign.month);
+        if (taken) throw new RuleError("TURN_ALREADY_TAKEN", "turn already taken this month");
+
         const missing = input.missing ?? "idle";
         const advanceMonthFlag = input.advanceMonth ?? false;
         let orderStored: (string | UnitRef)[];
@@ -394,8 +400,6 @@ export function openParallelTurn(
           orderUnits = acting;
           orderStored = orderUnits;
         }
-
-        const campaign = requireCampaign(db, input.campaignId);
         const turnId = newId();
         const seqRow = db
           .prepare("SELECT COALESCE(MAX(sequence), 0) + 1 AS seq FROM turns WHERE campaign_id = ?")
