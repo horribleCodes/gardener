@@ -22,7 +22,8 @@ test("MCP server is named gardener and registers create_hero", async () => {
   expect(names).toContain("remove-campaign");
   expect(names).toContain("set_interest");
   expect(names).not.toContain("create_godbound");
-  expect(names).toHaveLength(50);
+  expect(names).toContain("pass_interest");
+  expect(names).toHaveLength(51);
   await client.close();
 });
 

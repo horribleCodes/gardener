@@ -755,7 +755,7 @@ function applyFactionPlan(
     mode: interestMode,
     standingOrders,
   });
-  if ("code" in started && started.code === "PENDING_INTEREST") {
+  if (started.pending) {
     return { pending: true, interest: started };
   }
   const data = started.result as { pending?: boolean; code?: string; actionId?: string };

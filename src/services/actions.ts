@@ -170,9 +170,326 @@ function troubleAfterDelta(
 }
 
 export function followRolledAction(
-  _db: Database.Database,
-  _actionId: string,
+  db: Database.Database,
+  actionId: string,
 ): { featureNotRestored?: true } {
+  const action = db
+    .prepare(
+      `SELECT id, turn_id, type, actor_id, target_id, outcome, roll_id, dominion_delta
+       FROM actions WHERE id = ?`,
+    )
+    .get(actionId) as
+    | {
+        id: string;
+        turn_id: string;
+        type: string;
+        actor_id: string;
+        target_id: string | null;
+        outcome: string;
+        roll_id: string | null;
+        dominion_delta: number;
+      }
+    | undefined;
+  if (!action?.roll_id) return {};
+  const rollRow = db.prepare("SELECT payload FROM rolls WHERE id = ?").get(action.roll_id) as
+    | { payload: string }
+    | undefined;
+  if (!rollRow) return {};
+  const payload = JSON.parse(rollRow.payload) as Record<string, unknown>;
+  const effect = (payload.effect ?? {}) as Record<string, unknown>;
+  const kind = effect.kind as string | undefined;
+  const actor = requireFaction(db, action.actor_id);
+  const campaign = db
+    .prepare("SELECT campaign_id FROM factions WHERE id = ?")
+    .get(action.actor_id) as { campaign_id: string };
+
+  if (kind === "attack" || action.type === "attack") {
+    const attackerRoll = payload.attacker as { total?: number } | undefined;
+    const defenderTotal = typeof payload.defenderTotal === "number" ? payload.defenderTotal : 0;
+    const defender = action.target_id ? requireFaction(db, action.target_id) : actor;
+    const winner = resolveContest({
+      attackerTotal: typeof attackerRoll?.total === "number" ? attackerRoll.total : 0,
+      defenderTotal,
+      attackerPower: actor.power,
+      defenderPower: defender.power,
+    });
+    const newOutcome = winner === "attacker" ? "attacker_win" : "defender_win";
+    const previous = action.outcome;
+    payload.winner = winner;
+    if (previous === newOutcome) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    if (newOutcome === "attacker_win") {
+      const problems = loadProblemsOrdered(db, defender.id);
+      const trouble = sumTrouble(problems);
+      const damage = attackProblemDamage(actor.power, defender.power);
+      const featureIds = db
+        .prepare("SELECT feature_ids FROM actions WHERE id = ?")
+        .get(action.id) as { feature_ids: string };
+      const ids = JSON.parse(featureIds.feature_ids) as (string | null)[];
+      if (defender.control === "player") {
+        db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("PENDING_DEFENDER_CHOICE", action.id);
+        db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+        return {};
+      }
+      const choice = chooseDefense({
+        policy: "preserve_existence",
+        cohesion: defender.cohesion,
+        trouble,
+        dieMax: facesForPower(defender.power),
+        problemDamage: damage,
+        canSacrifice: Boolean(ids[1]),
+      });
+      applyAttackDefense(db, {
+        campaignId: campaign.campaign_id,
+        turnId: action.turn_id,
+        actionId: action.id,
+        attackerId: actor.id,
+        defenderId: defender.id,
+        attackerFeatureId: ids[0] ?? "",
+        defenderFeatureId: ids[1] ?? null,
+        defenderChoice: choice,
+      });
+      return {};
+    }
+    const defense = effect.defense as string | null;
+    if (defense === "cohesion") {
+      db.prepare("UPDATE factions SET cohesion = cohesion + 1 WHERE id = ?").run(defender.id);
+    } else if (defense === "problem") {
+      const problemId = effect.problemId as string | undefined;
+      const damage = typeof effect.damage === "number" ? effect.damage : 1;
+      if (problemId) {
+        const row = db.prepare("SELECT points FROM problems WHERE id = ?").get(problemId) as
+          | { points: number }
+          | undefined;
+        if (row) {
+          const next = row.points - damage;
+          if (next <= 0 && effect.createdProblem) {
+            db.prepare("DELETE FROM problems WHERE id = ?").run(problemId);
+          } else if (next <= 0) {
+            db.prepare("DELETE FROM problems WHERE id = ?").run(problemId);
+          } else {
+            db.prepare("UPDATE problems SET points = ? WHERE id = ?").run(next, problemId);
+          }
+        }
+      }
+    }
+    payload.effect = { kind: "attack", defense: null };
+    db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("defender_win", action.id);
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return defense === "sacrifice" ? { featureNotRestored: true } : {};
+  }
+
+  if (kind === "build_strength" || action.type === "build_strength") {
+    const inverted = false;
+    const trouble = typeof payload.trouble === "number" ? payload.trouble : 0;
+    const kept = typeof payload.kept === "number" ? payload.kept : 0;
+    const success = inverted ? kept <= trouble : kept > trouble;
+    const previousSuccess = action.outcome === "success";
+    payload.success = success;
+    if (success === previousSuccess) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    if (success && !previousSuccess) {
+      const granted = Math.ceil(actor.power / 2);
+      db.prepare("UPDATE factions SET dominion = dominion + ? WHERE id = ?").run(granted, actor.id);
+      db.prepare("UPDATE actions SET outcome = ?, dominion_delta = ? WHERE id = ?").run(
+        "success",
+        granted,
+        action.id,
+      );
+      payload.effect = { kind: "build_strength", granted };
+    } else {
+      const granted = typeof effect.granted === "number" ? effect.granted : 0;
+      db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(granted, actor.id);
+      db.prepare("UPDATE actions SET outcome = ?, dominion_delta = 0 WHERE id = ?").run("failure", action.id);
+      payload.effect = { kind: "build_strength", granted: 0 };
+    }
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "aid" || action.type === "aid") {
+    const trouble = typeof payload.trouble === "number" ? payload.trouble : 0;
+    const kept = typeof payload.kept === "number" ? payload.kept : 0;
+    const success = kept > trouble;
+    const previousSuccess = action.outcome === "success";
+    const amount = typeof effect.amount === "number" ? effect.amount : Math.abs(action.dominion_delta);
+    payload.success = success;
+    if (success === previousSuccess) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    if (action.target_id) {
+      if (success && !previousSuccess) {
+        db.prepare("UPDATE factions SET dominion = dominion + ? WHERE id = ?").run(amount, action.target_id);
+      } else if (!success && previousSuccess) {
+        const target = requireFaction(db, action.target_id);
+        const pull = Math.min(amount, target.dominion);
+        db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(pull, action.target_id);
+      }
+    }
+    db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run(success ? "success" : "failure", action.id);
+    payload.effect = { ...effect, success };
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "restore_cohesion" || action.type === "restore_cohesion") {
+    const trouble = typeof payload.trouble === "number" ? payload.trouble : 0;
+    const kept = typeof payload.kept === "number" ? payload.kept : 0;
+    const success = kept > trouble;
+    const previousSuccess = action.outcome === "success";
+    payload.success = success;
+    if (success === previousSuccess) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    if (success && !previousSuccess) {
+      if (actor.cohesion >= actor.power) {
+        db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+        return {};
+      }
+      db.prepare("UPDATE factions SET cohesion = cohesion + 1 WHERE id = ?").run(actor.id);
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("success", action.id);
+      payload.effect = { kind: "restore_cohesion", raised: true };
+    } else {
+      db.prepare("UPDATE factions SET cohesion = MAX(cohesion - 1, 0) WHERE id = ?").run(actor.id);
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("failure", action.id);
+      payload.effect = { kind: "restore_cohesion", raised: false };
+    }
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "extend_interest" || action.type === "extend_interest") {
+    const attackerRoll = payload.attacker as { total?: number } | undefined;
+    const defenderTotal = typeof payload.defenderTotal === "number" ? payload.defenderTotal : 0;
+    const defender = action.target_id ? requireFaction(db, action.target_id) : actor;
+    const winner = resolveContest({
+      attackerTotal: typeof attackerRoll?.total === "number" ? attackerRoll.total : 0,
+      defenderTotal,
+      attackerPower: actor.power,
+      defenderPower: defender.power,
+    });
+    const newOutcome = winner === "attacker" ? "attacker_win" : "defender_win";
+    if (newOutcome === action.outcome) return {};
+    if (winner === "attacker") {
+      const dieMax = DIE_BY_POWER[actor.power];
+      const cap = interestCap(dieMax);
+      const existing = db
+        .prepare("SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?")
+        .get(actor.id, defender.id) as { points: number } | undefined;
+      if (existing && existing.points >= cap) {
+        return {};
+      }
+      if (existing) {
+        db.prepare(
+          "UPDATE interests SET points = points + 1 WHERE from_faction_id = ? AND to_faction_id = ?",
+        ).run(actor.id, defender.id);
+      } else {
+        db.prepare(
+          `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+           VALUES (?, ?, ?, 1, 'rivalry')`,
+        ).run(newId(), actor.id, defender.id);
+      }
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("attacker_win", action.id);
+      payload.effect = { kind: "extend_interest", added: true };
+    } else if (effect.added) {
+      const existing = db
+        .prepare("SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?")
+        .get(actor.id, defender.id) as { points: number } | undefined;
+      if (existing) {
+        if (existing.points <= 1) {
+          db.prepare("DELETE FROM interests WHERE from_faction_id = ? AND to_faction_id = ?").run(
+            actor.id,
+            defender.id,
+          );
+        } else {
+          db.prepare(
+            "UPDATE interests SET points = points - 1 WHERE from_faction_id = ? AND to_faction_id = ?",
+          ).run(actor.id, defender.id);
+        }
+      }
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("defender_win", action.id);
+      payload.effect = { kind: "extend_interest", added: false };
+    }
+    payload.winner = winner;
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "remove_interest" || action.type === "remove_interest") {
+    const attackerRoll = payload.attacker as { total?: number } | undefined;
+    const defenderTotal = typeof payload.defenderTotal === "number" ? payload.defenderTotal : 0;
+    const defender = action.target_id ? requireFaction(db, action.target_id) : actor;
+    const winner = resolveContest({
+      attackerTotal: typeof attackerRoll?.total === "number" ? attackerRoll.total : 0,
+      defenderTotal,
+      attackerPower: actor.power,
+      defenderPower: defender.power,
+    });
+    const newOutcome = winner === "attacker" ? "attacker_win" : "defender_win";
+    if (newOutcome === action.outcome) return {};
+    const nature = (effect.nature as string | undefined) ?? "rivalry";
+    if (winner === "attacker") {
+      const existing = db
+        .prepare("SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?")
+        .get(actor.id, defender.id) as { points: number } | undefined;
+      if (existing) {
+        if (existing.points <= 1) {
+          db.prepare("DELETE FROM interests WHERE from_faction_id = ? AND to_faction_id = ?").run(
+            actor.id,
+            defender.id,
+          );
+        } else {
+          db.prepare(
+            "UPDATE interests SET points = points - 1 WHERE from_faction_id = ? AND to_faction_id = ?",
+          ).run(actor.id, defender.id);
+        }
+      }
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("attacker_win", action.id);
+      payload.effect = { kind: "remove_interest", removed: true, nature };
+    } else {
+      const existing = db
+        .prepare("SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?")
+        .get(actor.id, defender.id) as { points: number } | undefined;
+      if (existing) {
+        db.prepare(
+          "UPDATE interests SET points = points + 1 WHERE from_faction_id = ? AND to_faction_id = ?",
+        ).run(actor.id, defender.id);
+      } else {
+        db.prepare(
+          `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+           VALUES (?, ?, ?, 1, ?)`,
+        ).run(newId(), actor.id, defender.id, nature);
+      }
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("defender_win", action.id);
+      payload.effect = { kind: "remove_interest", removed: false, nature };
+    }
+    payload.winner = winner;
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "enact_change" || action.type === "enact_change") {
+    const inverted = Boolean(effect.inverted);
+    const trouble = typeof payload.trouble === "number" ? payload.trouble : 0;
+    const kept = typeof payload.kept === "number" ? payload.kept : 0;
+    const success = inverted ? kept <= trouble : kept > trouble;
+    const previousSuccess = action.outcome === "success";
+    payload.success = success;
+    if (success === previousSuccess) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run(success ? "success" : "failure", action.id);
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
   return {};
 }
 

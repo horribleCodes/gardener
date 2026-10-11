@@ -392,7 +392,7 @@ export function passInterestInner(
   payload.passedFactionIds = [];
   payload.cursor += 1;
   const advanced = walkWindow(db, turn.id, payload, "pause", row.id);
-  if ("code" in advanced && advanced.code === "PENDING_INTEREST") return advanced;
+  if (advanced.pending) return advanced;
   return advanced.result;
 }
 
@@ -441,8 +441,13 @@ function reofferOrAdvance(
   }
   payload.cursor += 1;
   const advanced = walkWindow(db, turnId, payload, "pause", rowId);
-  if ("code" in advanced && advanced.code === "PENDING_INTEREST") return advanced;
-  return { ...report, ...(typeof advanced.result === "object" && advanced.result ? (advanced.result as object) : { result: advanced.result }) };
+  if (advanced.pending) return advanced;
+  return {
+    ...report,
+    ...(typeof advanced.result === "object" && advanced.result
+      ? (advanced.result as object)
+      : { result: advanced.result }),
+  };
 }
 
 function subjectDieMax(db: Database.Database, factionId: string): number {

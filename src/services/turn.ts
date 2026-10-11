@@ -70,6 +70,7 @@ export type FactionAction =
       targetFactionId: string;
       attackerFeatureId: string;
       defenderFeatureId?: string;
+      willing?: boolean;
       marginal?: boolean;
       attackerBonus?: number;
       defenderBonus?: number;
@@ -1007,7 +1008,7 @@ export function factionAction(
         action: input.action,
         mode: "pause",
       });
-      if ("code" in started && started.code === "PENDING_INTEREST") {
+      if (started.pending) {
         return started;
       }
       return started.result;
