@@ -94,6 +94,10 @@ Legacy code still uses `tables` for charts (`src/tables/`, `world://tables/{path
 
 On a failed roll-over check, play names a Problem as the reason. Gardener compares the failed face to contiguous **culprit bands** (each Problem covers a band as wide as its points, in stored order) so `get_faction` can show which Problem the face landed in. Culprit bands are that compare implementation. They are not a separate book concept and must not be taught as a third sheet row.
 
+## Turn
+
+A **turn** is one stored month of faction actions. The campaign has one turn row for that month. A second turn in the same month fails. Each faction may take one internal action and up to its Power in external actions, at most one external action against a given faction. Spend Interest and a slow-faction skip are free. A skip is recorded on the open turn; it does not open a turn, and that faction takes no budgeted action afterward.
+
 ## Aliases
 
 The agnostic target names some v1 terms differently. They mean the same thing:
