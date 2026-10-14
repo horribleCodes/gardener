@@ -142,6 +142,6 @@ Do **not** silently store mechanical claims only in facts when the user expected
 
 ## What not to use for setup
 
-- `extend_interest` — a faction action on a turn (`faction_action` opens one if needed). Adds one point on success, or with no contest under `willing: true`. If the edge is new, nature is **rolled**, starting at one point. Not a setup shortcut for “declare war.”
-- `resolve_attack` — finishes a pending defender choice on an attack already in progress. It is not a battle by itself, and not a standing war relationship.
-- `spend_interest` — spends points already on an edge. `timing: steal` is a free action on the open turn, or the reaction while a steal window is open. `before` and `after` need an open window and `direction` `raise` or `lower`. After the roll, Dominion cost equals the Interest that actually moved the kept face. The face stays inside 1 and the target's die maximum. One spend per target faction per turn. `pass_interest` declines the current offer.
+- `extend_interest` — adds one interest point on success, or with no contest.
+- `resolve_attack` — finishes a pending defender choice on an attack already in progress.
+- `spend_interest` — spends interest points already on an edge.
