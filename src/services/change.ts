@@ -153,27 +153,37 @@ export function commitResources(
       if (!change) throw new RuleError("ENTITY_NOT_FOUND", `change ${input.changeId} not found`);
 
       const hero = db
-        .prepare("SELECT id, influence FROM heroes WHERE id = ?")
-        .get(input.heroId) as { id: string; influence: number } | undefined;
+        .prepare("SELECT id, influence, wealth FROM heroes WHERE id = ?")
+        .get(input.heroId) as { id: string; influence: number; wealth: number } | undefined;
       if (!hero) throw new RuleError("ENTITY_NOT_FOUND", `hero ${input.heroId} not found`);
+      const wealthSpent = input.wealthSpent ?? 0;
       if (input.influence < 0) {
         throw new RuleError("INSUFFICIENT_INFLUENCE", "cannot commit negative influence");
       }
-      const wealthSpent = input.wealthSpent ?? 0;
-      let influenceDebit = input.influence;
+      if (wealthSpent < 0) {
+        throw new RuleError("INSUFFICIENT_WEALTH", "cannot commit negative wealth");
+      }
+      if (wealthSpent > hero.wealth) {
+        throw new RuleError("INSUFFICIENT_WEALTH", "not enough wealth to commit");
+      }
+      if (hero.influence < input.influence) {
+        throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough influence to commit");
+      }
+
+      let bought = 0;
       if (wealthSpent > 0) {
-        const gbRow = db
-          .prepare("SELECT wealth FROM heroes WHERE id = ?")
-          .get(input.heroId) as { wealth: number };
-        const converted = influenceFromWealth(gbRow.wealth, wealthSpent);
-        influenceDebit += converted.influence;
+        const priorRow = db
+          .prepare(
+            "SELECT COALESCE(SUM(wealth_spent), 0) AS wealth FROM change_commitments WHERE change_id = ?",
+          )
+          .get(input.changeId) as { wealth: number };
+        const prior = priorRow.wealth;
+        bought =
+          influenceFromWealth(prior + wealthSpent).influence - influenceFromWealth(prior).influence;
         db.prepare("UPDATE heroes SET wealth = wealth - ? WHERE id = ?").run(
-          converted.wealthUsed,
+          wealthSpent,
           input.heroId,
         );
-      }
-      if (hero.influence < influenceDebit) {
-        throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough influence to commit");
       }
       const existing = db
         .prepare(
@@ -184,15 +194,15 @@ export function commitResources(
         db.prepare(
           `UPDATE change_commitments SET influence = influence + ?, wealth_spent = wealth_spent + ?
            WHERE change_id = ? AND hero_id = ?`,
-        ).run(input.influence, wealthSpent, input.changeId, input.heroId);
+        ).run(input.influence + bought, wealthSpent, input.changeId, input.heroId);
       } else {
         db.prepare(
           `INSERT INTO change_commitments (change_id, hero_id, influence, wealth_spent)
            VALUES (?, ?, ?, ?)`,
-        ).run(input.changeId, input.heroId, input.influence, wealthSpent);
+        ).run(input.changeId, input.heroId, input.influence + bought, wealthSpent);
       }
       db.prepare("UPDATE heroes SET influence = influence - ? WHERE id = ?").run(
-        influenceDebit,
+        input.influence,
         input.heroId,
       );
 
