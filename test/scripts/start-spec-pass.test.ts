@@ -1,10 +1,22 @@
 import { afterEach, expect, test } from "vitest";
 import {
+  isRetryableWebhookResponse,
   isSpecRequiredLabel,
   specPassPrompt,
   specTargetBranch,
   startSpecPass,
 } from "../../scripts/start-spec-pass.mjs";
+
+const webhookEnv = () => {
+  process.env.CURSOR_AUTOMATION_WEBHOOK_URL = "https://api2.cursor.sh/automations/webhook/abc";
+  process.env.CURSOR_AUTOMATION_WEBHOOK_TOKEN = "wh-token";
+};
+
+const specIssue = {
+  number: 54,
+  html_url: "https://github.com/horribleCodes/gardener/issues/54",
+  title: "Campaign flags",
+};
 
 afterEach(() => {
   delete process.env.CURSOR_AUTOMATION_WEBHOOK_URL;
@@ -65,17 +77,26 @@ test("skips other labels", async () => {
   expect(result).toEqual({ ok: true, skipped: "label" });
 });
 
+test("classifies retryable webhook HTTP responses", () => {
+  expect(isRetryableWebhookResponse(500, "error")).toBe(true);
+  expect(isRetryableWebhookResponse(429, "rate limit")).toBe(true);
+  expect(
+    isRetryableWebhookResponse(
+      400,
+      '{"success":false,"error":"Failed to start background composer: [internal] internal error"}',
+    ),
+  ).toBe(true);
+  expect(isRetryableWebhookResponse(400, '{"success":false,"error":"bad request"}')).toBe(false);
+  expect(isRetryableWebhookResponse(401, "unauthorized")).toBe(false);
+});
+
 test("posts context to the automation webhook when webhook secrets are set", async () => {
   process.env.CURSOR_AUTOMATION_WEBHOOK_URL = "https://api2.cursor.sh/automations/webhook/abc";
   process.env.CURSOR_AUTOMATION_WEBHOOK_TOKEN = "wh-token\n";
   const calls: Array<{ url: string; init: RequestInit }> = [];
   const result = await startSpecPass({
     label: "spec-required",
-    issue: {
-      number: 54,
-      html_url: "https://github.com/horribleCodes/gardener/issues/54",
-      title: "Campaign flags",
-    },
+    issue: specIssue,
     repositoryUrl: "https://github.com/horribleCodes/gardener",
     fetchImpl: async (url, init) => {
       calls.push({ url: String(url), init: init ?? {} });
@@ -104,6 +125,108 @@ test("posts context to the automation webhook when webhook secrets are set", asy
     mode: "webhook",
     agentUrl: "https://cursor.com/agents/bc-spec-54",
   });
+});
+
+test("succeeds on the first webhook attempt when the response is OK", async () => {
+  webhookEnv();
+  let calls = 0;
+  const result = await startSpecPass({
+    label: "spec required",
+    issue: specIssue,
+    repositoryUrl: "https://github.com/horribleCodes/gardener",
+    retryDelaysMs: [0, 0, 0],
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ success: true, backgroundComposerId: "bc-first" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+  expect(calls).toBe(1);
+  expect(result).toEqual({
+    ok: true,
+    mode: "webhook",
+    agentUrl: "https://cursor.com/agents/bc-first",
+  });
+});
+
+test("retries transient webhook failures then succeeds", async () => {
+  webhookEnv();
+  const retryLogs: string[] = [];
+  let calls = 0;
+  const internalErrorBody =
+    '{"success":false,"error":"Failed to start background composer: [internal] internal error"}';
+  const result = await startSpecPass({
+    label: "spec required",
+    issue: specIssue,
+    repositoryUrl: "https://github.com/horribleCodes/gardener",
+    retryDelaysMs: [0, 0, 0],
+    logRetry: (message) => retryLogs.push(message),
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response(internalErrorBody, { status: 400 });
+      }
+      return new Response(
+        JSON.stringify({ success: true, backgroundComposerId: "bc-after-retry" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+  expect(calls).toBe(2);
+  expect(retryLogs).toHaveLength(1);
+  expect(retryLogs[0]).toContain("400");
+  expect(retryLogs[0]).toContain("internal error");
+  expect(retryLogs[0]).not.toContain("wh-token");
+  expect(result).toEqual({
+    ok: true,
+    mode: "webhook",
+    agentUrl: "https://cursor.com/agents/bc-after-retry",
+  });
+});
+
+test("does not retry non-retryable webhook 4xx responses", async () => {
+  webhookEnv();
+  let calls = 0;
+  const retryLogs: string[] = [];
+  await expect(
+    startSpecPass({
+      label: "spec required",
+      issue: specIssue,
+      repositoryUrl: "https://github.com/horribleCodes/gardener",
+      retryDelaysMs: [0, 0, 0],
+      logRetry: (message) => retryLogs.push(message),
+      fetchImpl: async () => {
+        calls += 1;
+        return new Response("invalid token", { status: 401 });
+      },
+    }),
+  ).rejects.toThrow(/Automation webhook 401: invalid token/);
+  expect(calls).toBe(1);
+  expect(retryLogs).toHaveLength(0);
+});
+
+test("fails after exhausting webhook retries on persistent transient errors", async () => {
+  webhookEnv();
+  let calls = 0;
+  const retryLogs: string[] = [];
+  await expect(
+    startSpecPass({
+      label: "spec required",
+      issue: specIssue,
+      repositoryUrl: "https://github.com/horribleCodes/gardener",
+      retryDelaysMs: [0, 0, 0],
+      logRetry: (message) => retryLogs.push(message),
+      fetchImpl: async () => {
+        calls += 1;
+        return new Response("upstream unavailable", { status: 503 });
+      },
+    }),
+  ).rejects.toThrow(/Automation webhook 503: upstream unavailable/);
+  expect(calls).toBe(4);
+  expect(retryLogs).toHaveLength(3);
+  expect(retryLogs.every((line) => line.includes("503"))).toBe(true);
 });
 
 test("fails when the webhook returns 200 without a started agent", async () => {

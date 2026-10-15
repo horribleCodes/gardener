@@ -7,6 +7,92 @@ import { pathToFileURL } from "node:url";
 
 const SPEC_LABELS = new Set(["spec required", "spec-required"]);
 
+/** @type {readonly number[]} */
+export const DEFAULT_WEBHOOK_RETRY_DELAYS_MS = [5000, 15000, 45000];
+
+const WEBHOOK_BODY_LOG_MAX = 500;
+
+/**
+ * @param {number} status
+ * @param {string} bodyText
+ */
+export function isRetryableWebhookResponse(status, bodyText) {
+  if (status >= 500) return true;
+  if (status === 429) return true;
+  if (status === 400 && /internal error/i.test(bodyText)) return true;
+  return false;
+}
+
+/**
+ * @param {string} text
+ */
+function truncateWebhookBody(text) {
+  return text.slice(0, WEBHOOK_BODY_LOG_MAX);
+}
+
+/**
+ * @param {object} opts
+ * @param {typeof fetch} opts.fetchImpl
+ * @param {string} opts.webhookUrl
+ * @param {string} opts.webhookToken
+ * @param {string} opts.body
+ * @param {readonly number[]} [opts.retryDelaysMs]
+ * @param {(ms: number) => Promise<void>} [opts.sleepMs]
+ * @param {(message: string) => void} [opts.logRetry]
+ */
+export async function postAutomationWebhookWithRetries(opts) {
+  const delays = opts.retryDelaysMs ?? DEFAULT_WEBHOOK_RETRY_DELAYS_MS;
+  const sleepMs = opts.sleepMs ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const logRetry = opts.logRetry ?? ((message) => console.error(message));
+  const maxAttempts = delays.length + 1;
+
+  /** @type {Error | undefined} */
+  let lastNetworkError;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const response = await opts.fetchImpl(opts.webhookUrl, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${opts.webhookToken}`,
+          "content-type": "application/json",
+        },
+        body: opts.body,
+      });
+      const text = await response.text();
+      if (response.ok) {
+        return { response, text };
+      }
+
+      const truncated = truncateWebhookBody(text);
+      const isLastAttempt = attempt >= maxAttempts - 1;
+      if (!isRetryableWebhookResponse(response.status, text) || isLastAttempt) {
+        throw new Error(`Automation webhook ${response.status}: ${truncated}`);
+      }
+
+      logRetry(
+        `Automation webhook attempt ${attempt + 1} failed (${response.status}); retrying in ${delays[attempt]}ms: ${truncated}`,
+      );
+      await sleepMs(delays[attempt]);
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("Automation webhook ")) {
+        throw err;
+      }
+      lastNetworkError = err instanceof Error ? err : new Error(String(err));
+      const isLastAttempt = attempt >= maxAttempts - 1;
+      if (isLastAttempt) {
+        throw lastNetworkError;
+      }
+      logRetry(
+        `Automation webhook attempt ${attempt + 1} failed (network); retrying in ${delays[attempt]}ms: ${lastNetworkError.message}`,
+      );
+      await sleepMs(delays[attempt]);
+    }
+  }
+
+  throw lastNetworkError ?? new Error("Automation webhook failed after retries");
+}
+
 /**
  * @param {string | undefined | null} name
  */
@@ -44,6 +130,9 @@ export function specPassPrompt(input) {
  * @param {string} [opts.targetBranch] Repository default branch (`main`) or an `origin/` ref.
  * @param {typeof fetch} [opts.fetchImpl]
  * @param {NodeJS.ProcessEnv} [opts.env]
+ * @param {readonly number[]} [opts.retryDelaysMs]
+ * @param {(ms: number) => Promise<void>} [opts.sleepMs]
+ * @param {(message: string) => void} [opts.logRetry]
  */
 export async function startSpecPass(opts) {
   const fetchImpl = opts.fetchImpl ?? fetch;
@@ -70,12 +159,10 @@ export async function startSpecPass(opts) {
   const webhookUrl = env.CURSOR_AUTOMATION_WEBHOOK_URL?.trim();
   const webhookToken = env.CURSOR_AUTOMATION_WEBHOOK_TOKEN?.trim();
   if (webhookUrl && webhookToken) {
-    const response = await fetchImpl(webhookUrl, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${webhookToken}`,
-        "content-type": "application/json",
-      },
+    const { text } = await postAutomationWebhookWithRetries({
+      fetchImpl,
+      webhookUrl,
+      webhookToken,
       body: JSON.stringify({
         // Automations inject `context` into the Cloud Agent prompt.
         context: prompt,
@@ -83,11 +170,10 @@ export async function startSpecPass(opts) {
         repository: opts.repositoryUrl,
         label: opts.label,
       }),
+      retryDelaysMs: opts.retryDelaysMs,
+      sleepMs: opts.sleepMs,
+      logRetry: opts.logRetry,
     });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`Automation webhook ${response.status}: ${text.slice(0, 500)}`);
-    }
     /** @type {Record<string, any>} */
     let parsed = {};
     try {
