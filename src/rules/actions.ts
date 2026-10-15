@@ -38,3 +38,17 @@ export function interestModifier(dieMax: number, spend: number): number {
   if (spend < 1) throw new RuleError("MODIFIER_EXCEEDS_DIE", "modifier must be at least 1");
   return spend;
 }
+
+export function movedKeptFace(input: {
+  kept: number;
+  dieMax: number;
+  direction: "raise" | "lower";
+  requested: number;
+}): { kept: number; spent: number } {
+  if (!Number.isInteger(input.requested) || input.requested < 1) {
+    throw new RuleError("MODIFIER_EXCEEDS_DIE", "modifier must be at least 1");
+  }
+  const raw = input.direction === "raise" ? input.kept + input.requested : input.kept - input.requested;
+  const kept = Math.min(input.dieMax, Math.max(1, raw));
+  return { kept, spent: Math.abs(kept - input.kept) };
+}

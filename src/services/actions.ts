@@ -4,6 +4,7 @@ import {
   attackProblemDamage,
   chooseDefense,
   interestCap,
+  movedKeptFace,
   type DefenseChoice,
 } from "../rules/actions.js";
 import { factionProjectCost } from "../rules/cost.js";
@@ -19,7 +20,7 @@ import { rollDie, type Rng } from "../rules/dice.js";
 import { applyCollapseIfNeeded } from "./collapse.js";
 import { listUsableFeatures, resolveDefenderFeature, type FeatureRow } from "./features.js";
 import type { StandingOrder } from "./unitPlan.js";
-import { troubleCheck } from "../rules/trouble.js";
+import { blameProblem, troubleCheck } from "../rules/trouble.js";
 import { loadCatalog } from "../tables/catalog.js";
 import { withTransaction } from "../store/db.js";
 import {
@@ -39,12 +40,14 @@ import {
   type ServiceResult,
 } from "./util.js";
 import { newId } from "./ids.js";
+import { assertFactionBudget } from "./factionBudget.js";
 
 export type RunActionInput = {
   campaignId: string;
   factionId: string;
   forcedRoll?: number;
   standingOrders?: StandingOrder[];
+  interestDeltas?: Record<string, number>;
 } & (
   | { type: "build_strength" }
   | { type: "restore_cohesion" }
@@ -103,9 +106,12 @@ export function runAction(db: Database.Database, input: RunActionInput): Service
         throw new RuleError("ENTITY_NOT_FOUND", "faction not in campaign");
       }
       const turnId = ensureOpenTurn(db, input.campaignId);
+      const targetFactionId =
+        "targetFactionId" in input ? input.targetFactionId : undefined;
+      assertFactionBudget(db, turnId, faction.id, input.type, targetFactionId);
 
       if (input.type === "build_strength") {
-        return runBuildStrength(db, faction, turnId, input.forcedRoll);
+        return runBuildStrength(db, faction, turnId, input.forcedRoll, input.interestDeltas);
       }
       if (input.type === "enact_change") {
         return runEnactChange(db, faction, turnId, input);
@@ -117,7 +123,7 @@ export function runAction(db: Database.Database, input: RunActionInput): Service
         return runExtendInterest(db, faction, turnId, input);
       }
       if (input.type === "restore_cohesion") {
-        return runRestoreCohesion(db, faction, turnId, input.forcedRoll);
+        return runRestoreCohesion(db, faction, turnId, input.forcedRoll, input.interestDeltas);
       }
       if (input.type === "aid") {
         return runAid(db, faction, turnId, input);
@@ -130,11 +136,369 @@ export function runAction(db: Database.Database, input: RunActionInput): Service
   );
 }
 
+function applyInterestDelta(
+  roll: { kept: number; bonus: number; total: number },
+  delta: number | undefined,
+  dieMax: number,
+): void {
+  if (!delta) return;
+  const direction = delta > 0 ? "raise" : "lower";
+  const moved = movedKeptFace({
+    kept: roll.kept,
+    dieMax,
+    direction,
+    requested: Math.abs(delta),
+  });
+  roll.kept = moved.kept;
+  roll.bonus = moved.kept === 1 ? 0 : roll.bonus;
+  roll.total = roll.kept + roll.bonus;
+}
+
+function troubleAfterDelta(
+  roll: { kept: number; natural: number; bonus: number; total: number },
+  trouble: number,
+  inverted: boolean,
+  problems: ReturnType<typeof loadProblemsOrdered>,
+  delta: number | undefined,
+  dieMax: number,
+): { success: boolean; culpritId: string | null } {
+  applyInterestDelta(roll, delta, dieMax);
+  const success = inverted ? roll.kept <= trouble : roll.kept > trouble;
+  const culpritId =
+    !inverted && !success ? blameProblem(problems, roll.kept).id : null;
+  return { success, culpritId };
+}
+
+export function followRolledAction(
+  db: Database.Database,
+  actionId: string,
+): { featureNotRestored?: true } {
+  const action = db
+    .prepare(
+      `SELECT id, turn_id, type, actor_id, target_id, outcome, roll_id, dominion_delta
+       FROM actions WHERE id = ?`,
+    )
+    .get(actionId) as
+    | {
+        id: string;
+        turn_id: string;
+        type: string;
+        actor_id: string;
+        target_id: string | null;
+        outcome: string;
+        roll_id: string | null;
+        dominion_delta: number;
+      }
+    | undefined;
+  if (!action?.roll_id) return {};
+  const rollRow = db.prepare("SELECT payload FROM rolls WHERE id = ?").get(action.roll_id) as
+    | { payload: string }
+    | undefined;
+  if (!rollRow) return {};
+  const payload = JSON.parse(rollRow.payload) as Record<string, unknown>;
+  const effect = (payload.effect ?? {}) as Record<string, unknown>;
+  const kind = effect.kind as string | undefined;
+  const actor = requireFaction(db, action.actor_id);
+  const campaign = db
+    .prepare("SELECT campaign_id FROM factions WHERE id = ?")
+    .get(action.actor_id) as { campaign_id: string };
+
+  if (kind === "attack" || action.type === "attack") {
+    const attackerRoll = payload.attacker as { total?: number } | undefined;
+    const defenderTotal = typeof payload.defenderTotal === "number" ? payload.defenderTotal : 0;
+    const defender = action.target_id ? requireFaction(db, action.target_id) : actor;
+    const winner = resolveContest({
+      attackerTotal: typeof attackerRoll?.total === "number" ? attackerRoll.total : 0,
+      defenderTotal,
+      attackerPower: actor.power,
+      defenderPower: defender.power,
+    });
+    const newOutcome = winner === "attacker" ? "attacker_win" : "defender_win";
+    const previous = action.outcome;
+    payload.winner = winner;
+    if (previous === newOutcome) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    if (newOutcome === "attacker_win") {
+      const problems = loadProblemsOrdered(db, defender.id);
+      const trouble = sumTrouble(problems);
+      const damage = attackProblemDamage(actor.power, defender.power);
+      const featureIds = db
+        .prepare("SELECT feature_ids FROM actions WHERE id = ?")
+        .get(action.id) as { feature_ids: string };
+      const ids = JSON.parse(featureIds.feature_ids) as (string | null)[];
+      if (defender.control === "player") {
+        db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("PENDING_DEFENDER_CHOICE", action.id);
+        db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+        return {};
+      }
+      const choice = chooseDefense({
+        policy: "preserve_existence",
+        cohesion: defender.cohesion,
+        trouble,
+        dieMax: facesForPower(defender.power),
+        problemDamage: damage,
+        canSacrifice: Boolean(ids[1]),
+      });
+      applyAttackDefense(db, {
+        campaignId: campaign.campaign_id,
+        turnId: action.turn_id,
+        actionId: action.id,
+        attackerId: actor.id,
+        defenderId: defender.id,
+        attackerFeatureId: ids[0] ?? "",
+        defenderFeatureId: ids[1] ?? null,
+        defenderChoice: choice,
+      });
+      return {};
+    }
+    const defense = effect.defense as string | null;
+    if (defense === "cohesion") {
+      db.prepare("UPDATE factions SET cohesion = cohesion + 1 WHERE id = ?").run(defender.id);
+    } else if (defense === "problem") {
+      const problemId = effect.problemId as string | undefined;
+      const damage = typeof effect.damage === "number" ? effect.damage : 1;
+      if (problemId) {
+        const row = db.prepare("SELECT points FROM problems WHERE id = ?").get(problemId) as
+          | { points: number }
+          | undefined;
+        if (row) {
+          const next = row.points - damage;
+          if (next <= 0 && effect.createdProblem) {
+            db.prepare("DELETE FROM problems WHERE id = ?").run(problemId);
+          } else if (next <= 0) {
+            db.prepare("DELETE FROM problems WHERE id = ?").run(problemId);
+          } else {
+            db.prepare("UPDATE problems SET points = ? WHERE id = ?").run(next, problemId);
+          }
+        }
+      }
+    }
+    payload.effect = { kind: "attack", defense: null };
+    db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("defender_win", action.id);
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return defense === "sacrifice" ? { featureNotRestored: true } : {};
+  }
+
+  if (kind === "build_strength" || action.type === "build_strength") {
+    const inverted = false;
+    const trouble = typeof payload.trouble === "number" ? payload.trouble : 0;
+    const kept = typeof payload.kept === "number" ? payload.kept : 0;
+    const success = inverted ? kept <= trouble : kept > trouble;
+    const previousSuccess = action.outcome === "success";
+    payload.success = success;
+    if (success === previousSuccess) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    if (success && !previousSuccess) {
+      const granted = Math.ceil(actor.power / 2);
+      db.prepare("UPDATE factions SET dominion = dominion + ? WHERE id = ?").run(granted, actor.id);
+      db.prepare("UPDATE actions SET outcome = ?, dominion_delta = ? WHERE id = ?").run(
+        "success",
+        granted,
+        action.id,
+      );
+      payload.effect = { kind: "build_strength", granted };
+    } else {
+      const granted = typeof effect.granted === "number" ? effect.granted : 0;
+      db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(granted, actor.id);
+      db.prepare("UPDATE actions SET outcome = ?, dominion_delta = 0 WHERE id = ?").run("failure", action.id);
+      payload.effect = { kind: "build_strength", granted: 0 };
+    }
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "aid" || action.type === "aid") {
+    const trouble = typeof payload.trouble === "number" ? payload.trouble : 0;
+    const kept = typeof payload.kept === "number" ? payload.kept : 0;
+    const success = kept > trouble;
+    const previousSuccess = action.outcome === "success";
+    const amount = typeof effect.amount === "number" ? effect.amount : Math.abs(action.dominion_delta);
+    payload.success = success;
+    if (success === previousSuccess) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    if (action.target_id) {
+      if (success && !previousSuccess) {
+        db.prepare("UPDATE factions SET dominion = dominion + ? WHERE id = ?").run(amount, action.target_id);
+      } else if (!success && previousSuccess) {
+        const target = requireFaction(db, action.target_id);
+        const pull = Math.min(amount, target.dominion);
+        db.prepare("UPDATE factions SET dominion = dominion - ? WHERE id = ?").run(pull, action.target_id);
+      }
+    }
+    db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run(success ? "success" : "failure", action.id);
+    payload.effect = { ...effect, success };
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "restore_cohesion" || action.type === "restore_cohesion") {
+    const trouble = typeof payload.trouble === "number" ? payload.trouble : 0;
+    const kept = typeof payload.kept === "number" ? payload.kept : 0;
+    const success = kept > trouble;
+    const previousSuccess = action.outcome === "success";
+    payload.success = success;
+    if (success === previousSuccess) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    if (success && !previousSuccess) {
+      if (actor.cohesion >= actor.power) {
+        db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+        return {};
+      }
+      db.prepare("UPDATE factions SET cohesion = cohesion + 1 WHERE id = ?").run(actor.id);
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("success", action.id);
+      payload.effect = { kind: "restore_cohesion", raised: true };
+    } else {
+      db.prepare("UPDATE factions SET cohesion = MAX(cohesion - 1, 0) WHERE id = ?").run(actor.id);
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("failure", action.id);
+      payload.effect = { kind: "restore_cohesion", raised: false };
+    }
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "extend_interest" || action.type === "extend_interest") {
+    const attackerRoll = payload.attacker as { total?: number } | undefined;
+    const defenderTotal = typeof payload.defenderTotal === "number" ? payload.defenderTotal : 0;
+    const defender = action.target_id ? requireFaction(db, action.target_id) : actor;
+    const winner = resolveContest({
+      attackerTotal: typeof attackerRoll?.total === "number" ? attackerRoll.total : 0,
+      defenderTotal,
+      attackerPower: actor.power,
+      defenderPower: defender.power,
+    });
+    const newOutcome = winner === "attacker" ? "attacker_win" : "defender_win";
+    if (newOutcome === action.outcome) return {};
+    if (winner === "attacker") {
+      const dieMax = DIE_BY_POWER[actor.power];
+      const cap = interestCap(dieMax);
+      const existing = db
+        .prepare("SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?")
+        .get(actor.id, defender.id) as { points: number } | undefined;
+      if (existing && existing.points >= cap) {
+        return {};
+      }
+      if (existing) {
+        db.prepare(
+          "UPDATE interests SET points = points + 1 WHERE from_faction_id = ? AND to_faction_id = ?",
+        ).run(actor.id, defender.id);
+      } else {
+        db.prepare(
+          `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+           VALUES (?, ?, ?, 1, 'rivalry')`,
+        ).run(newId(), actor.id, defender.id);
+      }
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("attacker_win", action.id);
+      payload.effect = { kind: "extend_interest", added: true };
+    } else if (effect.added) {
+      const existing = db
+        .prepare("SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?")
+        .get(actor.id, defender.id) as { points: number } | undefined;
+      if (existing) {
+        if (existing.points <= 1) {
+          db.prepare("DELETE FROM interests WHERE from_faction_id = ? AND to_faction_id = ?").run(
+            actor.id,
+            defender.id,
+          );
+        } else {
+          db.prepare(
+            "UPDATE interests SET points = points - 1 WHERE from_faction_id = ? AND to_faction_id = ?",
+          ).run(actor.id, defender.id);
+        }
+      }
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("defender_win", action.id);
+      payload.effect = { kind: "extend_interest", added: false };
+    }
+    payload.winner = winner;
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "remove_interest" || action.type === "remove_interest") {
+    const attackerRoll = payload.attacker as { total?: number } | undefined;
+    const defenderTotal = typeof payload.defenderTotal === "number" ? payload.defenderTotal : 0;
+    const defender = action.target_id ? requireFaction(db, action.target_id) : actor;
+    const winner = resolveContest({
+      attackerTotal: typeof attackerRoll?.total === "number" ? attackerRoll.total : 0,
+      defenderTotal,
+      attackerPower: actor.power,
+      defenderPower: defender.power,
+    });
+    const newOutcome = winner === "attacker" ? "attacker_win" : "defender_win";
+    if (newOutcome === action.outcome) return {};
+    const nature = (effect.nature as string | undefined) ?? "rivalry";
+    if (winner === "attacker") {
+      const existing = db
+        .prepare("SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?")
+        .get(actor.id, defender.id) as { points: number } | undefined;
+      if (existing) {
+        if (existing.points <= 1) {
+          db.prepare("DELETE FROM interests WHERE from_faction_id = ? AND to_faction_id = ?").run(
+            actor.id,
+            defender.id,
+          );
+        } else {
+          db.prepare(
+            "UPDATE interests SET points = points - 1 WHERE from_faction_id = ? AND to_faction_id = ?",
+          ).run(actor.id, defender.id);
+        }
+      }
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("attacker_win", action.id);
+      payload.effect = { kind: "remove_interest", removed: true, nature };
+    } else {
+      const existing = db
+        .prepare("SELECT points FROM interests WHERE from_faction_id = ? AND to_faction_id = ?")
+        .get(actor.id, defender.id) as { points: number } | undefined;
+      if (existing) {
+        db.prepare(
+          "UPDATE interests SET points = points + 1 WHERE from_faction_id = ? AND to_faction_id = ?",
+        ).run(actor.id, defender.id);
+      } else {
+        db.prepare(
+          `INSERT INTO interests (id, from_faction_id, to_faction_id, points, nature)
+           VALUES (?, ?, ?, 1, ?)`,
+        ).run(newId(), actor.id, defender.id, nature);
+      }
+      db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run("defender_win", action.id);
+      payload.effect = { kind: "remove_interest", removed: false, nature };
+    }
+    payload.winner = winner;
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  if (kind === "enact_change" || action.type === "enact_change") {
+    const inverted = Boolean(effect.inverted);
+    const trouble = typeof payload.trouble === "number" ? payload.trouble : 0;
+    const kept = typeof payload.kept === "number" ? payload.kept : 0;
+    const success = inverted ? kept <= trouble : kept > trouble;
+    const previousSuccess = action.outcome === "success";
+    payload.success = success;
+    if (success === previousSuccess) {
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+      return {};
+    }
+    db.prepare("UPDATE actions SET outcome = ? WHERE id = ?").run(success ? "success" : "failure", action.id);
+    db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(JSON.stringify(payload), action.roll_id);
+    return {};
+  }
+
+  return {};
+}
+
 function runBuildStrength(
   db: Database.Database,
   faction: { id: string; campaign_id: string; power: Power; dominion: number },
   turnId: string,
   forcedRoll?: number,
+  interestDeltas?: Record<string, number>,
 ) {
   const problems = loadProblemsOrdered(db, faction.id);
   const trouble = sumTrouble(problems);
@@ -148,11 +512,24 @@ function runBuildStrength(
     inverted: false,
     forcedRoll,
   });
+  const after = troubleAfterDelta(
+    check.roll,
+    trouble,
+    false,
+    problems,
+    interestDeltas?.[faction.id],
+    faces,
+  );
+  check.success = after.success;
+  check.culpritId = after.culpritId;
   const rollId = persistRoll(
     db,
     faction.campaign_id,
     turnId,
-    troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+    {
+      ...troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+      effect: { kind: "build_strength", granted: check.success ? Math.ceil(faction.power / 2) : 0 },
+    },
   );
   const actionId = newId();
   let dominionDelta = 0;
@@ -245,11 +622,33 @@ function runEnactChange(
     inverted,
     forcedRoll: input.forcedRoll,
   });
+  const after = troubleAfterDelta(
+    check.roll,
+    trouble,
+    inverted,
+    problems,
+    input.interestDeltas?.[faction.id],
+    faces,
+  );
+  check.success = after.success;
+  check.culpritId = after.culpritId;
   const rollId = persistRoll(
     db,
     faction.campaign_id,
     turnId,
-    troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+    {
+      ...troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+      effect: {
+        kind: "enact_change",
+        success: check.success,
+        inverted,
+        featureId: null,
+        partId: null,
+        problemId: input.problemId ?? input.solveProblemId ?? null,
+        createdProblem: false,
+        culpritId: check.culpritId,
+      },
+    },
   );
   const actionId = newId();
   const enactFeatureIds = input.meansFeatureId
@@ -438,6 +837,8 @@ export function applyAttackDefense(
     throw new RuleError("NO_USABLE_FEATURE", "no feature to sacrifice");
   }
 
+  let problemId: string | undefined = input.problemId;
+  let createdProblem = false;
   if (choice === "cohesion") {
     db.prepare("UPDATE factions SET cohesion = cohesion - 1 WHERE id = ?").run(defender.id);
   } else if (choice === "sacrifice" && defenderFeature) {
@@ -452,12 +853,36 @@ export function applyAttackDefense(
         throw new RuleError("ENTITY_NOT_FOUND", "problem not found");
       }
     } else {
-      const problemId = newId();
+      problemId = newId();
+      createdProblem = true;
       const problemText = loadCatalog().problems.military[0];
       db.prepare(
         `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
          VALUES (?, ?, ?, ?, 'military', 0, 0, 0, ?)`,
       ).run(problemId, defender.id, problemText, damage, nextProblemPosition(db, defender.id));
+    }
+  }
+
+  const actionRow = db
+    .prepare("SELECT roll_id FROM actions WHERE id = ?")
+    .get(input.actionId) as { roll_id: string | null } | undefined;
+  if (actionRow?.roll_id) {
+    const roll = db.prepare("SELECT payload FROM rolls WHERE id = ?").get(actionRow.roll_id) as
+      | { payload: string }
+      | undefined;
+    if (roll) {
+      const payload = JSON.parse(roll.payload) as Record<string, unknown>;
+      payload.effect = {
+        kind: "attack",
+        defense: choice,
+        problemId: problemId ?? null,
+        createdProblem,
+        damage,
+      };
+      db.prepare("UPDATE rolls SET payload = ? WHERE id = ?").run(
+        JSON.stringify(payload),
+        actionRow.roll_id,
+      );
     }
   }
 
@@ -558,6 +983,7 @@ function runAttack(
   let defenderTotal = 0;
 
   let attackerRoll;
+  let defenderRoll: ReturnType<typeof featureRoll> | undefined;
   let winner: "attacker" | "defender";
   if (!defenderFeature) {
     attackerRoll = featureRoll({
@@ -567,6 +993,7 @@ function runAttack(
       bonus: 0,
       forced: input.forcedAttackerRoll,
     });
+    applyInterestDelta(attackerRoll, input.interestDeltas?.[attacker.id], attackerFaces);
     winner = "attacker";
   } else {
     const settled = settledContest({
@@ -582,7 +1009,10 @@ function runAttack(
       forcedDefenderRoll: input.forcedDefenderRoll,
     });
     attackerRoll = settled.attackerRoll;
-    defenderTotal = settled.defenderRoll.total;
+    defenderRoll = settled.defenderRoll;
+    applyInterestDelta(attackerRoll, input.interestDeltas?.[attacker.id], attackerFaces);
+    applyInterestDelta(defenderRoll, input.interestDeltas?.[defender.id], DIE_BY_POWER[defender.power]);
+    defenderTotal = defenderRoll.total;
     let aTotal = attackerRoll.total;
     let dTotal = defenderTotal;
     if (input.standingOrders?.length) {
@@ -611,8 +1041,10 @@ function runAttack(
 
   const rollId = persistRoll(db, attacker.campaign_id, turnId, {
     attacker: attackerRoll,
+    defender: defenderRoll,
     defenderTotal,
     winner,
+    effect: { kind: "attack", defense: null },
   });
   const actionId = newId();
 
@@ -753,11 +1185,16 @@ function runExtendInterest(
   defenderFeature = resolveDefenderFeature(db, defender.id, input.defenderFeatureId);
 
   let attackerRoll;
+  let defenderRoll: ReturnType<typeof featureRoll> | undefined;
   let winner: "attacker" | "defender";
   let rollId: string;
   if (input.willing) {
     winner = "attacker";
-    rollId = persistRoll(db, attacker.campaign_id, turnId, { willing: true, winner: "attacker" });
+    rollId = persistRoll(db, attacker.campaign_id, turnId, {
+      willing: true,
+      winner: "attacker",
+      effect: { kind: "extend_interest", added: true },
+    });
   } else if (!defenderFeature) {
     const rng = nextRng(db, attacker.campaign_id);
     attackerRoll = featureRoll({
@@ -767,11 +1204,13 @@ function runExtendInterest(
       bonus: 0,
       forced: input.forcedAttackerRoll,
     });
+    applyInterestDelta(attackerRoll, input.interestDeltas?.[attacker.id], attackerFaces);
     winner = "attacker";
     rollId = persistRoll(db, attacker.campaign_id, turnId, {
       attacker: attackerRoll,
       defenderTotal,
       winner,
+      effect: { kind: "extend_interest", added: true },
     });
   } else {
     const rng = nextRng(db, attacker.campaign_id);
@@ -788,7 +1227,10 @@ function runExtendInterest(
       forcedDefenderRoll: input.forcedDefenderRoll,
     });
     attackerRoll = settled.attackerRoll;
-    defenderTotal = settled.defenderRoll.total;
+    defenderRoll = settled.defenderRoll;
+    applyInterestDelta(attackerRoll, input.interestDeltas?.[attacker.id], attackerFaces);
+    applyInterestDelta(defenderRoll, input.interestDeltas?.[defender.id], DIE_BY_POWER[defender.power]);
+    defenderTotal = defenderRoll.total;
     let aTotal = attackerRoll.total;
     let dTotal = defenderTotal;
     if (input.standingOrders?.length) {
@@ -815,8 +1257,10 @@ function runExtendInterest(
     defenderTotal = dTotal;
     rollId = persistRoll(db, attacker.campaign_id, turnId, {
       attacker: attackerRoll,
+      defender: defenderRoll,
       defenderTotal,
       winner,
+      effect: { kind: "extend_interest", added: winner === "attacker" },
     });
   }
 
@@ -884,6 +1328,7 @@ function runRestoreCohesion(
   faction: { id: string; campaign_id: string; power: Power; dominion: number; cohesion: number },
   turnId: string,
   forcedRoll?: number,
+  interestDeltas?: Record<string, number>,
 ) {
   if (listUsableFeatures(db, faction.id).length === 0) {
     throw new RuleError("NO_USABLE_FEATURE", "no usable feature");
@@ -908,11 +1353,24 @@ function runRestoreCohesion(
     inverted: false,
     forcedRoll,
   });
+  const after = troubleAfterDelta(
+    check.roll,
+    trouble,
+    false,
+    problems,
+    interestDeltas?.[faction.id],
+    faces,
+  );
+  check.success = after.success;
+  check.culpritId = after.culpritId;
   const rollId = persistRoll(
     db,
     faction.campaign_id,
     turnId,
-    troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+    {
+      ...troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+      effect: { kind: "restore_cohesion", raised: check.success },
+    },
   );
   const actionId = newId();
   if (check.success) {
@@ -957,11 +1415,24 @@ function runAid(
     inverted: false,
     forcedRoll: input.forcedRoll,
   });
+  const after = troubleAfterDelta(
+    check.roll,
+    trouble,
+    false,
+    problems,
+    input.interestDeltas?.[faction.id],
+    faces,
+  );
+  check.success = after.success;
+  check.culpritId = after.culpritId;
   const rollId = persistRoll(
     db,
     faction.campaign_id,
     turnId,
-    troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+    {
+      ...troubleRollPayload(check.roll, trouble, check.success, check.culpritId),
+      effect: { kind: "aid", amount, success: check.success },
+    },
   );
   const actionId = newId();
   if (check.success) {
@@ -1023,15 +1494,26 @@ function runRemoveInterest(
   let rollId: string | null = null;
   let outcome: string;
 
+  let nature: string | null = null;
+  const edgeRow = db
+    .prepare("SELECT nature FROM interests WHERE from_faction_id = ? AND to_faction_id = ?")
+    .get(faction.id, input.targetFactionId) as { nature: string } | undefined;
+  nature = edgeRow?.nature ?? null;
   if (input.willing) {
     outcome = "attacker_win";
-    rollId = persistRoll(db, faction.campaign_id, turnId, { willing: true, winner: "attacker" });
+    rollId = persistRoll(db, faction.campaign_id, turnId, {
+      willing: true,
+      winner: "attacker",
+      effect: { kind: "remove_interest", removed: true, nature },
+    });
   } else {
     const rng = nextRng(db, faction.campaign_id);
     const faces = DIE_BY_POWER[faction.power];
     const attackerRoll = rollDie(rng, faces, input.forcedRoll);
     const defender = requireFaction(db, input.targetFactionId);
     const defenderRoll = rollDie(rng, DIE_BY_POWER[defender.power]);
+    applyInterestDelta(attackerRoll, input.interestDeltas?.[faction.id], faces);
+    applyInterestDelta(defenderRoll, input.interestDeltas?.[defender.id], DIE_BY_POWER[defender.power]);
     const winner = resolveContest({
       attackerTotal: attackerRoll.total,
       defenderTotal: defenderRoll.total,
@@ -1040,8 +1522,10 @@ function runRemoveInterest(
     });
     rollId = persistRoll(db, faction.campaign_id, turnId, {
       attacker: attackerRoll,
+      defender: defenderRoll,
       defenderTotal: defenderRoll.total,
       winner,
+      effect: { kind: "remove_interest", removed: winner === "attacker", nature },
     });
     outcome = winner === "attacker" ? "attacker_win" : "defender_win";
   }

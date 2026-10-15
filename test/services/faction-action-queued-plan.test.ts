@@ -164,14 +164,17 @@ test("a queued plan on a closed turn does not block faction_action", () => {
     factionId: "a",
     action: { type: "idle" },
   });
-  expect(result).toEqual({ ok: true, data: { idle: true } });
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe("TURN_ALREADY_TAKEN");
+  }
 
   const stillQueued = db
     .prepare("SELECT status FROM write_queue WHERE turn_id = ? AND unit_id = 'a' AND kind = 'plan'")
     .get(closed.id) as { status: string };
   expect(stillQueued.status).toBe("queued");
   const openCount = db.prepare("SELECT COUNT(*) AS c FROM turns WHERE open = 1").get() as { c: number };
-  expect(openCount.c).toBe(1);
+  expect(openCount.c).toBe(0);
 });
 
 test("faction_action with no open turn still idles", () => {

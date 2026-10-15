@@ -43,6 +43,7 @@ import {
   factionAction,
   resolveAttack,
   spendInterest,
+  passInterest,
   advanceMonthForCampaign,
   listHooks,
   type FactionAction,
@@ -704,7 +705,8 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "apply_write_queue",
     {
-      description: "Apply queued plans in shuffled unit order",
+      description:
+        "Apply queued plans in shuffled unit order. Returns paused with interest when a faction may spend interest. run_faction_turn passes those offers itself.",
       inputSchema: {
         campaignId: z.string(),
         missing: z.enum(["idle", "mechanical"]).optional(),
@@ -745,7 +747,7 @@ export function buildServer(dbPath: string): McpServer {
     "faction_action",
     {
       description:
-        "Take one faction action now. Returns PLAN_ALREADY_QUEUED when that faction already has a queued plan on the open turn.",
+        "Take one faction action now. Returns PLAN_ALREADY_QUEUED when that faction already has a queued plan on the open turn. Returns PENDING_INTEREST when another faction may spend interest before the action continues. type skip records a slow faction on the open turn and does not open a turn.",
       inputSchema: {
         campaignId: z.string(),
         factionId: z.string(),
@@ -778,7 +780,8 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "spend_interest",
     {
-      description: "Spend interest to modify a contest",
+      description:
+        "Spend interest on the open turn. before and after require direction and an open interest window. steal is a free action, or the reaction while a steal window is open for that faction. Returns PENDING_INTEREST when other factions are still eligible.",
       inputSchema: {
         campaignId: z.string(),
         fromFactionId: z.string(),
@@ -786,9 +789,24 @@ export function buildServer(dbPath: string): McpServer {
         timing: z.enum(["before", "after", "steal"]),
         modifier: z.number().int(),
         actionId: z.string().optional(),
+        direction: z.enum(["raise", "lower"]).optional(),
       },
     },
     dbTool((a) => spendInterest(db, a)),
+  );
+
+  reg(
+    "pass_interest",
+    {
+      description:
+        "Pass an open interest offer. When every eligible faction has passed, the action continues.",
+      inputSchema: {
+        campaignId: z.string(),
+        fromFactionId: z.string(),
+        toFactionId: z.string(),
+      },
+    },
+    dbTool((a) => passInterest(db, a)),
   );
 
   reg(

@@ -16,7 +16,7 @@
     "gui": "npm run gui:build && npm run start --prefix dev/tools/gui"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.31.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "better-sqlite3": "13.0.3",
     "zod": "4.6.5"
   },

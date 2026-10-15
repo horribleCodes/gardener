@@ -82,11 +82,15 @@ export function sumTrouble(problems: ProblemRef[]): number {
 }
 
 export function ensureOpenTurn(db: Database.Database, campaignId: string): string {
-  const existing = db
+  const open = db
     .prepare("SELECT id FROM turns WHERE campaign_id = ? AND open = 1 LIMIT 1")
     .get(campaignId) as { id: string } | undefined;
-  if (existing) return existing.id;
+  if (open) return open.id;
   const campaign = requireCampaign(db, campaignId);
+  const taken = db
+    .prepare("SELECT id FROM turns WHERE campaign_id = ? AND month = ? LIMIT 1")
+    .get(campaignId, campaign.month) as { id: string } | undefined;
+  if (taken) throw new RuleError("TURN_ALREADY_TAKEN", "turn already taken this month");
   const turnId = newId();
   const seqRow = db
     .prepare("SELECT COALESCE(MAX(sequence), 0) + 1 AS seq FROM turns WHERE campaign_id = ?")

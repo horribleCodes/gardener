@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { attackProblemDamage, chooseDefense, interestCap, interestModifier } from "../../src/rules/actions.js";
+import { attackProblemDamage, chooseDefense, interestCap, interestModifier, movedKeptFace } from "../../src/rules/actions.js";
 
 test("a power-4 attacker inflicts 4 problem points on a power-1 defender", () => {
   expect(attackProblemDamage(4, 1)).toBe(4);
@@ -37,4 +37,20 @@ test("interest cap is twice the owner die and the modifier cannot exceed that di
   } catch (error) {
     expect((error as { code?: string }).code).toBe("MODIFIER_EXCEEDS_DIE");
   }
+});
+
+test("movedKeptFace clamps to 1 and the die maximum and reports points that moved", () => {
+  expect(movedKeptFace({ kept: 3, dieMax: 6, direction: "raise", requested: 2 })).toEqual({
+    kept: 5,
+    spent: 2,
+  });
+  expect(movedKeptFace({ kept: 5, dieMax: 6, direction: "raise", requested: 4 })).toEqual({
+    kept: 6,
+    spent: 1,
+  });
+  expect(movedKeptFace({ kept: 2, dieMax: 6, direction: "lower", requested: 5 })).toEqual({
+    kept: 1,
+    spent: 1,
+  });
+  expect(movedKeptFace({ kept: 6, dieMax: 6, direction: "raise", requested: 1 }).spent).toBe(0);
 });
