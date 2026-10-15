@@ -902,7 +902,19 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "cult_income",
     { description: "Monthly dominion grants", inputSchema: { campaignId: z.string() } },
-    async (a) => mcpToolResult(toEnvelope({ ok: true, data: cultIncome(db, a.campaignId as string) })),
+    async (a) => {
+      try {
+        return mcpToolResult(toEnvelope({ ok: true, data: cultIncome(db, a.campaignId as string) }));
+      } catch (error) {
+        if (error instanceof RuleError) {
+          return mcpToolResult({
+            ok: false,
+            error: { code: error.code, message: error.message, details: error.details },
+          });
+        }
+        return mcpToolResult(unexpectedErrorEnvelope(error));
+      }
+    },
   );
 
   reg(

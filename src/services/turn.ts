@@ -5,8 +5,7 @@ import {
   type Behavior,
   type Power,
 } from "../domain/types.js";
-import { monthlyDominion } from "../rules/cults.js";
-import type { Harshness } from "../domain/types.js";
+import { monthlyDominion, parseHarshness } from "../rules/cults.js";
 import { rollDie } from "../rules/dice.js";
 import { planGoal } from "../rules/goals.js";
 import { resolveContest } from "../rules/contest.js";
@@ -795,7 +794,7 @@ export function advanceMonth(db: Database.Database, campaignId: string): void {
         grant = monthlyDominion({
           kind: "cult",
           power: cult.power,
-          harshness: (cult.harshness ?? "nominal") as Harshness,
+          harshness: parseHarshness(cult.harshness ?? "nominal"),
           level: gb.level,
         });
       }
