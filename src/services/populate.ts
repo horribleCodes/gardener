@@ -1195,14 +1195,14 @@ export function formCult(
         throw new RuleError("FILL_INCOMPLETE", "acknowledged worshippers required");
       }
       requireCampaign(db, input.campaignId);
-      const gb = db
+      const hero = db
         .prepare("SELECT id, divinity, level FROM heroes WHERE id = ? AND campaign_id = ?")
         .get(input.heroId, input.campaignId) as
         | { id: string; divinity: string; level: number }
         | undefined;
-      if (!gb) throw new RuleError("ENTITY_NOT_FOUND", "hero not found");
-      if (gb.level < 2) throw new RuleError("LEVEL_TOO_LOW", "cult requires level 2");
-      if (gb.divinity === "free" && input.gmOverride !== true) {
+      if (!hero) throw new RuleError("ENTITY_NOT_FOUND", "hero not found");
+      if (hero.level < 2) throw new RuleError("LEVEL_TOO_LOW", "cult requires level 2");
+      if (hero.divinity === "free" && input.gmOverride !== true) {
         throw new RuleError("FREE_DIVINITY", "gmOverride required to leave free divinity");
       }
       const harshness = input.harshness === undefined ? "nominal" : parseHarshness(input.harshness);

@@ -47,7 +47,7 @@ Not implemented yet. Today there is one catalog file, `src/tables/catalog.json`.
 ## Cult
 
 A **cult** is a faction bound to a hero whose divinity is `cult`. `set_theology` costs that cult 1 Power and its internal action. At Power 1 the cult stops being a faction: the faction row is removed, divinity stays `cult`, and `cult_faction_id` is cleared. Leftover worshipers and the cult gift remain, and they do not pay cult Dominion. This is not a collapse.
-A hero forms a cult through `form_cult` at level 2 or higher, when they have the Apotheosis gift *Receive the Incense of Faith*, gained at level 2. Free divinity forms a cult only when that call passes `gmOverride`.
+A hero forms a cult through `form_cult` at level 2 or higher, when they have the Apotheosis gift *Receive the Incense of Faith*. Free divinity forms a cult only when that call passes `gmOverride`.
 
 ## Fact
 

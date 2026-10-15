@@ -567,7 +567,7 @@ export function buildServer(dbPath: string): McpServer {
     "form_cult",
     {
       description:
-        "Bind a hero of level 2 or higher who has the Apotheosis gift *Receive the Incense of Faith*, gained at level 2, to a cult faction. Free divinity requires gmOverride.",
+        "Bind a hero of level 2 or higher to a cult faction. Requires gmOverride for free divinities.",
       inputSchema: {
         campaignId: z.string(),
         heroId: z.string(),

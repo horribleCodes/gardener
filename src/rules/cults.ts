@@ -16,7 +16,7 @@ export function cultBudget(harshness: Harshness, dieMax: number): number {
   const key = parseHarshness(harshness);
   if (key === "nominal") return 0;
   if (key === "sharp") return Math.ceil(dieMax / 4);
-  if (key === "grueling") return dieMax / 2;
+  if (key === "grueling") return Math.ceil(dieMax / 2);
   return Math.ceil((dieMax * 3) / 4);
 }
 
