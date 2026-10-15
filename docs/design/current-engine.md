@@ -67,7 +67,7 @@ A campaign has at most one open turn.
 
 `set_theology` costs the cult 1 Power and its internal action. A Power 1 cult stops being a faction: the faction row is removed, the hero's divinity stays `cult`, and `cult_faction_id` is cleared. Leftover worshipers and the cult gift remain as public facts, and they do not pay cult Dominion. This is not a collapse.
 
-`form_cult` requires level 2, the Word `Incense of Faith`, and `acknowledged: true`. Free divinity also requires `gmOverride: true`. Omitted harshness on that call stores `nominal`. The four harshness keys price intrinsic Problems from the cult's Power die and price cult Dominion as Power plus 0, 1, 2, or 3. Any other harshness string is refused. On Power greater than 1, `set_theology` keeps an omitted harshness, keeps an omitted feature sentence, and changes intrinsic Problem text only for the ids in `intrinsicTexts`.
+`form_cult` requires level 2, the Apotheosis gift *Receive the Incense of Faith*, gained at level 2, and `acknowledged: true`. Free divinity also requires `gmOverride: true`. Omitted harshness on that call stores `nominal`. The four harshness keys price intrinsic Problems from the cult's Power die and price cult Dominion as Power plus 0, 1, 2, or 3. Any other harshness string is refused. On Power greater than 1, `set_theology` keeps an omitted harshness, keeps an omitted feature sentence, and changes intrinsic Problem text only for the ids in `intrinsicTexts`.
 
 ## Visibility and rumors
 

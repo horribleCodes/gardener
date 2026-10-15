@@ -13,12 +13,12 @@ function world(): Database.Database {
 
 function hero(
   db: Database.Database,
-  row: { id: string; level: number; divinity?: string; words?: unknown },
+  row: { id: string; level: number; divinity?: string },
 ): void {
   db.prepare(
     `INSERT INTO heroes (id, campaign_id, name, level, words, influence, dominion, wealth, divinity)
      VALUES (?, 'c1', ?, ?, ?, 0, 0, 0, ?)`,
-  ).run(row.id, row.id, row.level, JSON.stringify(row.words ?? ["Incense of Faith"]), row.divinity ?? "none");
+  ).run(row.id, row.id, row.level, JSON.stringify([]), row.divinity ?? "none");
 }
 
 function faction(
@@ -54,32 +54,6 @@ test("level 1 cannot form a cult", () => {
   expect(db.prepare("SELECT divinity FROM heroes WHERE id = 'h1'").get()).toEqual({ divinity: "none" });
 });
 
-test("a level 2 hero without Incense of Faith cannot form a cult", () => {
-  const db = world();
-  hero(db, { id: "h1", level: 2, words: ["Sun"] });
-  const result = formCult(db, {
-    campaignId: "c1", heroId: "h1", featureText: "The law", acknowledged: true,
-  });
-  expect(result).toEqual({
-    ok: false,
-    error: { code: "GIFT_REQUIRED", message: "Incense of Faith required", details: {} },
-  });
-  expect(db.prepare("SELECT COUNT(*) AS n FROM factions").get()).toEqual({ n: 0 });
-});
-
-test("words that are not JSON fail the gift gate", () => {
-  const db = world();
-  hero(db, { id: "h1", level: 2, words: ["Incense of Faith"] });
-  db.prepare("UPDATE heroes SET words = ? WHERE id = 'h1'").run("not-json");
-  const result = formCult(db, {
-    campaignId: "c1", heroId: "h1", featureText: "The law", acknowledged: true,
-  });
-  expect(result).toEqual({
-    ok: false,
-    error: { code: "GIFT_REQUIRED", message: "Incense of Faith required", details: {} },
-  });
-});
-
 test("free divinity cannot form a cult without gmOverride", () => {
   const db = world();
   hero(db, { id: "h1", level: 2, divinity: "free" });
@@ -97,7 +71,7 @@ test("free divinity cannot form a cult without gmOverride", () => {
   expect(db.prepare("SELECT COUNT(*) AS n FROM factions").get()).toEqual({ n: 0 });
 });
 
-test("gmOverride does not bypass level or the Word", () => {
+test("gmOverride does not bypass level", () => {
   const db = world();
   hero(db, { id: "h1", level: 1, divinity: "free" });
   expect(formCult(db, {
@@ -106,18 +80,11 @@ test("gmOverride does not bypass level or the Word", () => {
     ok: false,
     error: { code: "LEVEL_TOO_LOW", message: "cult requires level 2", details: {} },
   });
-  hero(db, { id: "h2", level: 2, divinity: "free", words: ["Sun"] });
-  expect(formCult(db, {
-    campaignId: "c1", heroId: "h2", featureText: "Law", acknowledged: true, gmOverride: true,
-  })).toEqual({
-    ok: false,
-    error: { code: "GIFT_REQUIRED", message: "Incense of Faith required", details: {} },
-  });
 });
 
 test("gmOverride lets free divinity found a grueling cult", () => {
   const db = world();
-  hero(db, { id: "h1", level: 2, divinity: "free", words: ["Sun", "Incense of Faith"] });
+  hero(db, { id: "h1", level: 2, divinity: "free" });
   const result = formCult(db, {
     campaignId: "c1",
     heroId: "h1",

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** `form_cult` enforces level 2, Incense of Faith, and the free-divinity override, and harshness keys price Problems and cult Dominion.
+**Goal:** `form_cult` enforces level 2 (the Apotheosis gift *Receive the Incense of Faith*) and the free-divinity override, and harshness keys price Problems and cult Dominion.
 
 **Architecture:** `parseHarshness` in `src/rules/cults.ts` is the only reader of a harshness string. `formCult` checks gates before it writes. `setTheology` on Power greater than 1 keeps omitted fields and edits intrinsic text by id. The Power 1 or less branch stays the end already shipped.
 
@@ -11,16 +11,16 @@
 ## Global Constraints
 
 - `form_cult` returns `LEVEL_TOO_LOW` / `cult requires level 2` when `heroes.level < 2`.
-- `form_cult` returns `GIFT_REQUIRED` / `Incense of Faith required` unless the parsed `words` array contains the exact string `Incense of Faith`.
+- `form_cult` does not inspect `heroes.words`. Level 2 is the Apotheosis gift *Receive the Incense of Faith*.
 - `form_cult` returns `FREE_DIVINITY` / `gmOverride required to leave free divinity` when divinity is `free` and `gmOverride` is not `true`.
-- `gmOverride: true` does not bypass level or Incense of Faith.
+- `gmOverride: true` does not bypass level.
 - Harshness keys are `nominal`, `sharp`, `grueling`, and `overwhelming`. Any other non-null string is `PICK_UNKNOWN` / `unknown harshness`.
 - A null harshness column on read counts as `nominal`. Omitted `harshness` on `form_cult` is stored as `nominal`.
 - Omitted `harshness` on `set_theology` does not write the harshness column.
 - On Power less than or equal to 1, `setTheology` ends the faction and ignores `harshness`, `featureText`, and `intrinsicTexts`.
 - This change does not set `status` to `collapsed`, does not write cohesion to 0 for a theology edit, and does not insert `type` `faction_collapsed`.
 - Intrinsic points are 0, `ceil(dieMax / 4)`, `dieMax / 2`, and `ceil(dieMax * 3 / 4)` for `nominal`, `sharp`, `grueling`, and `overwhelming`. Cult Dominion extra is 0, 1, 2, and 3 for those keys. `dieMax` is the die for the faction's Power.
-- Gate order on `form_cult` is acknowledged, campaign, hero, level, Incense of Faith, free divinity, harshness, adopted faction.
+- Gate order on `form_cult` is acknowledged, campaign, hero, level, free divinity, harshness, adopted faction.
 - Implementation continues on this pull request's branch. Do not branch from `main` and do not open a second pull request.
 - No test reads `docs/`, `user/`, `AGENTS.md`, `README.md`, or a file under `.cursor/prompts/` or `.cursor/skills/` and asserts on that file's text.
 
@@ -1122,7 +1122,7 @@ git commit -m "Price cult income from the four harshness keys"
 At the end of the **Cult** section in `docs/design/glossary.md`, add:
 
 ```markdown
-A hero forms a cult through `form_cult` at level 2 or higher when their Words include `Incense of Faith`. Free divinity forms a cult only when that call passes `gmOverride`.
+A hero forms a cult through `form_cult` at level 2 or higher, when they have the Apotheosis gift *Receive the Incense of Faith*, gained at level 2. Free divinity forms a cult only when that call passes `gmOverride`.
 ```
 
 In `docs/design/overview.md`, replace the two cult gap bullets with:
@@ -1134,13 +1134,13 @@ In `docs/design/overview.md`, replace the two cult gap bullets with:
 In `docs/design/current-engine.md`, add this paragraph after the existing Cult theology paragraph:
 
 ```markdown
-`form_cult` requires level 2, the Word `Incense of Faith`, and `acknowledged: true`. Free divinity also requires `gmOverride: true`. Omitted harshness on that call stores `nominal`. The four harshness keys price intrinsic Problems from the cult's Power die and price cult Dominion as Power plus 0, 1, 2, or 3. Any other harshness string is refused. On Power greater than 1, `set_theology` keeps an omitted harshness, keeps an omitted feature sentence, and changes intrinsic Problem text only for the ids in `intrinsicTexts`.
+`form_cult` requires level 2, the Apotheosis gift *Receive the Incense of Faith*, gained at level 2, and `acknowledged: true`. Free divinity also requires `gmOverride: true`. Omitted harshness on that call stores `nominal`. The four harshness keys price intrinsic Problems from the cult's Power die and price cult Dominion as Power plus 0, 1, 2, or 3. Any other harshness string is refused. On Power greater than 1, `set_theology` keeps an omitted harshness, keeps an omitted feature sentence, and changes intrinsic Problem text only for the ids in `intrinsicTexts`.
 ```
 
 In `user/skills/gdnr-director/references/gdnr-direct.md`, replace the `form_cult` and `set_theology` bullets with:
 
 ```markdown
-- `form_cult`: binds a hero to a cult faction, new or adopted (`adoptFactionId`). The hero must be level 2 or higher and their Words must include `Incense of Faith`. It needs `acknowledged: true`, meaning at least a village of willing worshippers exists. A hero with `divinity: free` is refused unless `gmOverride` is true. `harshness` is `nominal`, `sharp`, `grueling`, or `overwhelming`; omitting it stores `nominal`. Harsher cults carry more intrinsic problems and pay more Dominion each month. An unrecognized harshness is refused.
+- `form_cult`: binds a hero to a cult faction, new or adopted (`adoptFactionId`). The hero must be level 2 or higher and have the Apotheosis gift *Receive the Incense of Faith*, gained at level 2. It needs `acknowledged: true`, meaning at least a village of willing worshippers exists. A hero with `divinity: free` is refused unless `gmOverride` is true. `harshness` is `nominal`, `sharp`, `grueling`, or `overwhelming`; omitting it stores `nominal`. Harsher cults carry more intrinsic problems and pay more Dominion each month. An unrecognized harshness is refused.
 - `set_theology`: changes a cult's harshness, feature text, or the text of intrinsic problems (`intrinsicTexts`). It costs the cult 1 Power and its internal action for the turn. Omitting `harshness` keeps the stored harshness and its laws. A Power 1 cult stops being a faction: divinity stays `cult`, the hero's faction link is cleared, and the leftover worshipers and cult gift remain without paying cult Dominion. That end ignores harshness, feature text, and intrinsic texts.
 ```
 
@@ -1159,15 +1159,15 @@ git commit -m "Document cult formation gates and harshness pricing"
 
 Spec coverage:
 
-- Free divinity without the override is Task 2. `gmOverride` does not bypass level or the Word there.
-- Incense of Faith and level 2 are Task 2, including invalid JSON and the acknowledged-first order.
+- Free divinity without the override is Task 2. `gmOverride` does not bypass level there.
+- Level 2 (the Apotheosis gift *Receive the Incense of Faith*) and the acknowledged-first order are Task 2. There is no `words` check.
 - The four price formulas and unrecognized keys are Task 1. Adopted Power 3 sharp laws use the d10 in Task 2. Income and `set_power` use the same parser in Task 4.
 - Omitted harshness, intrinsic text edits, and the rollback when a named law would be deleted are Task 3. The Power 1 end stays, including an unrecognized key on that path.
 - Living docs and director copy are Task 5. The rolled feature on a new cult stays a gap in `overview.md`.
 
 Placeholder scan: every task names the files, the error codes, the prices, and the code to write. No step defers a formula, a message, or a file.
 
-Type consistency: `parseHarshness`, `LEVEL_TOO_LOW`, `GIFT_REQUIRED`, `FREE_DIVINITY`, `intrinsicTexts`, and the four harshness strings are the same in every task. `formCult` still returns `{ factionId }`. Power greater than 1 `setTheology` still returns `{ power, cohesion }`. The end return stays `{ ended, factionId, giftTexts, factIds }`.
+Type consistency: `parseHarshness`, `LEVEL_TOO_LOW`, `FREE_DIVINITY`, `intrinsicTexts`, and the four harshness strings are the same in every task. `formCult` still returns `{ factionId }`. Power greater than 1 `setTheology` still returns `{ power, cohesion }`. The end return stays `{ ended, factionId, giftTexts, factIds }`.
 
 ## Execution handoff
 

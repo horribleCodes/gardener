@@ -1196,15 +1196,12 @@ export function formCult(
       }
       requireCampaign(db, input.campaignId);
       const gb = db
-        .prepare("SELECT id, divinity, level, words FROM heroes WHERE id = ? AND campaign_id = ?")
+        .prepare("SELECT id, divinity, level FROM heroes WHERE id = ? AND campaign_id = ?")
         .get(input.heroId, input.campaignId) as
-        | { id: string; divinity: string; level: number; words: string }
+        | { id: string; divinity: string; level: number }
         | undefined;
       if (!gb) throw new RuleError("ENTITY_NOT_FOUND", "hero not found");
       if (gb.level < 2) throw new RuleError("LEVEL_TOO_LOW", "cult requires level 2");
-      if (!heroHasIncense(gb.words)) {
-        throw new RuleError("GIFT_REQUIRED", "Incense of Faith required");
-      }
       if (gb.divinity === "free" && input.gmOverride !== true) {
         throw new RuleError("FREE_DIVINITY", "gmOverride required to leave free divinity");
       }
@@ -1255,15 +1252,6 @@ export function formCult(
       return { factionId };
     }),
   );
-}
-
-function heroHasIncense(wordsJson: string): boolean {
-  try {
-    const parsed = JSON.parse(wordsJson) as unknown;
-    return Array.isArray(parsed) && parsed.includes("Incense of Faith");
-  } catch {
-    return false;
-  }
 }
 
 function assertIntrinsicEdits(
