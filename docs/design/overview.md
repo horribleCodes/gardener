@@ -81,7 +81,6 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 **Changes, Influence, and Dominion**
 
 - Hero Dominion cannot be spent on changes; only `create_champion` debits it.
-- `wealthSpent` debits the hero's Influence pool instead of adding coverage bought with wealth.
 - `record_deed` and `record_challenge_outcome` do not re-check activation; a further commit is needed.
 - `commit_resources` returns only status and coverage, not the withdrawal assessment preview.
 - `begin_change` cannot store resisters or deed and challenge overrides, and `quote_change` ignores place wards.
