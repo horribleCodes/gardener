@@ -1266,6 +1266,44 @@ function heroHasIncense(wordsJson: string): boolean {
   }
 }
 
+function assertIntrinsicEdits(
+  db: Database.Database,
+  factionId: string,
+  edits: { problemId: string; text: string }[] | undefined,
+): void {
+  if (!edits || edits.length === 0) return;
+  const seen = new Set<string>();
+  for (const edit of edits) {
+    if (seen.has(edit.problemId)) {
+      throw new RuleError("FILL_INCOMPLETE", "duplicate intrinsic problem");
+    }
+    seen.add(edit.problemId);
+    const row = db
+      .prepare("SELECT id, intrinsic FROM problems WHERE id = ? AND faction_id = ?")
+      .get(edit.problemId, factionId) as { id: string; intrinsic: number } | undefined;
+    if (!row || row.intrinsic !== 1) {
+      throw new RuleError("ENTITY_NOT_FOUND", "intrinsic problem not found");
+    }
+  }
+}
+
+function writeIntrinsicTexts(
+  db: Database.Database,
+  factionId: string,
+  edits: { problemId: string; text: string }[] | undefined,
+): void {
+  if (!edits || edits.length === 0) return;
+  for (const edit of edits) {
+    const row = db
+      .prepare("SELECT id, intrinsic FROM problems WHERE id = ? AND faction_id = ?")
+      .get(edit.problemId, factionId) as { id: string; intrinsic: number } | undefined;
+    if (!row || row.intrinsic !== 1) {
+      throw new RuleError("FILL_INCOMPLETE", "intrinsic problem removed by the new budget");
+    }
+    db.prepare("UPDATE problems SET text = ? WHERE id = ?").run(edit.text, edit.problemId);
+  }
+}
+
 export function setTheology(
   db: Database.Database,
   input: {
@@ -1273,6 +1311,7 @@ export function setTheology(
     cultFactionId: string;
     harshness?: string;
     featureText?: string;
+    intrinsicTexts?: { problemId: string; text: string }[];
   },
 ): ServiceResult<Record<string, unknown>> {
   return wrapRule(() =>
@@ -1280,7 +1319,7 @@ export function setTheology(
       requireCampaign(db, input.campaignId);
       const faction = db
         .prepare(
-          `SELECT id, power, cohesion, cult, patron_hero_id, home_place_id
+          `SELECT id, power, cohesion, cult, harshness, patron_hero_id, home_place_id
            FROM factions WHERE id = ? AND campaign_id = ?`,
         )
         .get(input.cultFactionId, input.campaignId) as
@@ -1289,6 +1328,7 @@ export function setTheology(
             power: Power;
             cohesion: number;
             cult: number;
+            harshness: string | null;
             patron_hero_id: string | null;
             home_place_id: string | null;
           }
@@ -1376,23 +1416,38 @@ export function setTheology(
         return { ended: true, factionId: faction.id, giftTexts, factIds };
       }
 
+      if (input.harshness !== undefined) parseHarshness(input.harshness);
+      const harshnessForBudget = input.harshness === undefined
+        ? (faction.harshness ?? "nominal")
+        : input.harshness;
+      assertIntrinsicEdits(db, faction.id, input.intrinsicTexts);
+
       const newPower = (faction.power - 1) as Power;
       const newCohesion = Math.min(faction.cohesion, newPower);
-      db.prepare("UPDATE factions SET power = ?, cohesion = ?, harshness = ? WHERE id = ?").run(
-        newPower,
-        newCohesion,
-        input.harshness ?? "nominal",
-        faction.id,
-      );
-      rescaleIntrinsic(db, faction.id, newPower, input.harshness ?? "nominal");
+      if (input.harshness === undefined) {
+        db.prepare("UPDATE factions SET power = ?, cohesion = ? WHERE id = ?").run(
+          newPower,
+          newCohesion,
+          faction.id,
+        );
+      } else {
+        db.prepare("UPDATE factions SET power = ?, cohesion = ?, harshness = ? WHERE id = ?").run(
+          newPower,
+          newCohesion,
+          input.harshness,
+          faction.id,
+        );
+      }
+      rescaleIntrinsic(db, faction.id, newPower, harshnessForBudget);
       if (input.featureText) {
         const feat = db
-          .prepare("SELECT id FROM features WHERE faction_id = ? LIMIT 1")
+          .prepare("SELECT id FROM features WHERE faction_id = ? ORDER BY id ASC LIMIT 1")
           .get(faction.id) as { id: string } | undefined;
         if (feat) {
           db.prepare("UPDATE features SET text = ? WHERE id = ?").run(input.featureText, feat.id);
         }
       }
+      writeIntrinsicTexts(db, faction.id, input.intrinsicTexts);
       return { power: newPower, cohesion: newCohesion };
     }),
   );

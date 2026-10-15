@@ -585,12 +585,14 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "set_theology",
     {
-      description: "Change cult theology. Costs 1 Power and the internal action. A Power 1 cult stops being a faction.",
+      description:
+        "Change cult theology. Costs 1 Power and the internal action. Omitted harshness is kept. A Power 1 cult stops being a faction.",
       inputSchema: {
         campaignId: z.string(),
         cultFactionId: z.string(),
-        harshness: z.string().optional(),
+        harshness: z.enum(["nominal", "sharp", "grueling", "overwhelming"]).optional(),
         featureText: z.string().optional(),
+        intrinsicTexts: z.array(z.object({ problemId: z.string(), text: z.string() })).optional(),
       },
     },
     dbTool((a) => setTheology(db, a)),
