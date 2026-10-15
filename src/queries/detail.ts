@@ -1,9 +1,8 @@
 import type Database from "better-sqlite3";
 import { DIE_BY_POWER, RuleError, type Power } from "../domain/types.js";
 import { interestCap } from "../rules/actions.js";
-import { monthlyDominion } from "../rules/cults.js";
+import { monthlyDominion, parseHarshness } from "../rules/cults.js";
 import { unevenBonus } from "../rules/contest.js";
-import type { Harshness } from "../domain/types.js";
 import { decisionMakers, type PowerStructure } from "./brief.js";
 import { loadProblemsOrdered, sumTrouble } from "../services/util.js";
 
@@ -200,7 +199,7 @@ export function cultIncome(db: Database.Database, campaignId: string) {
         grant = monthlyDominion({
           kind: "cult",
           power: g.power,
-          harshness: (g.harshness ?? "nominal") as Harshness,
+          harshness: parseHarshness(g.harshness ?? "nominal"),
           level: g.level,
         });
       }

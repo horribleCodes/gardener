@@ -88,8 +88,7 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 
 **Cults**
 
-- `form_cult` adds a rolled feature and problem, prices intrinsic problems from Power 1, has no free-divinity guard, and misprices unknown harshness text.
-- `set_theology` resets an omitted harshness to `nominal` and cannot edit intrinsic texts.
+- `form_cult` adds a rolled feature and a rolled non-intrinsic problem on a new cult.
 
 **Generation and setup**
 

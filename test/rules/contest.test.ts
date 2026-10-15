@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { featureRoll, readGmBonus, resolveContest, unevenBonus } from "../../src/rules/contest.js";
-import { cultBudget, monthlyDominion } from "../../src/rules/cults.js";
+import { cultBudget, monthlyDominion, parseHarshness } from "../../src/rules/cults.js";
 import { mulberry32 } from "../../src/rules/dice.js";
 import { RuleError } from "../../src/domain/types.js";
 
@@ -68,4 +68,31 @@ test("cult budgets and incomes", () => {
   expect(monthlyDominion({ kind: "free", power: 1, harshness: "nominal", level: 2 })).toBe(1);
   expect(monthlyDominion({ kind: "free", power: 1, harshness: "nominal", level: 6 })).toBe(3);
   expect(monthlyDominion({ kind: "none", power: 1, harshness: "nominal", level: 9 })).toBe(0);
+});
+
+test("unrecognized harshness is refused and the four keys keep their prices", () => {
+  expect(cultBudget("nominal", 20)).toBe(0);
+  expect(cultBudget("sharp", 8)).toBe(2);
+  expect(cultBudget("sharp", 10)).toBe(3);
+  expect(cultBudget("grueling", 8)).toBe(4);
+  expect(cultBudget("grueling", 10)).toBe(5);
+  expect(cultBudget("overwhelming", 8)).toBe(6);
+  expect(cultBudget("overwhelming", 10)).toBe(8);
+  expect(monthlyDominion({ kind: "cult", power: 1, harshness: "grueling", level: 2 })).toBe(3);
+  expect(monthlyDominion({ kind: "cult", power: 3, harshness: "sharp", level: 2 })).toBe(4);
+  expect(monthlyDominion({ kind: "free", power: 1, harshness: "cruel" as never, level: 2 })).toBe(1);
+  expect(monthlyDominion({ kind: "none", power: 1, harshness: "cruel" as never, level: 9 })).toBe(0);
+  for (const value of ["cruel", "Grueling", ""]) {
+    expect(() => parseHarshness(value)).toThrow(RuleError);
+    try {
+      parseHarshness(value);
+    } catch (error) {
+      expect((error as RuleError).code).toBe("PICK_UNKNOWN");
+      expect((error as RuleError).message).toBe("unknown harshness");
+    }
+    expect(() => cultBudget(value as never, 6)).toThrow(RuleError);
+    expect(() => monthlyDominion({
+      kind: "cult", power: 1, harshness: value as never, level: 2,
+    })).toThrow(RuleError);
+  }
 });

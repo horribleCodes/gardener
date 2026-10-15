@@ -567,15 +567,17 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "form_cult",
     {
-      description: "Bind a hero to a cult faction",
+      description:
+        "Bind a hero of level 2 or higher to a cult faction. Requires gmOverride for free divinities.",
       inputSchema: {
         campaignId: z.string(),
         heroId: z.string(),
         featureText: z.string(),
-        harshness: z.string().optional(),
+        harshness: z.enum(["nominal", "sharp", "grueling", "overwhelming"]).optional(),
         acknowledged: z.boolean().optional(),
         adoptFactionId: z.string().optional(),
         name: z.string().optional(),
+        gmOverride: z.boolean().optional(),
       },
     },
     dbTool((a) => formCult(db, a)),
@@ -584,12 +586,14 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "set_theology",
     {
-      description: "Change cult theology. Costs 1 Power and the internal action. A Power 1 cult stops being a faction.",
+      description:
+        "Change cult theology. Costs 1 Power and the internal action. Omitted harshness is kept. A Power 1 cult stops being a faction.",
       inputSchema: {
         campaignId: z.string(),
         cultFactionId: z.string(),
-        harshness: z.string().optional(),
+        harshness: z.enum(["nominal", "sharp", "grueling", "overwhelming"]).optional(),
         featureText: z.string().optional(),
+        intrinsicTexts: z.array(z.object({ problemId: z.string(), text: z.string() })).optional(),
       },
     },
     dbTool((a) => setTheology(db, a)),
@@ -916,7 +920,19 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "cult_income",
     { description: "Monthly dominion grants", inputSchema: { campaignId: z.string() } },
-    async (a) => mcpToolResult(toEnvelope({ ok: true, data: cultIncome(db, a.campaignId as string) })),
+    async (a) => {
+      try {
+        return mcpToolResult(toEnvelope({ ok: true, data: cultIncome(db, a.campaignId as string) }));
+      } catch (error) {
+        if (error instanceof RuleError) {
+          return mcpToolResult({
+            ok: false,
+            error: { code: error.code, message: error.message, details: error.details },
+          });
+        }
+        return mcpToolResult(unexpectedErrorEnvelope(error));
+      }
+    },
   );
 
   reg(
