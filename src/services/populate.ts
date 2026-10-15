@@ -14,7 +14,7 @@ import {
 } from "../domain/types.js";
 import { interestCap } from "../rules/actions.js";
 import { championStats } from "../rules/cost.js";
-import { cultBudget } from "../rules/cults.js";
+import { cultBudget, parseHarshness } from "../rules/cults.js";
 import { generateCourt, type CourtDraft } from "../generate/court.js";
 import {
   generateProblems,
@@ -1186,6 +1186,7 @@ export function formCult(
     acknowledged?: boolean;
     adoptFactionId?: string;
     name?: string;
+    gmOverride?: boolean;
   },
 ): ServiceResult<{ factionId: string }> {
   return wrapRule(() =>
@@ -1195,9 +1196,19 @@ export function formCult(
       }
       requireCampaign(db, input.campaignId);
       const gb = db
-        .prepare("SELECT id, divinity FROM heroes WHERE id = ? AND campaign_id = ?")
-        .get(input.heroId, input.campaignId) as { id: string; divinity: string } | undefined;
+        .prepare("SELECT id, divinity, level, words FROM heroes WHERE id = ? AND campaign_id = ?")
+        .get(input.heroId, input.campaignId) as
+        | { id: string; divinity: string; level: number; words: string }
+        | undefined;
       if (!gb) throw new RuleError("ENTITY_NOT_FOUND", "hero not found");
+      if (gb.level < 2) throw new RuleError("LEVEL_TOO_LOW", "cult requires level 2");
+      if (!heroHasIncense(gb.words)) {
+        throw new RuleError("GIFT_REQUIRED", "Incense of Faith required");
+      }
+      if (gb.divinity === "free" && input.gmOverride !== true) {
+        throw new RuleError("FREE_DIVINITY", "gmOverride required to leave free divinity");
+      }
+      const harshness = input.harshness === undefined ? "nominal" : parseHarshness(input.harshness);
 
       let factionId = input.adoptFactionId;
       if (!factionId) {
@@ -1210,26 +1221,32 @@ export function formCult(
         });
         if (!created.ok) throw new RuleError(created.error.code, created.error.message);
         factionId = created.data.factionId;
-        db.prepare("UPDATE factions SET cult = 1, patron_hero_id = ?, harshness = ? WHERE id = ?").run(
-          input.heroId,
-          input.harshness ?? "nominal",
-          factionId,
-        );
       } else {
-        db.prepare(
-          "UPDATE factions SET cult = 1, patron_hero_id = ?, harshness = ? WHERE id = ?",
-        ).run(input.heroId, input.harshness ?? "nominal", factionId);
+        const adopted = db
+          .prepare("SELECT id FROM factions WHERE id = ? AND campaign_id = ?")
+          .get(factionId, input.campaignId) as { id: string } | undefined;
+        if (!adopted) throw new RuleError("ENTITY_NOT_FOUND", "faction not found");
       }
+      db.prepare(
+        "UPDATE factions SET cult = 1, patron_hero_id = ?, harshness = ? WHERE id = ?",
+      ).run(input.heroId, harshness, factionId);
 
       insertFeatureFromText(db, factionId, input.featureText);
-      const power = 1 as Power;
-      const budget = cultBudget((input.harshness ?? "nominal") as import("../domain/types.js").Harshness, DIE_BY_POWER[power]);
-      if (budget > 0) {
+
+      const stored = db
+        .prepare("SELECT power FROM factions WHERE id = ?")
+        .get(factionId) as { power: Power };
+      const budget = cultBudget(parseHarshness(harshness), DIE_BY_POWER[stored.power]);
+      const existingIntrinsic = db
+        .prepare("SELECT COUNT(*) AS n FROM problems WHERE faction_id = ? AND intrinsic = 1")
+        .get(factionId) as { n: number };
+      if (existingIntrinsic.n === 0 && budget > 0) {
         db.prepare(
           `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
-           VALUES (?, ?, ?, ?, 'cultural', 1, 0, 0, 0)`,
-        ).run(newId(), factionId, input.featureText, budget);
+           VALUES (?, ?, ?, ?, 'cultural', 1, 0, 0, ?)`,
+        ).run(newId(), factionId, input.featureText, budget, nextProblemPosition(db, factionId));
       }
+      rescaleIntrinsic(db, factionId, stored.power, harshness);
 
       db.prepare("UPDATE heroes SET divinity = 'cult', cult_faction_id = ? WHERE id = ?").run(
         factionId,
@@ -1238,6 +1255,15 @@ export function formCult(
       return { factionId };
     }),
   );
+}
+
+function heroHasIncense(wordsJson: string): boolean {
+  try {
+    const parsed = JSON.parse(wordsJson) as unknown;
+    return Array.isArray(parsed) && parsed.includes("Incense of Faith");
+  } catch {
+    return false;
+  }
 }
 
 export function setTheology(

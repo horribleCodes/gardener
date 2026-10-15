@@ -566,15 +566,17 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "form_cult",
     {
-      description: "Bind a hero to a cult faction",
+      description:
+        "Bind a hero of level 2 or higher whose Words include Incense of Faith to a cult faction. Free divinity requires gmOverride.",
       inputSchema: {
         campaignId: z.string(),
         heroId: z.string(),
         featureText: z.string(),
-        harshness: z.string().optional(),
+        harshness: z.enum(["nominal", "sharp", "grueling", "overwhelming"]).optional(),
         acknowledged: z.boolean().optional(),
         adoptFactionId: z.string().optional(),
         name: z.string().optional(),
+        gmOverride: z.boolean().optional(),
       },
     },
     dbTool((a) => formCult(db, a)),
