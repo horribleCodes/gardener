@@ -3,12 +3,13 @@ import type Database from "better-sqlite3";
 import { z } from "zod";
 import { RuleError } from "../domain/types.js";
 import { quoteChange } from "../rules/cost.js";
-import { catalogRowsAt } from "../tables/catalog.js";
+import { catalogRowsAt, catalogTableUris } from "../tables/catalog.js";
 import {
   cultIncome,
   explainRoll,
   getCourt,
   getFaction,
+  getHero,
   interestMap,
   relevantFeatures,
 } from "../queries/detail.js";
@@ -569,7 +570,7 @@ export function buildServer(dbPath: string): McpServer {
     "form_cult",
     {
       description:
-        "Bind a hero of level 2 or higher to a cult faction. Requires gmOverride for free divinities.",
+        "Bind a hero of level 2 or higher to a cult faction. Requires gmOverride for free divinities. Optional homePlaceId must be a place in the campaign.",
       inputSchema: {
         campaignId: z.string(),
         heroId: z.string(),
@@ -579,6 +580,7 @@ export function buildServer(dbPath: string): McpServer {
         adoptFactionId: z.string().optional(),
         name: z.string().optional(),
         gmOverride: z.boolean().optional(),
+        homePlaceId: z.string().optional(),
       },
     },
     dbTool((a) => formCult(db, a)),
@@ -830,6 +832,12 @@ export function buildServer(dbPath: string): McpServer {
   );
 
   reg(
+    "list_catalog_tables",
+    { description: "List valid world://tables/{path} URIs.", inputSchema: {} },
+    async () => mcpToolResult(toEnvelope({ ok: true, data: { uris: catalogTableUris() } })),
+  );
+
+  reg(
     "get_world_brief",
     { description: "GM world summary", inputSchema: { campaignId: z.string() } },
     async (a) => {
@@ -841,6 +849,21 @@ export function buildServer(dbPath: string): McpServer {
         });
       }
       return mcpToolResult(toEnvelope({ ok: true, data: brief }));
+    },
+  );
+
+  reg(
+    "get_hero",
+    { description: "Hero sheet. No open turn required.", inputSchema: { heroId: z.string() } },
+    async (a) => {
+      const data = getHero(db, a.heroId as string);
+      if (!data) {
+        return mcpToolResult({
+          ok: false,
+          error: { code: "ENTITY_NOT_FOUND", message: "hero not found", details: {} },
+        });
+      }
+      return mcpToolResult(toEnvelope({ ok: true, data }));
     },
   );
 
@@ -993,6 +1016,22 @@ export function buildServer(dbPath: string): McpServer {
   );
 
   server.registerResource(
+    "campaign-hero",
+    new ResourceTemplate("world://campaigns/{campaignId}/heroes/{heroId}", { list: undefined }),
+    { description: "Hero JSON" },
+    async (_uri, { heroId }) => {
+      const data = getHero(db, heroId as string);
+      if (!data) {
+        return jsonResource({
+          ok: false,
+          error: { code: "ENTITY_NOT_FOUND", message: "hero not found", details: {} },
+        });
+      }
+      return jsonResource(data);
+    },
+  );
+
+  server.registerResource(
     "campaign-court",
     new ResourceTemplate("world://campaigns/{campaignId}/courts/{courtId}", { list: undefined }),
     { description: "Court JSON" },
@@ -1028,8 +1067,23 @@ export function buildServer(dbPath: string): McpServer {
   );
 
   server.registerResource(
+    "catalog-tables",
+    "world://tables",
+    { description: "Catalog table URI list" },
+    async () => jsonResource({ uris: catalogTableUris() }),
+  );
+
+  server.registerResource(
     "catalog-table",
-    new ResourceTemplate("world://tables/{path}", { list: undefined }),
+    new ResourceTemplate("world://tables/{path}", {
+      list: async () => ({
+        resources: catalogTableUris().map((uri) => ({
+          uri,
+          name: uri,
+          mimeType: "application/json",
+        })),
+      }),
+    }),
     { description: "Generator catalog subtree" },
     async (_uri, { path }) => {
       try {
