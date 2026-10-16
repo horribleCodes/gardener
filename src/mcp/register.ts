@@ -434,12 +434,13 @@ export function buildServer(dbPath: string): McpServer {
     "commit_resources",
     {
       description:
-        "Commit influence or wealth to a change. When a feature change's coverage, deeds, and challenges are met, this call adds the Feature and one backlash Problem.",
+        "Commit influence, wealth, or Dominion to a change. When a feature change's coverage, deeds, and challenges are met, this call adds the Feature and one backlash Problem.",
       inputSchema: {
         changeId: z.string(),
         heroId: z.string(),
         influence: z.number().int(),
         wealthSpent: z.number().int().optional(),
+        dominionSpent: z.number().int().optional(),
         backlash: z.string().optional(),
         featureText: z.string().optional(),
       },
