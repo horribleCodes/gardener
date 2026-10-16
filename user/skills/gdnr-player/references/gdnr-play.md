@@ -57,8 +57,8 @@ Every reply is `{ ok, data, rolls, advisories, derived }`, or `{ ok: false, erro
 
 Keep director reads apart from what a character knows.
 
-- **Director reads:** `get_world_brief`, `get_hero`, `get_faction`, `interest_map`, `list_hooks`, `list_rumors`, and `list_catalog_tables`. They show the whole world, including heroes with no open turn. Use them to run it, not as in-character knowledge.
-- **In-character knowledge:** `get_unit_view`. It is the frozen snapshot of what one acting unit knows during an open turn, and it exists only for the units in that turn. In character, a player knows only what it shows.
+- **Director reads:** `get_world_brief`, `get_faction`, `interest_map`, `list_hooks`, `list_rumors`, and `get_hero` (for non-player heroes). They show the whole world. Use them to run it, not as in-character knowledge.
+- **In-character knowledge:** `get_hero` (for player heroes) and `get_unit_view`. The latter is the frozen snapshot of what one acting unit knows during an open turn, and it exists only for the units in that turn. In character, a player knows only what it shows.
 
 Do not invent dice results or mechanical relationships that are not in the data.
 

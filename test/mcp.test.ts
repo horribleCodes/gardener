@@ -108,7 +108,7 @@ test("get_unit_view for rivalry omits dominion and behavior; quote_change still 
   await client.close();
 });
 
-test("get_hero and catalog table list work with no open turn", async () => {
+test("get_hero works with no open turn", async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = buildServer(":memory:");
   await server.connect(serverTransport);
@@ -154,6 +154,29 @@ test("get_hero and catalog table list work with no open turn", async () => {
     error: { code: "ENTITY_NOT_FOUND", message: "hero not found", details: {} },
   });
 
+  const heroResource = await client.readResource({
+    uri: `world://campaigns/${campaignId}/heroes/${heroId}`,
+  });
+  expect(JSON.parse(heroResource.contents[0].text as string)).toEqual(sheet.data);
+
+  const missingHeroResource = await client.readResource({
+    uri: `world://campaigns/${campaignId}/heroes/missing`,
+  });
+  expect(JSON.parse(missingHeroResource.contents[0].text as string)).toEqual({
+    ok: false,
+    error: { code: "ENTITY_NOT_FOUND", message: "hero not found", details: {} },
+  });
+
+  await client.close();
+});
+
+test("catalog table list works with no open turn", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
   const listed = JSON.parse(
     ((await client.callTool({ name: "list_catalog_tables", arguments: {} })).content as {
       text: string;
@@ -170,19 +193,6 @@ test("get_hero and catalog table list work with no open turn", async () => {
   const rows = JSON.parse(table.contents[0].text as string);
   expect(Array.isArray(rows)).toBe(true);
   expect(rows.length).toBeGreaterThan(0);
-
-  const heroResource = await client.readResource({
-    uri: `world://campaigns/${campaignId}/heroes/${heroId}`,
-  });
-  expect(JSON.parse(heroResource.contents[0].text as string)).toEqual(sheet.data);
-
-  const missingHeroResource = await client.readResource({
-    uri: `world://campaigns/${campaignId}/heroes/missing`,
-  });
-  expect(JSON.parse(missingHeroResource.contents[0].text as string)).toEqual({
-    ok: false,
-    error: { code: "ENTITY_NOT_FOUND", message: "hero not found", details: {} },
-  });
 
   await client.close();
 });

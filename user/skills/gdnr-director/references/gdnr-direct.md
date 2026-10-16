@@ -94,7 +94,7 @@ Not a free-text adjective like “mercantile.”
 
 ## After seed
 
-1. Call `get_world_brief` and `interest_map` as sanity checks. The brief lists each hero's id, name, level, divinity, and Dominion. `get_hero` reads one hero (Words and `cult_faction_id` too) with no open turn.
+1. Call `get_world_brief` and `interest_map` as sanity checks.
 2. Recover place ids from `get_world_brief` (court `placeId`) or `get_faction` (`home_place_id`) before parenting `create_place`. `seed_campaign` does not return place ids.
 
 ## Adding entities after seed
