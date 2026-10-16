@@ -69,6 +69,18 @@ export function worldBrief(db: Database.Database, campaignId: string) {
     };
   });
 
+  const heroes = db
+    .prepare(
+      `SELECT id, name, level, divinity, dominion FROM heroes WHERE campaign_id = ? ORDER BY id ASC`,
+    )
+    .all(campaignId) as {
+    id: string;
+    name: string;
+    level: number;
+    divinity: string;
+    dominion: number;
+  }[];
+
   const courts = db
     .prepare(
       `SELECT id, type, place_id FROM courts WHERE campaign_id = ?`,
@@ -86,6 +98,7 @@ export function worldBrief(db: Database.Database, campaignId: string) {
     month: campaign.month,
     flags,
     factions: factionBriefs,
+    heroes,
     courts: courts.map((c) => ({
       id: c.id,
       type: c.type,
