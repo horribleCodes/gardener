@@ -569,7 +569,7 @@ export function buildServer(dbPath: string): McpServer {
     "form_cult",
     {
       description:
-        "Bind a hero of level 2 or higher to a cult faction. A new cult is Power 1 with the chosen Feature and only the holy laws its harshness requires. lawText is required when those laws are inserted. Free divinity requires gmOverride.",
+        "Bind a hero of level 2 or higher to a Power 1 cult faction. Requires a feature text. Free divinity heroes require gmOverride.",
       inputSchema: {
         campaignId: z.string(),
         heroId: z.string(),

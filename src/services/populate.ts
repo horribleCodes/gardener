@@ -359,7 +359,6 @@ export function createFaction(
       );
 
       const advisories: string[] = [];
-      const fill = defaultFill(input.fill);
       const seed = input.seed ?? Math.floor(Math.random() * 0xffffffff);
       const rng = mulberry32(seed);
       const dieMax = DIE_BY_POWER[input.power];

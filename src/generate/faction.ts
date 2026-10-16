@@ -17,7 +17,7 @@ export function problemBudget(
   if (pressure === "prosperous") return Math.round(dieMax / 4);
   if (pressure === "strained") return Math.round(dieMax / 3);
   if (crisisBand === "three-quarter") return Math.ceil((dieMax * 3) / 4);
-  return dieMax / 2;
+  return Math.round(dieMax / 2);
 }
 
 export function splitProblemPoints(budget: number, rng: Rng): number[] {
