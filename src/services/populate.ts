@@ -326,6 +326,7 @@ export function createFaction(
     pressure?: "prosperous" | "strained" | "crisis";
     crisisBand?: "half" | "three-quarter";
     featureCount?: number;
+    problemCount?: number;
   },
 ): ServiceResult<{ factionId: string; advisories: string[] }> {
   return wrapRule(() =>
@@ -368,13 +369,15 @@ export function createFaction(
         input.crisisBand ?? "half",
       );
       const catalog = loadCatalog();
-      const problems = generateProblems(budget, rng, catalog);
-      for (let i = 0; i < problems.length; i++) {
-        const p = problems[i];
-        db.prepare(
-          `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
-           VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?)`,
-        ).run(newId(), factionId, p.text, p.points, p.domain, i);
+      if (input.problemCount !== 0) {
+        const problems = generateProblems(budget, rng, catalog);
+        for (let i = 0; i < problems.length; i++) {
+          const p = problems[i];
+          db.prepare(
+            `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+             VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?)`,
+          ).run(newId(), factionId, p.text, p.points, p.domain, i);
+        }
       }
 
       const featureTarget = input.featureCount ?? input.power;
@@ -1182,6 +1185,7 @@ export function formCult(
     campaignId: string;
     heroId: string;
     featureText: string;
+    lawText?: string;
     harshness?: string;
     acknowledged?: boolean;
     adoptFactionId?: string;
@@ -1209,12 +1213,18 @@ export function formCult(
 
       let factionId = input.adoptFactionId;
       if (!factionId) {
+        const budget = cultBudget(parseHarshness(harshness), DIE_BY_POWER[1]);
+        if (budget > 0 && !input.lawText) {
+          throw new RuleError("FILL_INCOMPLETE", "holy law required");
+        }
         const created = createFaction(db, {
           campaignId: input.campaignId,
           name: input.name ?? "Cult",
           power: 1,
           behavior: "directed",
           origin: "forged",
+          featureCount: 0,
+          problemCount: 0,
         });
         if (!created.ok) throw new RuleError(created.error.code, created.error.message);
         factionId = created.data.factionId;
@@ -1238,10 +1248,13 @@ export function formCult(
         .prepare("SELECT COUNT(*) AS n FROM problems WHERE faction_id = ? AND intrinsic = 1")
         .get(factionId) as { n: number };
       if (existingIntrinsic.n === 0 && budget > 0) {
+        if (!input.lawText) {
+          throw new RuleError("FILL_INCOMPLETE", "holy law required");
+        }
         db.prepare(
           `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
            VALUES (?, ?, ?, ?, 'cultural', 1, 0, 0, ?)`,
-        ).run(newId(), factionId, input.featureText, budget, nextProblemPosition(db, factionId));
+        ).run(newId(), factionId, input.lawText, budget, nextProblemPosition(db, factionId));
       }
       rescaleIntrinsic(db, factionId, stored.power, harshness);
 
