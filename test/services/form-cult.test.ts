@@ -90,6 +90,7 @@ test("gmOverride lets free divinity found a grueling cult", () => {
     campaignId: "c1",
     heroId: "h1",
     featureText: "Winter must never return",
+    lawText: "The frost is a sin",
     acknowledged: true,
     gmOverride: true,
     harshness: "grueling",
@@ -105,12 +106,17 @@ test("gmOverride lets free divinity found a grueling cult", () => {
     harshness: "grueling",
     power: 1,
   });
+  expect(db.prepare("SELECT text FROM features WHERE faction_id = ?").all(factionId)).toEqual([
+    { text: "Winter must never return" },
+  ]);
   expect(db.prepare(
-    "SELECT text, points FROM problems WHERE faction_id = ? AND intrinsic = 1",
-  ).get(factionId)).toEqual({ text: "Winter must never return", points: 3 });
+    "SELECT text, points, intrinsic FROM problems WHERE faction_id = ?",
+  ).all(factionId)).toEqual([
+    { text: "The frost is a sin", points: 3, intrinsic: 1 },
+  ]);
 });
 
-test("omitted harshness stores nominal and no intrinsic points", () => {
+test("omitted harshness stores nominal and no problems", () => {
   const db = world();
   hero(db, { id: "h1", level: 2 });
   const result = formCult(db, {
@@ -118,12 +124,17 @@ test("omitted harshness stores nominal and no intrinsic points", () => {
   });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
-  expect(db.prepare("SELECT harshness FROM factions WHERE id = ?").get(result.data.factionId)).toEqual({
+  const factionId = result.data.factionId;
+  expect(db.prepare("SELECT harshness, power FROM factions WHERE id = ?").get(factionId)).toEqual({
     harshness: "nominal",
+    power: 1,
   });
-  expect(db.prepare(
-    "SELECT COALESCE(SUM(points), 0) AS points FROM problems WHERE faction_id = ? AND intrinsic = 1",
-  ).get(result.data.factionId)).toEqual({ points: 0 });
+  expect(db.prepare("SELECT text FROM features WHERE faction_id = ?").all(factionId)).toEqual([
+    { text: "Quiet faith" },
+  ]);
+  expect(db.prepare("SELECT COUNT(*) AS n FROM problems WHERE faction_id = ?").get(factionId)).toEqual({
+    n: 0,
+  });
 });
 
 test("an unrecognized harshness forms nothing", () => {
@@ -145,6 +156,10 @@ test("an adopted Power 3 cult prices sharp laws from the d10", () => {
   hero(db, { id: "h1", level: 2 });
   faction(db, { id: "f1", power: 3 });
   db.prepare(
+    `INSERT INTO features (id, faction_id, text, domain, origin, aimed_at_faction_id)
+     VALUES ('old-feat', 'f1', 'Old mill', 'economic', 'native', NULL)`,
+  ).run();
+  db.prepare(
     `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
      VALUES ('old', 'f1', 'Street debt', 2, 'economic', 0, 0, 0, 0)`,
   ).run();
@@ -152,14 +167,19 @@ test("an adopted Power 3 cult prices sharp laws from the d10", () => {
     campaignId: "c1",
     heroId: "h1",
     featureText: "The tithe",
+    lawText: "Pay the tithe in winter",
     acknowledged: true,
     adoptFactionId: "f1",
     harshness: "sharp",
   });
   expect(result).toEqual({ ok: true, data: { factionId: "f1" } });
+  expect(db.prepare("SELECT text FROM features WHERE faction_id = 'f1' ORDER BY text").all()).toEqual([
+    { text: "Old mill" },
+    { text: "The tithe" },
+  ]);
   expect(db.prepare(
     "SELECT text, points FROM problems WHERE faction_id = 'f1' AND intrinsic = 1",
-  ).get()).toEqual({ text: "The tithe", points: 3 });
+  ).get()).toEqual({ text: "Pay the tithe in winter", points: 3 });
   expect(db.prepare("SELECT text, points FROM problems WHERE id = 'old'").get()).toEqual({
     text: "Street debt",
     points: 2,
@@ -218,6 +238,61 @@ test("acknowledged is still required before the level gate", () => {
     ok: false,
     error: { code: "FILL_INCOMPLETE", message: "acknowledged worshippers required", details: {} },
   });
+});
+
+test("a new cult without a holy law is refused when harshness prices one", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "Winter must never return",
+    acknowledged: true,
+    harshness: "grueling",
+  });
+  expect(result).toEqual({
+    ok: false,
+    error: { code: "FILL_INCOMPLETE", message: "holy law required", details: {} },
+  });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM factions").get()).toEqual({ n: 0 });
+  expect(db.prepare("SELECT divinity FROM heroes WHERE id = 'h1'").get()).toEqual({ divinity: "none" });
+});
+
+test("new cult composition matches each harshness budget", () => {
+  const cases = [
+    { harshness: "nominal" as const, points: 0 },
+    { harshness: "sharp" as const, points: 2 },
+    { harshness: "grueling" as const, points: 3 },
+    { harshness: "overwhelming" as const, points: 5 },
+  ];
+  for (const row of cases) {
+    const db = world();
+    hero(db, { id: "h1", level: 2 });
+    const result = formCult(db, {
+      campaignId: "c1",
+      heroId: "h1",
+      featureText: "Chosen gift",
+      lawText: "Keep the vigil",
+      acknowledged: true,
+      harshness: row.harshness,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const factionId = result.data.factionId;
+    expect(db.prepare("SELECT power FROM factions WHERE id = ?").get(factionId)).toEqual({ power: 1 });
+    expect(db.prepare("SELECT text FROM features WHERE faction_id = ?").all(factionId)).toEqual([
+      { text: "Chosen gift" },
+    ]);
+    const problems = db
+      .prepare("SELECT text, points, intrinsic FROM problems WHERE faction_id = ?")
+      .all(factionId) as { text: string; points: number; intrinsic: number }[];
+    if (row.points === 0) {
+      expect(problems).toEqual([]);
+    } else {
+      expect(problems).toEqual([{ text: "Keep the vigil", points: row.points, intrinsic: 1 }]);
+      expect(problems[0].text).not.toBe("Chosen gift");
+    }
+  }
 });
 
 function place(db: Database.Database, id: string, name: string): void {
