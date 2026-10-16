@@ -855,7 +855,7 @@ export function buildServer(dbPath: string): McpServer {
 
   reg(
     "get_hero",
-    { description: "Hero sheet. No open turn required.", inputSchema: { heroId: z.string() } },
+    { description: "Hero sheet", inputSchema: { heroId: z.string() } },
     async (a) => {
       const data = getHero(db, a.heroId as string);
       if (!data) {

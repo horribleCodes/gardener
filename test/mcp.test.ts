@@ -108,7 +108,7 @@ test("get_unit_view for rivalry omits dominion and behavior; quote_change still 
   await client.close();
 });
 
-test("get_hero works with no open turn", async () => {
+test("get_hero returns the sheet and a not-found error", async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = buildServer(":memory:");
   await server.connect(serverTransport);
@@ -154,10 +154,41 @@ test("get_hero works with no open turn", async () => {
     error: { code: "ENTITY_NOT_FOUND", message: "hero not found", details: {} },
   });
 
+  await client.close();
+});
+
+test("hero resource returns the sheet and a not-found error", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const created = await client.callTool({
+    name: "create_campaign",
+    arguments: { name: "Reads", rngSeed: 1 },
+  });
+  const createdBody = JSON.parse((created.content as { text: string }[])[0].text);
+  const campaignId = createdBody.data.campaignId as string;
+  const heroCreated = await client.callTool({
+    name: "create_hero",
+    arguments: { campaignId, name: "Lira", level: 2, words: ["Sun"], dominion: 3, divinity: "free" },
+  });
+  const heroBody = JSON.parse((heroCreated.content as { text: string }[])[0].text);
+  const heroId = heroBody.data.heroId as string;
+
   const heroResource = await client.readResource({
     uri: `world://campaigns/${campaignId}/heroes/${heroId}`,
   });
-  expect(JSON.parse(heroResource.contents[0].text as string)).toEqual(sheet.data);
+  expect(JSON.parse(heroResource.contents[0].text as string)).toEqual({
+    id: heroId,
+    name: "Lira",
+    level: 2,
+    divinity: "free",
+    dominion: 3,
+    cult_faction_id: null,
+    words: ["Sun"],
+  });
 
   const missingHeroResource = await client.readResource({
     uri: `world://campaigns/${campaignId}/heroes/missing`,
@@ -170,7 +201,7 @@ test("get_hero works with no open turn", async () => {
   await client.close();
 });
 
-test("catalog table list works with no open turn", async () => {
+test("catalog table list returns valid URIs", async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = buildServer(":memory:");
   await server.connect(serverTransport);
