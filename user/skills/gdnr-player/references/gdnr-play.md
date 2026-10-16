@@ -95,6 +95,7 @@ Mundus wards raise the Influence cost of a change inside them. They do not block
 
 - **Influence** is committed, not spent. It returns to the hero when withdrawn, and the change may then decay.
 - **Dominion** is spent. It makes a result last and is never refunded.
+- `commit_resources` spends that Dominion with `dominionSpent`. Omitted or `0` spends none. Withdrawing Influence does not return it.
 - A change moves from `pending` to `active` once its coverage (Dominion spent plus Influence committed) reaches the cost and its deeds and challenges are done. If withdrawing Influence drops coverage below the cost, it becomes `decaying`. Committing the difference again returns it to `active`.
 
 Before an Influence change is committed, say whether it will hold if the hero stops shepherding it.

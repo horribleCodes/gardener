@@ -118,6 +118,7 @@ export function commitResources(
     heroId: string;
     influence: number;
     wealthSpent?: number;
+    dominionSpent?: number;
     backlash?: string;
     featureText?: string;
   },
@@ -153,21 +154,30 @@ export function commitResources(
       if (!change) throw new RuleError("ENTITY_NOT_FOUND", `change ${input.changeId} not found`);
 
       const hero = db
-        .prepare("SELECT id, influence, wealth FROM heroes WHERE id = ?")
-        .get(input.heroId) as { id: string; influence: number; wealth: number } | undefined;
+        .prepare("SELECT id, influence, wealth, dominion FROM heroes WHERE id = ?")
+        .get(input.heroId) as
+        | { id: string; influence: number; wealth: number; dominion: number }
+        | undefined;
       if (!hero) throw new RuleError("ENTITY_NOT_FOUND", `hero ${input.heroId} not found`);
       const wealthSpent = input.wealthSpent ?? 0;
+      const paidDominion = input.dominionSpent ?? 0;
       if (input.influence < 0) {
         throw new RuleError("INSUFFICIENT_INFLUENCE", "cannot commit negative influence");
       }
       if (wealthSpent < 0) {
         throw new RuleError("INSUFFICIENT_WEALTH", "cannot commit negative wealth");
       }
+      if (paidDominion < 0) {
+        throw new RuleError("INSUFFICIENT_DOMINION", "cannot commit negative dominion");
+      }
       if (wealthSpent > hero.wealth) {
         throw new RuleError("INSUFFICIENT_WEALTH", "not enough wealth to commit");
       }
       if (hero.influence < input.influence) {
         throw new RuleError("INSUFFICIENT_INFLUENCE", "not enough influence to commit");
+      }
+      if (hero.dominion < paidDominion) {
+        throw new RuleError("INSUFFICIENT_DOMINION", "not enough dominion to commit");
       }
 
       let bought = 0;
@@ -206,8 +216,18 @@ export function commitResources(
         input.heroId,
       );
 
+      if (paidDominion > 0) {
+        db.prepare("UPDATE heroes SET dominion = dominion - ? WHERE id = ?").run(
+          paidDominion,
+          input.heroId,
+        );
+        db.prepare("UPDATE changes SET dominion_spent = dominion_spent + ? WHERE id = ?").run(
+          paidDominion,
+          change.id,
+        );
+      }
       const quote = quoteForChangeRow(db, change);
-      const covered = coveredOnChange(db, change.id, change.dominion_spent);
+      const covered = coveredOnChange(db, change.id, change.dominion_spent + paidDominion);
       let status = change.status;
       if (
         covered >= quote.total &&
