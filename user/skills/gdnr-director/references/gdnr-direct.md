@@ -121,7 +121,7 @@ Not a free-text adjective like “mercantile.”
 - `set_divinity`: switches a hero's divinity. The choice is normally fixed, so this needs `gmOverride: true`.
 - `set_power`: sets a faction's Power (1–5) by fiat.
 - `expand_change`: grows an active change. The same scope and magnitude costs nothing; a larger one pays the difference.
-- `create_champion`: spends a flat 8 Dominion from a hero to create a champion of a given level (`loyal` halves the effective level).
+- `create_champion`: spends a flat 8 Dominion from a hero to create a champion of a given level (`loyal` halves the effective level). Quoted PC change costs take hero Dominion on `commit_resources` (`dominionSpent`), not on this tool.
 - `record_shatter`: records how an already collapsed faction ended.
 
 ## Director overrides
