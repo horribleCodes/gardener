@@ -85,10 +85,6 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 - `begin_change` cannot store resisters or deed and challenge overrides, and `quote_change` ignores place wards.
 - Ward key holders cannot be set.
 
-**Cults**
-
-- `form_cult` adds a rolled feature and a rolled non-intrinsic problem on a new cult.
-
 **Generation and setup**
 
 - An invalid `courtType` in `seed_campaign` drops the court silently.
