@@ -1187,6 +1187,7 @@ export function formCult(
     adoptFactionId?: string;
     name?: string;
     gmOverride?: boolean;
+    homePlaceId?: string;
   },
 ): ServiceResult<{ factionId: string }> {
   return wrapRule(() =>
@@ -1207,6 +1208,13 @@ export function formCult(
       }
       const harshness = input.harshness === undefined ? "nominal" : parseHarshness(input.harshness);
 
+      if (input.homePlaceId !== undefined) {
+        const place = db
+          .prepare("SELECT id FROM places WHERE id = ? AND campaign_id = ?")
+          .get(input.homePlaceId, input.campaignId) as { id: string } | undefined;
+        if (!place) throw new RuleError("ENTITY_NOT_FOUND", "place not found");
+      }
+
       let factionId = input.adoptFactionId;
       if (!factionId) {
         const created = createFaction(db, {
@@ -1215,6 +1223,7 @@ export function formCult(
           power: 1,
           behavior: "directed",
           origin: "forged",
+          homePlaceId: input.homePlaceId,
         });
         if (!created.ok) throw new RuleError(created.error.code, created.error.message);
         factionId = created.data.factionId;
@@ -1227,6 +1236,12 @@ export function formCult(
       db.prepare(
         "UPDATE factions SET cult = 1, patron_hero_id = ?, harshness = ? WHERE id = ?",
       ).run(input.heroId, harshness, factionId);
+      if (input.homePlaceId !== undefined) {
+        db.prepare("UPDATE factions SET home_place_id = ? WHERE id = ?").run(
+          input.homePlaceId,
+          factionId,
+        );
+      }
 
       insertFeatureFromText(db, factionId, input.featureText);
 
