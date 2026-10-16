@@ -94,7 +94,7 @@ Not a free-text adjective like “mercantile.”
 
 ## After seed
 
-1. Call `get_world_brief` and `interest_map` as sanity checks.
+1. Call `get_world_brief` and `interest_map` as sanity checks. The brief lists each hero's id, name, level, divinity, and Dominion. `get_hero` reads one hero (Words and `cult_faction_id` too) with no open turn.
 2. Recover place ids from `get_world_brief` (court `placeId`) or `get_faction` (`home_place_id`) before parenting `create_place`. `seed_campaign` does not return place ids.
 
 ## Adding entities after seed
@@ -116,7 +116,8 @@ Not a free-text adjective like “mercantile.”
 
 - `fit_blank`: names blank court or character rows left by `fill: blank`.
 - `ensure_setpiece`: makes sure a court, challenge, character, fact, or problem face exists for a scene. Calling it again with the same `key` returns the same row.
-- `form_cult`: binds a hero to a cult faction, new or adopted (`adoptFactionId`). The hero must be level 2 or higher. It needs `acknowledged: true`, meaning at least a village of willing worshippers exists. A hero with `divinity: free` is refused unless `gmOverride` is true. `harshness` is `nominal`, `sharp`, `grueling`, or `overwhelming`; omitting it stores `nominal`. Harsher cults carry more intrinsic problems and pay more Dominion each month. An unrecognized harshness is refused.
+- `form_cult`: binds a hero to a cult faction, new or adopted (`adoptFactionId`). The hero must be level 2 or higher. It needs `acknowledged: true`, meaning at least a village of willing worshippers exists. A hero with `divinity: free` is refused unless `gmOverride` is true. Optional `homePlaceId` must be a place in the campaign; a new cult stores it as home, and an adopted faction keeps its home unless this argument is passed. `harshness` is `nominal`, `sharp`, `grueling`, or `overwhelming`; omitting it stores `nominal`. Harsher cults carry more intrinsic problems and pay more Dominion each month. An unrecognized harshness is refused.
+- `list_catalog_tables`: lists the `world://tables/{path}` URIs the catalog resource will accept. `world://tables` is the same list.
 - `set_theology`: changes a cult's harshness, feature text, or the text of intrinsic problems (`intrinsicTexts`). It costs the cult 1 Power and its internal action for the turn. Omitting `harshness` keeps the stored harshness and its laws. Using this on a Power 1 cult causes it to stop being a faction and should only be done with the player aware of the consequences. The leftover worshipers and cult gift remain without paying cult Dominion. That end ignores harshness, feature text, and intrinsic texts.
 - `set_divinity`: switches a hero's divinity. The choice is normally fixed, so this needs `gmOverride: true`.
 - `set_power`: sets a faction's Power (1–5) by fiat.
