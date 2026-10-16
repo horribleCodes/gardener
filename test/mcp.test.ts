@@ -23,7 +23,9 @@ test("MCP server is named gardener and registers create_hero", async () => {
   expect(names).toContain("set_interest");
   expect(names).not.toContain("create_godbound");
   expect(names).toContain("pass_interest");
-  expect(names).toHaveLength(51);
+  expect(names).toContain("get_hero");
+  expect(names).toContain("list_catalog_tables");
+  expect(names).toHaveLength(53);
   await client.close();
 });
 
@@ -103,6 +105,126 @@ test("get_unit_view for rivalry omits dominion and behavior; quote_change still 
   });
   const quoteBody = JSON.parse((quoteResult.content as { text: string }[])[0].text);
   expect(quoteBody.data.total).toBe(12);
+  await client.close();
+});
+
+test("get_hero returns the sheet and a not-found error", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const created = await client.callTool({
+    name: "create_campaign",
+    arguments: { name: "Reads", rngSeed: 1 },
+  });
+  const createdBody = JSON.parse((created.content as { text: string }[])[0].text);
+  const campaignId = createdBody.data.campaignId as string;
+  const heroCreated = await client.callTool({
+    name: "create_hero",
+    arguments: { campaignId, name: "Lira", level: 2, words: ["Sun"], dominion: 3, divinity: "free" },
+  });
+  const heroBody = JSON.parse((heroCreated.content as { text: string }[])[0].text);
+  const heroId = heroBody.data.heroId as string;
+
+  const sheet = JSON.parse(
+    ((await client.callTool({ name: "get_hero", arguments: { heroId } })).content as {
+      text: string;
+    }[])[0].text,
+  );
+  expect(sheet.ok).toBe(true);
+  expect(sheet.data).toEqual({
+    id: heroId,
+    name: "Lira",
+    level: 2,
+    divinity: "free",
+    dominion: 3,
+    cult_faction_id: null,
+    words: ["Sun"],
+  });
+
+  const missing = JSON.parse(
+    ((await client.callTool({ name: "get_hero", arguments: { heroId: "missing" } })).content as {
+      text: string;
+    }[])[0].text,
+  );
+  expect(missing).toEqual({
+    ok: false,
+    error: { code: "ENTITY_NOT_FOUND", message: "hero not found", details: {} },
+  });
+
+  await client.close();
+});
+
+test("hero resource returns the sheet and a not-found error", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const created = await client.callTool({
+    name: "create_campaign",
+    arguments: { name: "Reads", rngSeed: 1 },
+  });
+  const createdBody = JSON.parse((created.content as { text: string }[])[0].text);
+  const campaignId = createdBody.data.campaignId as string;
+  const heroCreated = await client.callTool({
+    name: "create_hero",
+    arguments: { campaignId, name: "Lira", level: 2, words: ["Sun"], dominion: 3, divinity: "free" },
+  });
+  const heroBody = JSON.parse((heroCreated.content as { text: string }[])[0].text);
+  const heroId = heroBody.data.heroId as string;
+
+  const heroResource = await client.readResource({
+    uri: `world://campaigns/${campaignId}/heroes/${heroId}`,
+  });
+  expect(JSON.parse(heroResource.contents[0].text as string)).toEqual({
+    id: heroId,
+    name: "Lira",
+    level: 2,
+    divinity: "free",
+    dominion: 3,
+    cult_faction_id: null,
+    words: ["Sun"],
+  });
+
+  const missingHeroResource = await client.readResource({
+    uri: `world://campaigns/${campaignId}/heroes/missing`,
+  });
+  expect(JSON.parse(missingHeroResource.contents[0].text as string)).toEqual({
+    ok: false,
+    error: { code: "ENTITY_NOT_FOUND", message: "hero not found", details: {} },
+  });
+
+  await client.close();
+});
+
+test("catalog table list returns valid URIs", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const listed = JSON.parse(
+    ((await client.callTool({ name: "list_catalog_tables", arguments: {} })).content as {
+      text: string;
+    }[])[0].text,
+  );
+  expect(listed.ok).toBe(true);
+  expect(listed.data.uris).toContain("world://tables/powerStructure");
+
+  const collection = await client.readResource({ uri: "world://tables" });
+  const collectionBody = JSON.parse(collection.contents[0].text as string);
+  expect(collectionBody.uris).toEqual(listed.data.uris);
+
+  const table = await client.readResource({ uri: "world://tables/powerStructure" });
+  const rows = JSON.parse(table.contents[0].text as string);
+  expect(Array.isArray(rows)).toBe(true);
+  expect(rows.length).toBeGreaterThan(0);
+
   await client.close();
 });
 

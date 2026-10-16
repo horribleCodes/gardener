@@ -6,6 +6,44 @@ import { unevenBonus } from "../rules/contest.js";
 import { decisionMakers, type PowerStructure } from "./brief.js";
 import { loadProblemsOrdered, sumTrouble } from "../services/util.js";
 
+export function getHero(db: Database.Database, heroId: string) {
+  const hero = db
+    .prepare(
+      `SELECT id, name, level, divinity, dominion, cult_faction_id, words
+       FROM heroes WHERE id = ?`,
+    )
+    .get(heroId) as
+    | {
+        id: string;
+        name: string;
+        level: number;
+        divinity: string;
+        dominion: number;
+        cult_faction_id: string | null;
+        words: string;
+      }
+    | undefined;
+  if (!hero) return null;
+  let words: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(hero.words);
+    if (Array.isArray(parsed) && parsed.every((w) => typeof w === "string")) {
+      words = parsed;
+    }
+  } catch {
+    words = [];
+  }
+  return {
+    id: hero.id,
+    name: hero.name,
+    level: hero.level,
+    divinity: hero.divinity,
+    dominion: hero.dominion,
+    cult_faction_id: hero.cult_faction_id,
+    words,
+  };
+}
+
 export function getFaction(db: Database.Database, factionId: string) {
   const faction = db
     .prepare(

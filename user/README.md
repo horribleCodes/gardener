@@ -20,7 +20,7 @@ The user will interact with the world both as a director and as a player, but th
 - Have the player do something they are unable to do or lies outside their sphere of influence
 - Demand access to information the player hasn't learned yet
 
-In character, a player knows only what `get_unit_view` shows for their unit. `get_world_brief`, `get_faction`, and `interest_map` are director reads.
+In character, a player knows only `get_hero` for their own hero(es), and what `get_unit_view` shows for their unit. `get_world_brief`, `get_hero`, `get_faction`, and `interest_map` are director reads.
 
 **Directors** may change the world directly and do not have a presence in the game. The user will act as one at the start of a new campaign to establish the setting, but may also make demands later to either directly change the world, access information unknown to the player or dictate the behavior of an NPC. Their actions are never restricted.
 

@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type Database from "better-sqlite3";
 import { openDb } from "../../src/store/db.js";
+import { getFaction } from "../../src/queries/detail.js";
 import { formCult } from "../../src/services/populate.js";
 
 function world(): Database.Database {
@@ -292,4 +293,79 @@ test("new cult composition matches each harshness budget", () => {
       expect(problems[0].text).not.toBe("Chosen gift");
     }
   }
+});
+
+function place(db: Database.Database, id: string, name: string): void {
+  db.prepare(
+    `INSERT INTO places (id, campaign_id, name, scope, parent_place_id) VALUES (?, 'c1', ?, 'village', NULL)`,
+  ).run(id, name);
+}
+
+test("form_cult stores homePlaceId on a new cult", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  place(db, "vale", "Ash Vale");
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The law",
+    acknowledged: true,
+    homePlaceId: "vale",
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(getFaction(db, result.data.factionId)?.home_place_id).toBe("vale");
+});
+
+test("an unknown homePlaceId forms nothing", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The law",
+    acknowledged: true,
+    homePlaceId: "missing",
+  });
+  expect(result).toEqual({
+    ok: false,
+    error: { code: "ENTITY_NOT_FOUND", message: "place not found", details: {} },
+  });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM factions").get()).toEqual({ n: 0 });
+  expect(db.prepare("SELECT divinity FROM heroes WHERE id = 'h1'").get()).toEqual({ divinity: "none" });
+});
+
+test("adopting keeps the stored home unless homePlaceId is passed", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  place(db, "old", "Old Home");
+  place(db, "new", "New Home");
+  faction(db, { id: "f1", power: 3 });
+  db.prepare("UPDATE factions SET home_place_id = 'old' WHERE id = 'f1'").run();
+  const kept = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The tithe",
+    acknowledged: true,
+    adoptFactionId: "f1",
+  });
+  expect(kept.ok).toBe(true);
+  expect(getFaction(db, "f1")?.home_place_id).toBe("old");
+
+  const db2 = world();
+  hero(db2, { id: "h1", level: 2 });
+  place(db2, "old", "Old Home");
+  place(db2, "new", "New Home");
+  faction(db2, { id: "f1", power: 3 });
+  db2.prepare("UPDATE factions SET home_place_id = 'old' WHERE id = 'f1'").run();
+  const moved = formCult(db2, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The tithe",
+    acknowledged: true,
+    adoptFactionId: "f1",
+    homePlaceId: "new",
+  });
+  expect(moved.ok).toBe(true);
+  expect(getFaction(db2, "f1")?.home_place_id).toBe("new");
 });

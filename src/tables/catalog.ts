@@ -29,6 +29,22 @@ export function catalogRowsAt(path: string): { id?: string; text: string }[] {
   return rowsAt(catalog, path);
 }
 
+export function catalogTableUris(): string[] {
+  const uris: string[] = [];
+  walk(loadCatalog(), "", uris);
+  return uris;
+}
+
+function walk(value: unknown, prefix: string, uris: string[]): void {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return;
+  for (const key of Object.keys(value as object)) {
+    const next = prefix === "" ? key : `${prefix}.${key}`;
+    const child = (value as Record<string, unknown>)[key];
+    if (Array.isArray(child)) uris.push(`world://tables/${next}`);
+    else walk(child, next, uris);
+  }
+}
+
 function rowsAt(catalog: Catalog, path: string): { id?: string; text: string }[] {
   const parts = path.split(".");
   let cursor: unknown = catalog;
