@@ -32,26 +32,6 @@ Every reply is `{ ok, data, rolls, advisories, derived }`, or `{ ok: false, erro
 - `advisories` are warnings that did not fail the call. Read them and pass on anything the user should know.
 - After a mutation that touches a faction, read `derived.collapseMargin` (die maximum minus Trouble). Warn the user when it is 1 or 2; at 0 or below the faction has collapsed.
 
-| Error | Meaning |
-| --- | --- |
-| `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND` | An id is wrong or belongs to another campaign. |
-| `UNKNOWN_TO_UNIT` | A plan names an id that is not in that unit's frozen view. |
-| `TURN_ALREADY_OPEN` | Finish or apply the open turn first. |
-| `QUEUE_NOT_EMPTY` | The open turn still has a queued plan or reaction. Apply the queue or finish the reaction, then advance the month. |
-| `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET` | The faction has used its actions for this turn, or already acted on that target. |
-| `INTEREST_CAP` | The edge is already at twice the owner's die maximum. |
-| `INTEREST_NATURE_MISMATCH` | The directed pair already has a different nature. Pass `replaceNature: true` or pick the existing nature. |
-| `NO_USABLE_FEATURE` | The acting faction has no feature it can use for this. |
-| `COLLAPSED_FACTION` | The faction has collapsed and cannot act. |
-| `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH` | Not enough to pay. |
-| `NOTHING_TO_SOLVE` | No non-intrinsic problem to shrink, or Trouble is 0. |
-| `FILL_INCOMPLETE` | A required field is missing (for example under `fill: require`, or `form_cult` without `acknowledged`). |
-| `DISSOLVES_CULT` | A Power 1 cult would stop being a faction. Pass `acknowledgeDissolve: true` on `set_theology` only when that end is intended. Holy laws are normally set at `form_cult`. |
-| `CHANGE_ALREADY_LANDED` | This feature change already has its Feature and backlash. `commit_resources` recorded them. |
-| `CHANGE_NOT_READY` | The call does not fit the change. `apply_outcome` was asked to add the Feature for a change that has not landed, or for a change that is not a feature change. The same code already covers a withdrawal that is not decaying and a deed when none remain. |
-| `PICK_UNKNOWN` | A value is not a known chart key (for example a free-text behavior). |
-| `WRITE_LOCKED` | Another write held the lock too long. Retry. |
-
 ## How a stretch of play moves
 
 ### 1. Read before acting

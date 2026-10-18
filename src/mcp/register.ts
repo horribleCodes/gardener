@@ -592,7 +592,7 @@ export function buildServer(dbPath: string): McpServer {
     "set_theology",
     {
       description:
-        "Change cult theology. Costs 1 Power and the internal action. Omitted harshness is kept. On Power 1, acknowledgeDissolve must be true or the call is refused with DISSOLVES_CULT; with that flag the cult stops being a faction.",
+        "Change cult theology. Costs 1 Power and the internal action. Omitted harshness is kept. Power 1 factions will dissolve from this and require acknowledgeDissolve=true.",
       inputSchema: {
         campaignId: z.string(),
         cultFactionId: z.string(),
