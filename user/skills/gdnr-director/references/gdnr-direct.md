@@ -4,7 +4,7 @@
 
 Pass an outline with places and factions. The call returns `campaignId` and `seed` only.
 
-Keep the `campaignId` and tell the user what it is. No tool lists campaigns, so a lost id cannot be recovered.
+Keep the `campaignId` and tell the user what it is. `world://campaigns` and `get_campaigns` return every campaign in the open file as id and name.
 
 ### Places
 

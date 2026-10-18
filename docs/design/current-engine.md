@@ -17,7 +17,7 @@ An outline place on `seed_campaign` requires `scope`: `village`, `city`, `region
 
 A relative path, including the default, resolves against the working directory of the process that launched the MCP server, which is usually the MCP client's. Use an absolute path when the file must stay in one place. The server creates the file but not its folder, so the folder must exist.
 
-There is no tool that lists campaigns. The `campaignId` exists only in the reply from `seed_campaign` or `create_campaign`, and a lost id cannot be recovered through any current tool. A list tool is tracked on the Project.
+`world://campaigns` and `get_campaigns` return every campaign in the open file as `id` and `name`, ordered by name (case-insensitive) then id. An empty file returns an empty list. Callers can still keep the `campaignId` from `seed_campaign` or `create_campaign`.
 
 ## Identifiers
 
@@ -29,7 +29,7 @@ The file's SQLite `user_version` is its schema version.
 
 ## MCP surface
 
-- **Resources:** `world://campaigns/{campaignId}/brief`, `…/factions/{factionId}`, `…/courts/{courtId}`, `…/heroes/{heroId}`, `…/turns/latest`, `…/hooks`, `world://tables` (the valid `{path}` URI list), and `world://tables/{path}` (a subtree of the chart catalog).
+- **Resources:** `world://campaigns` (every campaign as `id` and `name`), `world://campaigns/{campaignId}/brief`, `…/factions/{factionId}`, `…/courts/{courtId}`, `…/heroes/{heroId}`, `…/turns/latest`, `…/hooks`, `world://tables` (the valid `{path}` URI list), and `world://tables/{path}` (a subtree of the chart catalog).
 - **Prompts:** `gm-briefing` and `faction-turn-narration`. Both are read-only and ask the model to narrate only what the embedded JSON says.
 
 Every tool returns one envelope:
