@@ -591,13 +591,14 @@ export function buildServer(dbPath: string): McpServer {
     "set_theology",
     {
       description:
-        "Change cult theology. Costs 1 Power and the internal action. Omitted harshness is kept. A Power 1 cult stops being a faction.",
+        "Change cult theology. Costs 1 Power and the internal action. Omitted harshness is kept. On Power 1, acknowledgeDissolve must be true or the call is refused with DISSOLVES_CULT; with that flag the cult stops being a faction.",
       inputSchema: {
         campaignId: z.string(),
         cultFactionId: z.string(),
         harshness: z.enum(["nominal", "sharp", "grueling", "overwhelming"]).optional(),
         featureText: z.string().optional(),
         intrinsicTexts: z.array(z.object({ problemId: z.string(), text: z.string() })).optional(),
+        acknowledgeDissolve: z.boolean().optional(),
       },
     },
     dbTool((a) => setTheology(db, a)),

@@ -1327,6 +1327,7 @@ export function setTheology(
     harshness?: string;
     featureText?: string;
     intrinsicTexts?: { problemId: string; text: string }[];
+    acknowledgeDissolve?: boolean;
   },
 ): ServiceResult<Record<string, unknown>> {
   return wrapRule(() =>
@@ -1350,6 +1351,13 @@ export function setTheology(
         | undefined;
       if (!faction || faction.cult === 0) {
         throw new RuleError("ENTITY_NOT_FOUND", "cult faction not found");
+      }
+
+      if (faction.power <= 1 && input.acknowledgeDissolve !== true) {
+        throw new RuleError(
+          "DISSOLVES_CULT",
+          "the cult will stop being a faction; holy laws are normally set at form_cult",
+        );
       }
 
       ensureInternalTurnSlot(db, input.campaignId, faction.id);

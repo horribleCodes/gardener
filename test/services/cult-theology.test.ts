@@ -222,6 +222,7 @@ test("a Power 1 cult still ends when harshness is unrecognized", () => {
     cultFactionId: "f1",
     harshness: "cruel",
     intrinsicTexts: [{ problemId: "law1", text: "Ignored" }],
+    acknowledgeDissolve: true,
   });
   expect(result.ok).toBe(true);
   if (!result.ok) return;

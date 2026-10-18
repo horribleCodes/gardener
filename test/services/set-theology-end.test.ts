@@ -112,7 +112,13 @@ test("a Power 1 cult stops being a faction and keeps the gift and worshipers", (
      ) VALUES ('q1', 'c1', 't1', 'faction', 'f1', 'plan', '{}', 'queued', 1)`,
   ).run();
 
-  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1", harshness: "sharp", featureText: "ignored" });
+  const result = setTheology(db, {
+    campaignId: "c1",
+    cultFactionId: "f1",
+    harshness: "sharp",
+    featureText: "ignored",
+    acknowledgeDissolve: true,
+  });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   const factIds = result.data.factIds as string[];
@@ -173,7 +179,7 @@ test("facts land on the home place when the cult has no patron", () => {
   ).run();
   faction(db, { id: "f1", power: 1, cohesion: 1, home: "p1" });
   feature(db, "feat1", "f1", "Place gift");
-  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1" });
+  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1", acknowledgeDissolve: true });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   const factIds = result.data.factIds as string[];
@@ -195,7 +201,7 @@ test("a cult with no patron and no home place still ends, with no facts", () => 
   const db = world();
   faction(db, { id: "f1", power: 1, cohesion: 1 });
   feature(db, "feat1", "f1", "A gift");
-  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1" });
+  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1", acknowledgeDissolve: true });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   expect(result.data).toEqual({ ended: true, factionId: "f1", giftTexts: ["A gift"], factIds: [] });
@@ -207,7 +213,7 @@ test("a patron and no features still records that worshipers remain", () => {
   const db = world();
   hero(db, "h1", "f1");
   faction(db, { id: "f1", power: 1, cohesion: 1, patron: "h1" });
-  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1" });
+  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1", acknowledgeDissolve: true });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   expect(result.data.giftTexts).toEqual([]);
@@ -230,7 +236,7 @@ test("a spent internal action leaves the Power 1 cult in place", () => {
     `INSERT INTO actions (id, turn_id, type, actor_type, actor_id, outcome)
      VALUES ('a1', 't1', 'build_strength', 'faction', 'f1', 'success')`,
   ).run();
-  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1" });
+  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1", acknowledgeDissolve: true });
   expect(result).toEqual({
     ok: false,
     error: { code: "INTERNAL_BUDGET", message: "internal action already taken", details: {} },
@@ -257,6 +263,86 @@ test("a faction that is not a cult is left alone", () => {
     error: { code: "ENTITY_NOT_FOUND", message: "cult faction not found", details: {} },
   });
   expect(db.prepare("SELECT status FROM factions WHERE id = 'f1'").get()).toEqual({ status: "active" });
+});
+
+test("a Power 1 cult without acknowledgeDissolve is refused and unchanged", () => {
+  const db = world();
+  hero(db, "h1", "f1");
+  faction(db, { id: "f1", power: 1, cohesion: 1, patron: "h1" });
+  feature(db, "feat1", "f1", "The healing gift");
+  db.prepare(
+    `INSERT INTO problems (id, faction_id, text, points, domain, intrinsic, external, resistance, position)
+     VALUES ('prob1', 'f1', 'Holy law', 1, 'cultural', 1, 0, 0, 0)`,
+  ).run();
+  const result = setTheology(db, { campaignId: "c1", cultFactionId: "f1" });
+  expect(result).toEqual({
+    ok: false,
+    error: {
+      code: "DISSOLVES_CULT",
+      message: "the cult will stop being a faction; holy laws are normally set at form_cult",
+      details: {},
+    },
+  });
+  expect(db.prepare("SELECT id, power, cohesion, status FROM factions WHERE id = 'f1'").get()).toEqual({
+    id: "f1",
+    power: 1,
+    cohesion: 1,
+    status: "active",
+  });
+  expect(db.prepare("SELECT id FROM features WHERE id = 'feat1'").get()).toEqual({ id: "feat1" });
+  expect(db.prepare("SELECT id FROM problems WHERE id = 'prob1'").get()).toEqual({ id: "prob1" });
+  expect(db.prepare("SELECT divinity, cult_faction_id FROM heroes WHERE id = 'h1'").get()).toEqual({
+    divinity: "cult",
+    cult_faction_id: "f1",
+  });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM facts").get()).toEqual({ n: 0 });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM turns").get()).toEqual({ n: 0 });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM actions WHERE type = 'set_theology'").get()).toEqual({ n: 0 });
+});
+
+test("acknowledgeDissolve false is not an acknowledgement", () => {
+  const db = world();
+  hero(db, "h1", "f1");
+  faction(db, { id: "f1", power: 1, cohesion: 1, patron: "h1" });
+  const result = setTheology(db, {
+    campaignId: "c1",
+    cultFactionId: "f1",
+    acknowledgeDissolve: false,
+  });
+  expect(result).toEqual({
+    ok: false,
+    error: {
+      code: "DISSOLVES_CULT",
+      message: "the cult will stop being a faction; holy laws are normally set at form_cult",
+      details: {},
+    },
+  });
+  expect(db.prepare("SELECT id FROM factions WHERE id = 'f1'").get()).toEqual({ id: "f1" });
+  expect(db.prepare("SELECT cult_faction_id FROM heroes WHERE id = 'h1'").get()).toEqual({
+    cult_faction_id: "f1",
+  });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM actions WHERE type = 'set_theology'").get()).toEqual({ n: 0 });
+});
+
+test("a Power 2 cult with acknowledgeDissolve still drops Power", () => {
+  const db = world();
+  hero(db, "h1", "f1");
+  faction(db, { id: "f1", power: 2, cohesion: 2, patron: "h1", harshness: "nominal" });
+  feature(db, "feat1", "f1", "Old gift");
+  const result = setTheology(db, {
+    campaignId: "c1",
+    cultFactionId: "f1",
+    acknowledgeDissolve: true,
+  });
+  expect(result).toEqual({ ok: true, data: { power: 1, cohesion: 1 } });
+  expect(db.prepare("SELECT id, power, status FROM factions WHERE id = 'f1'").get()).toEqual({
+    id: "f1",
+    power: 1,
+    status: "active",
+  });
+  expect(db.prepare("SELECT cult_faction_id FROM heroes WHERE id = 'h1'").get()).toEqual({
+    cult_faction_id: "f1",
+  });
 });
 
 test("a Power 2 cult loses 1 Power and stays a faction", () => {
@@ -292,7 +378,7 @@ test("ending the cult stops cult Dominion while a linked cult still pays", () =>
   hero(db, "h2", "f2");
   faction(db, { id: "f1", power: 1, cohesion: 1, patron: "h1", harshness: "nominal" });
   faction(db, { id: "f2", power: 1, cohesion: 1, patron: "h2", harshness: "nominal" });
-  const ended = setTheology(db, { campaignId: "c1", cultFactionId: "f1" });
+  const ended = setTheology(db, { campaignId: "c1", cultFactionId: "f1", acknowledgeDissolve: true });
   expect(ended.ok).toBe(true);
   advanceMonth(db, "c1");
   expect(db.prepare("SELECT dominion FROM heroes WHERE id = 'h1'").get()).toEqual({ dominion: 0 });
