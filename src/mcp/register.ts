@@ -842,7 +842,7 @@ export function buildServer(dbPath: string): McpServer {
   reg(
     "get_campaigns",
     {
-      description: "Campaign list. Same body as world://campaigns.",
+      description: "Campaign list.",
       inputSchema: {},
     },
     async () => mcpToolResult(toEnvelope({ ok: true, data: getCampaigns(db) })),
