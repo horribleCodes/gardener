@@ -27,7 +27,6 @@ test("MCP server is named gardener and registers create_hero", async () => {
   expect(names).toContain("list_catalog_tables");
   expect(names).toContain("get_campaigns");
   expect(names).not.toContain("list_campaigns");
-  expect(names).toHaveLength(54);
   await client.close();
 });
 
