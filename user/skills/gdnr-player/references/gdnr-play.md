@@ -46,6 +46,7 @@ Every reply is `{ ok, data, rolls, advisories, derived }`, or `{ ok: false, erro
 | `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH` | Not enough to pay. |
 | `NOTHING_TO_SOLVE` | No non-intrinsic problem to shrink, or Trouble is 0. |
 | `FILL_INCOMPLETE` | A required field is missing (for example under `fill: require`, or `form_cult` without `acknowledged`). |
+| `DISSOLVES_CULT` | A Power 1 cult would stop being a faction. Pass `acknowledgeDissolve: true` on `set_theology` only when that end is intended. Holy laws are normally set at `form_cult`. |
 | `CHANGE_ALREADY_LANDED` | This feature change already has its Feature and backlash. `commit_resources` recorded them. |
 | `CHANGE_NOT_READY` | The call does not fit the change. `apply_outcome` was asked to add the Feature for a change that has not landed, or for a change that is not a feature change. The same code already covers a withdrawal that is not decaying and a deed when none remain. |
 | `PICK_UNKNOWN` | A value is not a known chart key (for example a free-text behavior). |

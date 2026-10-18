@@ -43,7 +43,7 @@ Every tool returns one envelope:
 - `advisories` are warnings that did not fail the call, such as a court size clamped into range.
 - `derived` is the slice most relevant to the mutation. For a faction it is `trouble`, `collapseMargin` (die maximum minus Trouble; at 0 or below the faction collapses), and `status`. For a change it is its status, scope, and magnitude.
 
-Common error codes: `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_UNKNOWN`, `TURN_ALREADY_OPEN`, `TURN_ALREADY_TAKEN`, `FACTION_SKIPPED`, `ALREADY_ACTED`, `WRITE_LOCKED`, `UNKNOWN_TO_UNIT`, `QUEUE_CLOSED`, `QUEUE_NOT_EMPTY`, `NOT_PENDING`, `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET`, `INTEREST_CAP`, `INTEREST_NATURE_MISMATCH`, `INTEREST_ALREADY_SPENT`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `COLLAPSED_FACTION`, `COHESION_AT_CAP`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `CHANGE_NOT_READY`, `CHANGE_ALREADY_LANDED`, `NOTHING_TO_SOLVE`, `INTRINSIC_PROBLEM`, `MAGNITUDE_REJECTED`, and `NAME_TAKEN`.
+Common error codes: `CAMPAIGN_NOT_FOUND`, `ENTITY_NOT_FOUND`, `FILL_INCOMPLETE`, `PICK_UNKNOWN`, `TURN_ALREADY_OPEN`, `TURN_ALREADY_TAKEN`, `FACTION_SKIPPED`, `ALREADY_ACTED`, `WRITE_LOCKED`, `UNKNOWN_TO_UNIT`, `QUEUE_CLOSED`, `QUEUE_NOT_EMPTY`, `NOT_PENDING`, `INTERNAL_BUDGET`, `EXTERNAL_BUDGET`, `DUPLICATE_EXTERNAL_TARGET`, `INTEREST_CAP`, `INTEREST_NATURE_MISMATCH`, `INTEREST_ALREADY_SPENT`, `MODIFIER_EXCEEDS_DIE`, `NO_USABLE_FEATURE`, `COLLAPSED_FACTION`, `COHESION_AT_CAP`, `INSUFFICIENT_DOMINION`, `INSUFFICIENT_INFLUENCE`, `INSUFFICIENT_WEALTH`, `CHANGE_NOT_READY`, `CHANGE_ALREADY_LANDED`, `NOTHING_TO_SOLVE`, `INTRINSIC_PROBLEM`, `MAGNITUDE_REJECTED`, `NAME_TAKEN`, and `DISSOLVES_CULT`.
 
 ## Determinism
 
@@ -66,7 +66,7 @@ A campaign has at most one open turn.
 
 ## Cult theology
 
-`set_theology` costs the cult 1 Power and its internal action. A Power 1 cult stops being a faction: the faction row is removed, the hero's divinity stays `cult`, and `cult_faction_id` is cleared. Leftover worshipers and the cult gift remain as public facts, and they do not pay cult Dominion. This is not a collapse.
+`set_theology` costs the cult 1 Power and its internal action. A Power 1 cult stops being a faction only when the call passes `acknowledgeDissolve: true`: the faction row is removed, the hero's divinity stays `cult`, and `cult_faction_id` is cleared. Leftover worshipers and the cult gift remain as public facts, and they do not pay cult Dominion. This is not a collapse. Without that flag the call returns `DISSOLVES_CULT`, writes nothing, and does not use the internal action. On Power greater than 1 the flag is ignored.
 
 `form_cult` requires the Apotheosis gift *Receive the Incense of Faith*, gained at level 2, and `acknowledged: true`. Free divinity also requires `gmOverride: true`. Omitted harshness on that call stores `nominal`. The four harshness keys price intrinsic Problems from the cult's Power die and price cult Dominion as Power plus 0, 1, 2, or 3. Any other harshness string is refused. On Power greater than 1, `set_theology` keeps an omitted harshness, keeps an omitted feature sentence, and changes intrinsic Problem text only for the ids in `intrinsicTexts`.
 
