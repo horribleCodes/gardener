@@ -16,6 +16,8 @@ The server implements the Godbound **strain** profile: monthly faction turns, in
 
 Storage, the MCP surface, determinism, and the turn model as they run now are in [current-engine.md](./current-engine.md).
 
+`world://campaigns` and `get_campaigns` return every campaign in the open file as `id` and `name`.
+
 ## Invariants
 
 These hold for every profile and module:
@@ -101,4 +103,3 @@ Code that does not yet do what living intent says. Each is tracked as engine wor
 - Build strength, attack, extend interest, and aid events default to `public`; enact change, restore cohesion, and remove interest record no event; `create_fact` cannot set the place a `local` fact needs.
 - Rumors cover only faction actions and read "because unknown" for successful checks.
 - Every unexpected error is reported as `ENTITY_NOT_FOUND`.
-- There is no tool to list campaigns.

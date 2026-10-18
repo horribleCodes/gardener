@@ -25,7 +25,80 @@ test("MCP server is named gardener and registers create_hero", async () => {
   expect(names).toContain("pass_interest");
   expect(names).toContain("get_hero");
   expect(names).toContain("list_catalog_tables");
-  expect(names).toHaveLength(53);
+  expect(names).toContain("get_campaigns");
+  expect(names).not.toContain("list_campaigns");
+  await client.close();
+});
+
+test("get_campaigns returns an empty list when the database has no campaigns", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const listed = JSON.parse(
+    ((await client.callTool({ name: "get_campaigns", arguments: {} })).content as {
+      text: string;
+    }[])[0].text,
+  );
+  expect(listed).toEqual({
+    ok: true,
+    data: { campaigns: [] },
+    rolls: [],
+    advisories: [],
+    derived: {},
+  });
+
+  await client.close();
+});
+
+test("world://campaigns body equals get_campaigns data", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  await client.callTool({
+    name: "create_campaign",
+    arguments: { name: "Reads", rngSeed: 1 },
+  });
+
+  const listed = JSON.parse(
+    ((await client.callTool({ name: "get_campaigns", arguments: {} })).content as {
+      text: string;
+    }[])[0].text,
+  );
+  const collection = await client.readResource({ uri: "world://campaigns" });
+  expect(JSON.parse(collection.contents[0].text as string)).toEqual(listed.data);
+
+  await client.close();
+});
+
+test("get_campaigns includes a campaign created by create_campaign", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = buildServer(":memory:");
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+
+  const created = JSON.parse(
+    ((await client.callTool({
+      name: "create_campaign",
+      arguments: { name: "Reads", rngSeed: 1 },
+    })).content as { text: string }[])[0].text,
+  );
+  const campaignId = created.data.campaignId as string;
+
+  const listed = JSON.parse(
+    ((await client.callTool({ name: "get_campaigns", arguments: {} })).content as {
+      text: string;
+    }[])[0].text,
+  );
+  expect(listed.ok).toBe(true);
+  expect(listed.data.campaigns).toEqual([{ id: campaignId, name: "Reads" }]);
+
   await client.close();
 });
 

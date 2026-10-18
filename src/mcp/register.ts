@@ -13,6 +13,7 @@ import {
   interestMap,
   relevantFeatures,
 } from "../queries/detail.js";
+import { getCampaigns } from "../queries/campaigns.js";
 import { worldBrief, rumorLines } from "../queries/rumors.js";
 import { beginChange, commitResources, applyOutcome, withdrawInfluence, assessWithdrawal, resolveWithdrawal, expandChange } from "../services/change.js";
 import {
@@ -839,6 +840,15 @@ export function buildServer(dbPath: string): McpServer {
   );
 
   reg(
+    "get_campaigns",
+    {
+      description: "Campaign list.",
+      inputSchema: {},
+    },
+    async () => mcpToolResult(toEnvelope({ ok: true, data: getCampaigns(db) })),
+  );
+
+  reg(
     "get_world_brief",
     { description: "GM world summary", inputSchema: { campaignId: z.string() } },
     async (a) => {
@@ -999,6 +1009,13 @@ export function buildServer(dbPath: string): McpServer {
   const jsonResource = (payload: unknown) => ({
     contents: [{ uri: "ignored", mimeType: "application/json", text: JSON.stringify(payload) }],
   });
+
+  server.registerResource(
+    "campaigns",
+    "world://campaigns",
+    { description: "Campaign list JSON" },
+    async () => jsonResource(getCampaigns(db)),
+  );
 
   server.registerResource(
     "campaign-brief",
