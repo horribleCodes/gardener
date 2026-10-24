@@ -571,7 +571,7 @@ export function buildServer(dbPath: string): McpServer {
     "form_cult",
     {
       description:
-        "Bind a hero of level 2 or higher to a Power 1 cult faction. Requires a feature text. Free divinity heroes require gmOverride.",
+        "Bind a hero of level 2 or higher to a cult faction. A new cult requires behavior (any stored string, including directed). Optional control is npc or player and defaults to npc. directed requires control player; directed with npc or omitted control returns DIRECTED_NPC and writes nothing. The reply includes the stored behavior and control. Omit behavior and control when adopting. Requires gmOverride for free divinities. Optional homePlaceId must be a place in the campaign.",
       inputSchema: {
         campaignId: z.string(),
         heroId: z.string(),
@@ -583,6 +583,8 @@ export function buildServer(dbPath: string): McpServer {
         name: z.string().optional(),
         gmOverride: z.boolean().optional(),
         homePlaceId: z.string().optional(),
+        behavior: z.string().optional(),
+        control: z.enum(["npc", "player"]).optional(),
       },
     },
     dbTool((a) => formCult(db, a)),

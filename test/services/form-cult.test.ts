@@ -94,6 +94,7 @@ test("gmOverride lets free divinity found a grueling cult", () => {
     acknowledged: true,
     gmOverride: true,
     harshness: "grueling",
+    behavior: "self_absorbed_survivor",
   });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
@@ -121,6 +122,7 @@ test("omitted harshness stores nominal and no problems", () => {
   hero(db, { id: "h1", level: 2 });
   const result = formCult(db, {
     campaignId: "c1", heroId: "h1", featureText: "Quiet faith", acknowledged: true,
+    behavior: "self_absorbed_survivor",
   });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
@@ -172,7 +174,10 @@ test("an adopted Power 3 cult prices sharp laws from the d10", () => {
     adoptFactionId: "f1",
     harshness: "sharp",
   });
-  expect(result).toEqual({ ok: true, data: { factionId: "f1" } });
+  expect(result).toEqual({
+    ok: true,
+    data: { factionId: "f1", behavior: "directed", control: "npc" },
+  });
   expect(db.prepare("SELECT text FROM features WHERE faction_id = 'f1' ORDER BY text").all()).toEqual([
     { text: "Old mill" },
     { text: "The tithe" },
@@ -249,6 +254,7 @@ test("a new cult without a holy law is refused when harshness prices one", () =>
     featureText: "Winter must never return",
     acknowledged: true,
     harshness: "grueling",
+    behavior: "self_absorbed_survivor",
   });
   expect(result).toEqual({
     ok: false,
@@ -275,6 +281,7 @@ test("new cult composition matches each harshness budget", () => {
       lawText: "Keep the vigil",
       acknowledged: true,
       harshness: row.harshness,
+      behavior: "self_absorbed_survivor",
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -311,6 +318,7 @@ test("form_cult stores homePlaceId on a new cult", () => {
     featureText: "The law",
     acknowledged: true,
     homePlaceId: "vale",
+    behavior: "self_absorbed_survivor",
   });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
@@ -368,4 +376,163 @@ test("adopting keeps the stored home unless homePlaceId is passed", () => {
   });
   expect(moved.ok).toBe(true);
   expect(getFaction(db2, "f1")?.home_place_id).toBe("new");
+});
+
+test("a new cult without behavior is refused and writes nothing", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The law",
+    acknowledged: true,
+  });
+  expect(result).toEqual({
+    ok: false,
+    error: { code: "FILL_INCOMPLETE", message: "behavior required", details: {} },
+  });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM factions").get()).toEqual({ n: 0 });
+  expect(db.prepare("SELECT divinity, cult_faction_id FROM heroes WHERE id = 'h1'").get()).toEqual({
+    divinity: "none",
+    cult_faction_id: null,
+  });
+});
+
+test("empty behavior is refused as missing", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The law",
+    acknowledged: true,
+    behavior: "",
+  });
+  expect(result).toEqual({
+    ok: false,
+    error: { code: "FILL_INCOMPLETE", message: "behavior required", details: {} },
+  });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM factions").get()).toEqual({ n: 0 });
+});
+
+test("a new cult stores the caller behavior and default npc control", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The law",
+    acknowledged: true,
+    behavior: "self_absorbed_survivor",
+  });
+  expect(result).toEqual({
+    ok: true,
+    data: {
+      factionId: expect.any(String),
+      behavior: "self_absorbed_survivor",
+      control: "npc",
+    },
+  });
+  if (!result.ok) return;
+  expect(
+    db.prepare("SELECT behavior, control FROM factions WHERE id = ?").get(result.data.factionId),
+  ).toEqual({ behavior: "self_absorbed_survivor", control: "npc" });
+});
+
+test("directed with player control is stored", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The law",
+    acknowledged: true,
+    behavior: "directed",
+    control: "player",
+  });
+  expect(result).toEqual({
+    ok: true,
+    data: { factionId: expect.any(String), behavior: "directed", control: "player" },
+  });
+  if (!result.ok) return;
+  expect(
+    db.prepare("SELECT behavior, control FROM factions WHERE id = ?").get(result.data.factionId),
+  ).toEqual({ behavior: "directed", control: "player" });
+});
+
+test("directed with omitted control is refused", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The law",
+    acknowledged: true,
+    behavior: "directed",
+  });
+  expect(result).toEqual({
+    ok: false,
+    error: {
+      code: "DIRECTED_NPC",
+      message:
+        "a directed faction must not be table-driven: make it player-, agent-, or GM-controlled, or give it a real behavior",
+      details: {},
+    },
+  });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM factions").get()).toEqual({ n: 0 });
+  expect(db.prepare("SELECT divinity, cult_faction_id FROM heroes WHERE id = 'h1'").get()).toEqual({
+    divinity: "none",
+    cult_faction_id: null,
+  });
+});
+
+test("directed with npc control is refused", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The law",
+    acknowledged: true,
+    behavior: "directed",
+    control: "npc",
+  });
+  expect(result).toEqual({
+    ok: false,
+    error: {
+      code: "DIRECTED_NPC",
+      message:
+        "a directed faction must not be table-driven: make it player-, agent-, or GM-controlled, or give it a real behavior",
+      details: {},
+    },
+  });
+  expect(db.prepare("SELECT COUNT(*) AS n FROM factions").get()).toEqual({ n: 0 });
+});
+
+test("adopting rejects a passed behavior", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  faction(db, { id: "f1", power: 3 });
+  const result = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The tithe",
+    acknowledged: true,
+    adoptFactionId: "f1",
+    behavior: "self_absorbed_survivor",
+  });
+  expect(result).toEqual({
+    ok: false,
+    error: {
+      code: "FILL_INCOMPLETE",
+      message: "behavior and control apply only to a new cult",
+      details: {},
+    },
+  });
+  expect(
+    db.prepare("SELECT behavior, control, cult FROM factions WHERE id = 'f1'").get(),
+  ).toEqual({ behavior: "directed", control: "npc", cult: 0 });
+  expect(db.prepare("SELECT divinity FROM heroes WHERE id = 'h1'").get()).toEqual({
+    divinity: "none",
+  });
 });
