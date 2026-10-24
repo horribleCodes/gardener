@@ -3,6 +3,7 @@ import type Database from "better-sqlite3";
 import { openDb } from "../../src/store/db.js";
 import { getFaction } from "../../src/queries/detail.js";
 import { formCult } from "../../src/services/populate.js";
+import { runFactionTurn } from "../../src/services/turn.js";
 
 function world(): Database.Database {
   const db = openDb(":memory:");
@@ -535,4 +536,28 @@ test("adopting rejects a passed behavior", () => {
   expect(db.prepare("SELECT divinity FROM heroes WHERE id = 'h1'").get()).toEqual({
     divinity: "none",
   });
+});
+
+test("a chart-behavior cult takes a real action on the next mechanical turn", () => {
+  const db = world();
+  hero(db, { id: "h1", level: 2 });
+  const formed = formCult(db, {
+    campaignId: "c1",
+    heroId: "h1",
+    featureText: "The law",
+    acknowledged: true,
+    behavior: "self_absorbed_survivor",
+  });
+  expect(formed.ok).toBe(true);
+  if (!formed.ok) return;
+  const factionId = formed.data.factionId;
+
+  const turned = runFactionTurn(db, ":memory:", { campaignId: "c1" });
+  expect(turned.ok).toBe(true);
+
+  const row = db
+    .prepare("SELECT type FROM actions WHERE actor_id = ?")
+    .get(factionId) as { type: string } | undefined;
+  expect(row).toBeDefined();
+  expect(row?.type).not.toBe("idle");
 });
