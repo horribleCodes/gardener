@@ -13,6 +13,7 @@ import {
   type Scope,
 } from "../domain/types.js";
 import { interestCap } from "../rules/actions.js";
+import { assertDirectedAllowed } from "../rules/control.js";
 import { championStats } from "../rules/cost.js";
 import { cultBudget, parseHarshness } from "../rules/cults.js";
 import { generateCourt, type CourtDraft } from "../generate/court.js";
@@ -1191,8 +1192,10 @@ export function formCult(
     name?: string;
     gmOverride?: boolean;
     homePlaceId?: string;
+    behavior?: string;
+    control?: "npc" | "player";
   },
-): ServiceResult<{ factionId: string }> {
+): ServiceResult<{ factionId: string; behavior: string; control: string }> {
   return wrapRule(() =>
     withTransaction(db, () => {
       if (!input.acknowledged) {
@@ -1220,6 +1223,11 @@ export function formCult(
 
       let factionId = input.adoptFactionId;
       if (!factionId) {
+        if (input.behavior === undefined || input.behavior === "") {
+          throw new RuleError("FILL_INCOMPLETE", "behavior required");
+        }
+        const control = input.control ?? "npc";
+        assertDirectedAllowed(input.behavior, control);
         const budget = cultBudget(parseHarshness(harshness), DIE_BY_POWER[1]);
         if (budget > 0 && !input.lawText) {
           throw new RuleError("FILL_INCOMPLETE", "holy law required");
@@ -1228,7 +1236,8 @@ export function formCult(
           campaignId: input.campaignId,
           name: input.name ?? "Cult",
           power: 1,
-          behavior: "directed",
+          behavior: input.behavior,
+          control,
           origin: "forged",
           featureCount: 0,
           problemCount: 0,
@@ -1241,6 +1250,12 @@ export function formCult(
           .prepare("SELECT id FROM factions WHERE id = ? AND campaign_id = ?")
           .get(factionId, input.campaignId) as { id: string } | undefined;
         if (!adopted) throw new RuleError("ENTITY_NOT_FOUND", "faction not found");
+        if (input.behavior !== undefined || input.control !== undefined) {
+          throw new RuleError(
+            "FILL_INCOMPLETE",
+            "behavior and control apply only to a new cult",
+          );
+        }
       }
       db.prepare(
         "UPDATE factions SET cult = 1, patron_hero_id = ?, harshness = ? WHERE id = ?",
@@ -1255,8 +1270,8 @@ export function formCult(
       insertFeatureFromText(db, factionId, input.featureText);
 
       const stored = db
-        .prepare("SELECT power FROM factions WHERE id = ?")
-        .get(factionId) as { power: Power };
+        .prepare("SELECT power, behavior, control FROM factions WHERE id = ?")
+        .get(factionId) as { power: Power; behavior: string; control: string };
       const budget = cultBudget(parseHarshness(harshness), DIE_BY_POWER[stored.power]);
       const existingIntrinsic = db
         .prepare("SELECT COUNT(*) AS n FROM problems WHERE faction_id = ? AND intrinsic = 1")
@@ -1276,7 +1291,7 @@ export function formCult(
         factionId,
         input.heroId,
       );
-      return { factionId };
+      return { factionId, behavior: stored.behavior, control: stored.control };
     }),
   );
 }
