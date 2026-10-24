@@ -5,7 +5,7 @@ Living design framing for Gardener. Work tracking and sequencing live on [Garden
 ## Sources of truth
 
 - **Code** is current behavior.
-- **`docs/design/`** is living intent: this page, the [glossary](./glossary.md), [current-engine.md](./current-engine.md), and decisions promoted from issues.
+- **`docs/design/`** is living intent: this page, the [glossary](./glossary.md), [current-engine.md](./current-engine.md), [mechanics.md](./mechanics.md), and decisions promoted from issues.
 - **`docs/superpowers/`** is history: dated specs and plans. They are not maintained after merge, although a status banner may point to a successor.
 
 When code misses living intent, the gap is engine work: it is listed under [Known engine gaps](#known-engine-gaps) and tracked on the Project. Do not rewrite living intent to match a gap.
@@ -14,7 +14,7 @@ When code misses living intent, the gap is engine work: it is listed under [Know
 
 The server implements the Godbound **strain** profile: monthly faction turns, influence, world-changes, and related MCP tools. That shape was specified in [godbound-faction-mcp-design.md](../superpowers/specs/2026-09-21-godbound-faction-mcp-design.md) (historical spec) and then changed by [strain-contract.md](../superpowers/plans/2026-09-23-strain-contract.md) (historical plan): schema-version checks on open, setpiece links, challenges that can exist without a change, and willing Remove Interest.
 
-Storage, the MCP surface, determinism, and the turn model as they run now are in [current-engine.md](./current-engine.md).
+Storage, the MCP surface, determinism, and the turn model as they run now are in [current-engine.md](./current-engine.md). Running game rules are in [mechanics.md](./mechanics.md).
 
 `world://campaigns` and `get_campaigns` return every campaign in the open file as `id` and `name`.
 

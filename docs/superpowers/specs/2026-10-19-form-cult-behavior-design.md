@@ -1,6 +1,6 @@
 # `form_cult` caller-chosen behavior
 
-> Status: design for issue #132. Not implemented on this branch. Living docs to update at implementation time: [`docs/design/current-engine.md`](../../../docs/design/current-engine.md). Play copy: [`user/skills/gdnr-director/references/gdnr-direct.md`](../../../../user/skills/gdnr-director/references/gdnr-direct.md). Parent: #128. Shared pairing rule later expanded on #133.
+> Status: design for issue #132. Not implemented on this branch. Living docs to update at implementation time: [`docs/design/current-engine.md`](../../../docs/design/current-engine.md) (error codes), [`docs/design/mechanics.md`](../../../docs/design/mechanics.md) (Cult theology). Play copy: [`user/skills/gdnr-director/references/gdnr-direct.md`](../../../../user/skills/gdnr-director/references/gdnr-direct.md). Parent: #128. Shared pairing rule later expanded on #133.
 
 ## Purpose
 
@@ -110,7 +110,7 @@ Holy-law and `createFaction` run only after the new-cult pair is accepted. Adopt
 
 In `docs/design/current-engine.md`, add `DIRECTED_NPC` to the common error codes list.
 
-Replace the new-cult paragraph under Cult theology (the one that starts "A new cult is created at Power 1") with:
+In `docs/design/mechanics.md`, replace the new-cult paragraph under Cult theology (the one that starts "A new cult is created at Power 1") with:
 
 ```markdown
 A new cult is created at Power 1 with no rolled Feature and no rolled Problems. `form_cult` requires `behavior` for that create and stores it; it does not roll or default a behavior. Optional `control` is `npc` or `player` and defaults to `npc`. `directed` means the plan comes from outside the tables; `control` says who supplies it. `directed` with `control: player` is stored. `directed` with `control: npc` or with `control` omitted returns `DIRECTED_NPC` and writes nothing. The reply includes the stored `behavior` and `control`. Adopting a faction does not take `behavior` or `control` and does not change that pair. `form_cult` then inserts the caller's Feature. When harshness prices intrinsic points, it inserts one intrinsic Problem whose text is `lawText`. `nominal` inserts none. Adopting a faction keeps its Features and Problems and still adds that Feature and, when it has no holy law yet, that intrinsic Problem.
@@ -156,4 +156,4 @@ Do not add a test that reads `docs/`, `user/`, `AGENTS.md`, `README.md`, or a pr
 - `form_cult` with `behavior: directed` and `control: player` is accepted and stored.
 - `form_cult` with `behavior: directed` and no control, or `npc` control, fails with `DIRECTED_NPC` and writes nothing.
 - Tests, one rule per test, cover the `behavior` argument.
-- The `form_cult` tool description, `docs/design/current-engine.md`, and `user/skills/gdnr-director/references/gdnr-direct.md` describe what control and behavior a new cult gets, and when to pass `control: player` versus `control: npc`.
+- The `form_cult` tool description, `docs/design/mechanics.md`, and `user/skills/gdnr-director/references/gdnr-direct.md` describe what control and behavior a new cult gets, and when to pass `control: player` versus `control: npc`. `docs/design/current-engine.md` lists `DIRECTED_NPC`.

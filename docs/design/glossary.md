@@ -111,4 +111,4 @@ The agnostic target names some v1 terms differently. They mean the same thing:
 
 ## Further reading
 
-Precedence: code is current behavior, [`docs/design/`](./) is living intent, and `docs/superpowers/` is history. The [overview](./overview.md) explains how gaps between code and intent are handled, and [current-engine.md](./current-engine.md) describes the running server. For naming only, this glossary is authoritative.
+Precedence: code is current behavior, [`docs/design/`](./) is living intent, and `docs/superpowers/` is history. The [overview](./overview.md) explains how gaps between code and intent are handled, [current-engine.md](./current-engine.md) describes the running server, and [mechanics.md](./mechanics.md) describes the running game rules. For naming only, this glossary is authoritative.

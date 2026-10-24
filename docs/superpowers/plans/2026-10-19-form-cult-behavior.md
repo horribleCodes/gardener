@@ -30,6 +30,7 @@
 - Modify: `src/mcp/register.ts` (`form_cult` description and schema)
 - Modify: `test/services/form-cult.test.ts`
 - Modify: `docs/design/current-engine.md`
+- Modify: `docs/design/mechanics.md`
 - Modify: `user/skills/gdnr-director/references/gdnr-direct.md`
 
 ---
@@ -435,6 +436,7 @@ git commit -m "test form_cult chart behavior acts on a mechanical turn"
 
 **Files:**
 - Modify: `docs/design/current-engine.md`
+- Modify: `docs/design/mechanics.md`
 - Modify: `user/skills/gdnr-director/references/gdnr-direct.md`
 
 **Interfaces:**
@@ -445,15 +447,17 @@ git commit -m "test form_cult chart behavior acts on a mechanical turn"
 
 Add `DIRECTED_NPC` to the common error codes list, before the final `and `DISSOLVES_CULT``.
 
+Do not change the Control bullet. That campaign-wide enforcement is #133.
+
+- [ ] **Step 2: Update `docs/design/mechanics.md`**
+
 Replace the Cult theology paragraph that starts "A new cult is created at Power 1" with:
 
 ```markdown
 A new cult is created at Power 1 with no rolled Feature and no rolled Problems. `form_cult` requires `behavior` for that create and stores it; it does not roll or default a behavior. Optional `control` is `npc` or `player` and defaults to `npc`. `directed` means the plan comes from outside the tables; `control` says who supplies it. `directed` with `control: player` is stored. `directed` with `control: npc` or with `control` omitted returns `DIRECTED_NPC` and writes nothing. The reply includes the stored `behavior` and `control`. Adopting a faction does not take `behavior` or `control` and does not change that pair. `form_cult` then inserts the caller's Feature. When harshness prices intrinsic points, it inserts one intrinsic Problem whose text is `lawText`. `nominal` inserts none. Adopting a faction keeps its Features and Problems and still adds that Feature and, when it has no holy law yet, that intrinsic Problem.
 ```
 
-Do not change the Control bullet. That campaign-wide enforcement is #133.
-
-- [ ] **Step 2: Update `user/skills/gdnr-director/references/gdnr-direct.md`**
+- [ ] **Step 3: Update `user/skills/gdnr-director/references/gdnr-direct.md`**
 
 Replace the `form_cult` bullet with:
 
@@ -461,15 +465,15 @@ Replace the `form_cult` bullet with:
 - `form_cult`: binds a hero to a cult faction, new or adopted (`adoptFactionId`). The hero must be level 2 or higher. It needs `acknowledged: true`, meaning at least a village of willing worshippers exists. A hero with `divinity: free` is refused unless `gmOverride` is true. A new cult requires `behavior`. Pass a chart key (`despotic_tyrant`, `self_absorbed_survivor`, `scheming_manipulator`, `martial_conqueror`) when the cult should pick its own goal on a mechanical turn; omit `control` or pass `control: npc` for that NPC-run cult. Pass `behavior: directed` and `control: player` when the player supplies the plan; that cult idles on a mechanical turn until it is given one. `directed` with NPC control is refused. Omit `behavior` and `control` when adopting; that path does not change the adopted pair. The reply names the stored `behavior` and `control`. `harshness` is `nominal`, `sharp`, `grueling`, or `overwhelming`; omitting it stores `nominal`. A new cult is Power 1 with only the chosen Feature (`featureText`) and optional intrinsic holy laws. Holy laws require harshness above `nominal` and `lawText`. `nominal` has no holy law. An adopted faction keeps its Features and Problems and still receives the chosen Feature and, if it has no holy law yet, that law. Use `homePlaceId` to specify the new location of the cult faction.
 ```
 
-- [ ] **Step 3: Run the service tests**
+- [ ] **Step 4: Run the service tests**
 
 Run: `npx vitest run test/services/form-cult.test.ts`
 
 Expected: PASS. Do not add a test that reads these files.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add docs/design/current-engine.md user/skills/gdnr-director/references/gdnr-direct.md
+git add docs/design/current-engine.md docs/design/mechanics.md user/skills/gdnr-director/references/gdnr-direct.md
 git commit -m "document form_cult behavior and control"
 ```

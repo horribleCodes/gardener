@@ -11,7 +11,7 @@ Gardener is a local stateful MCP implementing a virtual world.
 - user-facing play instructions live under `user/`; files there must not link or cite anything outside `user/`, because skills ship without the rest of the repo (repeat the information instead)
 - development skills and prompts live under `.cursor/skills` and `.cursor/prompts`
 - finished MCP reviews live under `test/reviews`; playtest scripts under `test/play-scripts`
-- living design framing and naming live under `docs/design/` (for example `overview.md`, `glossary.md`)
+- living design framing and naming live under `docs/design/` (for example `overview.md`, `glossary.md`); engine shape is `current-engine.md`; game rules are `mechanics.md`
 
 ## MCP decisions
 
